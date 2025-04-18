@@ -7,16 +7,19 @@ import {
   Alert, 
   Paper, 
   CircularProgress,
-  alpha
+  alpha,
+  useTheme
 } from "@mui/material";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
+import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import { uploadFile } from "../services/apiService";
 import { useData } from "../contexts/DataContext";
 
 const FileUploader = () => {
   const { setCashFlowData, setIsLoading, setError, isLoading, error, cashFlowData } = useData();
+  const theme = useTheme();
 
   const [file, setFile] = useState(null);
   const [dragActive, setDragActive] = useState(false);
@@ -92,7 +95,9 @@ const FileUploader = () => {
           onDrop={handleDrop}
           sx={{
             border: '2px dashed',
-            borderColor: dragActive ? 'primary.main' : (theme) => theme.palette.grey[300],
+            borderColor: dragActive 
+                ? theme.palette.primary.main
+                : alpha(theme.palette.primary.main, 0.3),
             borderRadius: 2,
             p: 4,
             mb: 3,
@@ -100,11 +105,11 @@ const FileUploader = () => {
             cursor: 'pointer',
             transition: 'all 0.2s ease-in-out',
             backgroundColor: dragActive 
-              ? (theme) => alpha(theme.palette.primary.main, 0.08)
-              : (theme) => alpha(theme.palette.background.paper, 0.5),
+              ? alpha(theme.palette.primary.main, 0.15)
+              : alpha(theme.palette.background.paper, 0.4),
             '&:hover': {
-              borderColor: 'primary.main',
-              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.04)
+              borderColor: theme.palette.primary.main,
+              backgroundColor: alpha(theme.palette.primary.main, 0.1)
             }
           }}
           onClick={() => document.getElementById('file-upload').click()}
@@ -118,20 +123,33 @@ const FileUploader = () => {
           />
           {!file ? (
             <>
-              <FileUploadOutlinedIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2, opacity: 0.8 }} />
+              <CloudUploadIcon sx={{ 
+                fontSize: 64, 
+                color: theme.palette.primary.main, 
+                mb: 2, 
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))'
+              }} />
               <Typography variant="h6" gutterBottom fontWeight="medium" color="primary.main">
                 Drag and drop your Excel file here
               </Typography>
               <Typography variant="body1" color="text.secondary">
                 or click to browse files
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 2, opacity: 0.7 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ 
+                mt: 2, 
+                opacity: 0.8
+              }}>
                 Supported formats: .xlsx, .xls
               </Typography>
             </>
           ) : (
             <>
-              <DescriptionOutlinedIcon sx={{ fontSize: 50, color: 'primary.main', mb: 2 }} />
+              <DescriptionOutlinedIcon sx={{ 
+                fontSize: 50, 
+                color: theme.palette.primary.main, 
+                mb: 2,
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))'
+              }} />
               <Typography variant="h6" gutterBottom color="primary.main">
                 File selected
               </Typography>
@@ -158,9 +176,13 @@ const FileUploader = () => {
           sx={{
             py: 1.5,
             fontWeight: 500,
-            boxShadow: 2,
+            boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+            background: isLoading ? 
+              'linear-gradient(45deg, #4e7bea, #6d92fd)' : 
+              'linear-gradient(45deg, #4e7bea, #3461c7)',
             '&:hover': {
-              boxShadow: 3
+              boxShadow: '0 6px 10px rgba(0,0,0,0.4)',
+              background: 'linear-gradient(45deg, #5d8aff, #4e7bea)'
             }
           }}
           startIcon={isLoading ? <CircularProgress size={24} color="inherit" /> : <UploadFileIcon />}
@@ -172,17 +194,22 @@ const FileUploader = () => {
       {/* Display data summary after upload */}
       {cashFlowData && !isLoading && !error && (
         <Paper 
-          elevation={0} 
+          elevation={2} 
           sx={{ 
             mt: 4, 
             p: 3, 
             borderRadius: 2,
-            border: (theme) => `1px solid ${alpha(theme.palette.success.main, 0.3)}`,
-            backgroundColor: (theme) => alpha(theme.palette.success.main, 0.05)
+            border: `1px solid ${alpha(theme.palette.success.main, 0.4)}`,
+            background: `linear-gradient(to right, ${alpha(theme.palette.success.dark, 0.1)}, ${alpha(theme.palette.success.main, 0.05)})`,
+            boxShadow: `0 4px 12px ${alpha(theme.palette.success.dark, 0.25)}`
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <DescriptionOutlinedIcon sx={{ color: 'success.main', mr: 1 }} />
+            <DescriptionOutlinedIcon sx={{ 
+              color: theme.palette.success.main, 
+              mr: 1,
+              filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))'
+            }} />
             <Typography variant="h6" color="success.main" fontWeight="medium">
               File Uploaded Successfully
             </Typography>
@@ -191,9 +218,9 @@ const FileUploader = () => {
           <Box sx={{ 
             mt: 2,
             p: 2,
-            backgroundColor: 'background.paper',
+            backgroundColor: alpha(theme.palette.background.paper, 0.8),
             borderRadius: 1,
-            boxShadow: `0 1px 3px ${alpha('#000', 0.08)}`
+            boxShadow: `0 2px 8px ${alpha('#000', 0.2)}`
           }}>
             <Typography variant="subtitle2" gutterBottom color="text.secondary">
               Summary

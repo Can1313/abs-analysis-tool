@@ -12,51 +12,51 @@ import OptimizationPage from "./pages/OptimizationPage";
 import { DataProvider } from "./contexts/DataContext";
 import ComparisonPage from "./pages/ComparisonPage";
 
-
-
+// Create a dark navy theme
 const theme = createTheme({
   palette: {
+    mode: 'dark',
     primary: {
-      main: '#d32f2f', // Ana kırmızı
-      light: '#ef5350',
-      dark: '#b71c1c',
+      main: '#4e7bea', // Modern blue
+      light: '#6d92fd',
+      dark: '#3461c7',
       contrastText: '#ffffff',
     },
     secondary: {
-      main: '#c2185b', // Pembe-kırmızı
-      light: '#e91e63',
-      dark: '#880e4f',
+      main: '#9c27b0', // Purple
+      light: '#bb4fd3',
+      dark: '#7b1fa2',
       contrastText: '#ffffff',
     },
     error: {
-      main: '#ff1744',
-      light: '#ff4569',
-      dark: '#d50000',
+      main: '#f44336',
+      light: '#ff7961',
+      dark: '#d32f2f',
     },
     warning: {
-      main: '#ff9100',
+      main: '#ff9800',
       light: '#ffb74d',
-      dark: '#e65100',
+      dark: '#f57c00',
     },
     info: {
-      main: '#f44336',
-      light: '#ef9a9a',
-      dark: '#c62828',
+      main: '#29b6f6',
+      light: '#4fc3f7',
+      dark: '#0288d1',
     },
     success: {
-      main: '#8bc34a',
-      light: '#aed581',
-      dark: '#689f38',
+      main: '#4caf50',
+      light: '#80e27e',
+      dark: '#087f23',
     },
     background: {
-      default: '#fff5f5',
-      paper: '#ffffff',
+      default: '#0f172a', // Dark navy
+      paper: '#1e293b', // Lighter navy
     },
     text: {
-      primary: '#3e2723',
-      secondary: '#5d4037',
+      primary: '#e2e8f0',
+      secondary: '#94a3b8',
     },
-    divider: 'rgba(211, 47, 47, 0.12)',
+    divider: 'rgba(148, 163, 184, 0.12)',
   },
   typography: {
     fontFamily: '"Roboto", "Segoe UI", "Helvetica Neue", sans-serif',
@@ -80,14 +80,15 @@ const theme = createTheme({
     MuiPaper: {
       styleOverrides: {
         root: {
-          boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.04)',
+          backgroundImage: 'none',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.7)',
           borderRadius: 8,
         },
         elevation1: {
-          boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.04)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.7)',
         },
         elevation2: {
-          boxShadow: '0 3px 6px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.12)',
+          boxShadow: '0 3px 6px rgba(0,0,0,0.7), 0 2px 4px rgba(0,0,0,0.8)',
         },
       },
     },
@@ -99,7 +100,7 @@ const theme = createTheme({
           borderRadius: 6,
         },
         contained: {
-          boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
         },
       },
     },
@@ -107,7 +108,7 @@ const theme = createTheme({
       styleOverrides: {
         head: {
           fontWeight: 600,
-          backgroundColor: 'rgba(211, 47, 47, 0.05)',
+          backgroundColor: 'rgba(78, 123, 234, 0.15)',
         },
       },
     },
@@ -123,7 +124,8 @@ const theme = createTheme({
     MuiAppBar: {
       styleOverrides: {
         root: {
-          boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.04)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.7)',
+          backgroundColor: '#0f172a', // Match background.default
         },
       },
     },
@@ -131,6 +133,31 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 6,
+        },
+      },
+    },
+    MuiCssBaseline: {
+      styleOverrides: {
+        body: {
+          scrollbarColor: "#6b6b6b #2b2b2b",
+          "&::-webkit-scrollbar, & *::-webkit-scrollbar": {
+            backgroundColor: "#2b2b2b",
+            width: 8,
+          },
+          "&::-webkit-scrollbar-thumb, & *::-webkit-scrollbar-thumb": {
+            borderRadius: 8,
+            backgroundColor: "#6b6b6b",
+            minHeight: 24,
+          },
+          "&::-webkit-scrollbar-thumb:focus, & *::-webkit-scrollbar-thumb:focus": {
+            backgroundColor: "#959595",
+          },
+          "&::-webkit-scrollbar-thumb:active, & *::-webkit-scrollbar-thumb:active": {
+            backgroundColor: "#959595",
+          },
+          "&::-webkit-scrollbar-thumb:hover, & *::-webkit-scrollbar-thumb:hover": {
+            backgroundColor: "#959595",
+          },
         },
       },
     },

@@ -24,6 +24,7 @@ import { calculateResults } from '../services/apiService';
 import GeneralSettingsForm from '../components/calculation/GeneralSettingsForm';
 import TrancheAForm from '../components/calculation/TrancheAForm';
 import TrancheBForm from '../components/calculation/TrancheBForm';
+import ClassBCouponAdjuster from '../components/calculation/ClassBCouponAdjuster';
 import CalculationResults from './CalculationResults';
 import InterestRatesTable from '../components/calculation/InterestRatesTable';
 
@@ -237,6 +238,9 @@ const CalculationPage = () => {
               <GeneralSettingsForm />
               <TrancheAForm />
               <TrancheBForm />
+              
+              {/* Add the new ClassBCouponAdjuster component */}
+              {calculationResults && <ClassBCouponAdjuster />}
 
               <Divider sx={{ my: 3 }} />
 
