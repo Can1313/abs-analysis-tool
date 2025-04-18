@@ -15,11 +15,41 @@ import OptimizeIcon from '@mui/icons-material/Speed';
 import HomeIcon from '@mui/icons-material/Home';
 import CompareIcon from '@mui/icons-material/Compare';
 import BusinessIcon from '@mui/icons-material/Business';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 import { alpha } from '@mui/material/styles';
 
 const TopBar = () => {
   const location = useLocation();
   const theme = useTheme();
+  
+  // Menu items with updated professional names
+  const menuItems = [
+    {
+      path: '/',
+      label: 'Dashboard',
+      icon: <HomeIcon />
+    },
+    {
+      path: '/calculation',
+      label: 'Structure Analysis',
+      icon: <CalculateIcon />
+    },
+    {
+      path: '/optimization',
+      label: 'Portfolio Optimizer',
+      icon: <OptimizeIcon />
+    },
+    {
+      path: '/comparison',
+      label: 'Performance Metrics',
+      icon: <CompareIcon />
+    },
+    {
+      path: '/stress-testing',
+      label: 'Stress Testing',
+      icon: <AssessmentIcon />
+    }
+  ];
   
   return (
     <AppBar 
@@ -62,92 +92,30 @@ const TopBar = () => {
           </Box>
           
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button 
-              color="inherit" 
-              component={RouterLink} 
-              to="/"
-              startIcon={<HomeIcon />}
-              sx={{
-                px: 2,
-                py: 1,
-                borderRadius: 1,
-                backgroundColor: location.pathname === '/' 
-                  ? alpha(theme.palette.primary.main, 0.15) 
-                  : 'transparent',
-                '&:hover': {
-                  backgroundColor: location.pathname === '/' 
-                    ? alpha(theme.palette.primary.main, 0.25) 
-                    : alpha(theme.palette.primary.main, 0.1),
-                }
-              }}
-            >
-              Home
-            </Button>
-            
-            <Button 
-              color="inherit" 
-              component={RouterLink} 
-              to="/calculation"
-              startIcon={<CalculateIcon />}
-              sx={{
-                px: 2,
-                py: 1,
-                borderRadius: 1,
-                backgroundColor: location.pathname === '/calculation' 
-                  ? alpha(theme.palette.primary.main, 0.15) 
-                  : 'transparent',
-                '&:hover': {
-                  backgroundColor: location.pathname === '/calculation' 
-                    ? alpha(theme.palette.primary.main, 0.25) 
-                    : alpha(theme.palette.primary.main, 0.1),
-                }
-              }}
-            >
-              Calculate
-            </Button>
-            
-            <Button 
-              color="inherit" 
-              component={RouterLink} 
-              to="/optimization"
-              startIcon={<OptimizeIcon />}
-              sx={{
-                px: 2,
-                py: 1,
-                borderRadius: 1,
-                backgroundColor: location.pathname === '/optimization' 
-                  ? alpha(theme.palette.primary.main, 0.15) 
-                  : 'transparent',
-                '&:hover': {
-                  backgroundColor: location.pathname === '/optimization' 
-                    ? alpha(theme.palette.primary.main, 0.25) 
-                    : alpha(theme.palette.primary.main, 0.1),
-                }
-              }}
-            >
-              Optimize
-            </Button>
-            <Button 
-              color="inherit" 
-              component={RouterLink} 
-              to="/comparison"
-              startIcon={<CompareIcon />}
-              sx={{
-                px: 2,
-                py: 1,
-                borderRadius: 1,
-                backgroundColor: location.pathname === '/comparison' 
-                  ? alpha(theme.palette.primary.main, 0.15) 
-                  : 'transparent',
-                '&:hover': {
-                  backgroundColor: location.pathname === '/comparison' 
-                    ? alpha(theme.palette.primary.main, 0.25) 
-                    : alpha(theme.palette.primary.main, 0.1),
-                }
-              }}
-            >
-              Compare
-            </Button>
+            {menuItems.map((item) => (
+              <Button 
+                key={item.path}
+                color="inherit" 
+                component={RouterLink} 
+                to={item.path}
+                startIcon={item.icon}
+                sx={{
+                  px: 2,
+                  py: 1,
+                  borderRadius: 1,
+                  backgroundColor: location.pathname === item.path 
+                    ? alpha(theme.palette.primary.main, 0.15) 
+                    : 'transparent',
+                  '&:hover': {
+                    backgroundColor: location.pathname === item.path 
+                      ? alpha(theme.palette.primary.main, 0.25) 
+                      : alpha(theme.palette.primary.main, 0.1),
+                  }
+                }}
+              >
+                {item.label}
+              </Button>
+            ))}
           </Box>
         </Toolbar>
       </Container>

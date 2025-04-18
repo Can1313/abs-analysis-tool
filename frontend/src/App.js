@@ -9,6 +9,7 @@ import Footer from "./components/Footer";
 import HomePage from "./pages/HomePage";
 import CalculationPage from "./pages/CalculationPage";
 import OptimizationPage from "./pages/OptimizationPage";
+import StressTestingPage from "./pages/StressTestingPage";
 import { DataProvider } from "./contexts/DataContext";
 import ComparisonPage from "./pages/ComparisonPage";
 
@@ -176,6 +177,7 @@ function App() {
             <Route path="/calculation" element={<CalculationPage />} />
             <Route path="/optimization" element={<OptimizationPage />} />
             <Route path="/comparison" element={<ComparisonPage />} />
+            <Route path="/stress-testing" element={<StressTestingPage />} />
           </Routes>
           <Footer />
         </Router>
