@@ -1,6 +1,7 @@
 """
 Optimization service for ABS structure analysis.
-This module implements multiple optimization strategies to find optimal ABS configurations.
+This module implements multiple optimization strategies to find optimal ABS configurations
+with improved Class B percentage targeting.
 """
 import time
 import pandas as pd
@@ -106,8 +107,9 @@ def adjust_class_a_nominals_for_target_coupon(
     start_date: pd.Timestamp, 
     df_temp: pd.DataFrame, 
     min_buffer: float,
+    target_class_b_percent: float,
     max_allowed_diff: float = 0.5  # Reduced from 1.0 to 0.5 for tighter matching
-) -> Tuple[List[float], bool]:
+) -> Tuple[List[float], bool, float]:
     """
     Iteratively adjust Class A nominal amounts to achieve a target coupon rate for Class B
     using an improved adaptive search approach for faster convergence.
@@ -125,10 +127,11 @@ def adjust_class_a_nominals_for_target_coupon(
         start_date: Start date for calculations
         df_temp: DataFrame containing cash flow data
         min_buffer: Minimum buffer requirement
+        target_class_b_percent: Target percentage for Class B
         max_allowed_diff: Maximum allowed difference between actual and target coupon rate
         
     Returns:
-        Tuple of (adjusted_nominals, success_flag)
+        Tuple of (adjusted_nominals, success_flag, actual_class_b_percent)
     """
     # Initial parameters
     original_a_total = sum(a_nominals)
@@ -144,6 +147,11 @@ def adjust_class_a_nominals_for_target_coupon(
     
     logger.info(f"Starting adjustment with target coupon rate: {target_coupon_rate:.2f}%")
     logger.info(f"Original Class A total: {original_a_total:,.2f}, Class B nominal: {class_b_nominal:,.2f}")
+    
+    # Calculate actual Class B percentage
+    total_nominal = original_a_total + class_b_nominal
+    actual_class_b_percent = (class_b_nominal / total_nominal) * 100
+    logger.info(f"Target Class B percentage: {target_class_b_percent:.2f}%, Actual: {actual_class_b_percent:.2f}%")
     
     # First, evaluate the original nominals to get a baseline
     try:
@@ -174,12 +182,18 @@ def adjust_class_a_nominals_for_target_coupon(
                 b_base_rate, b_reinvest_rate, start_date, df_temp
             )
             
+            # Recalculate actual Class B percentage with adjusted Class A
+            test_a_total = sum(test_nominals)
+            test_total_nominal = test_a_total + class_b_nominal
+            test_class_b_percent = (class_b_nominal / test_total_nominal) * 100
+            
             # If the direct approach gives a good result, use it immediately
             if direct_min_buffer >= min_buffer and abs(direct_coupon_rate - target_coupon_rate) <= max_allowed_diff:
                 logger.info(f"Direct approach successful - Coupon rate: {direct_coupon_rate:.2f}%, "
                       f"diff: {abs(direct_coupon_rate - target_coupon_rate):.2f}%, "
-                      f"min buffer: {direct_min_buffer:.2f}%")
-                return test_nominals, True
+                      f"min buffer: {direct_min_buffer:.2f}%, "
+                      f"Class B %: {test_class_b_percent:.2f}%")
+                return test_nominals, True, test_class_b_percent
                 
             # If not perfect but close, use as starting point
             current_adjustment = direct_adjustment
@@ -193,7 +207,7 @@ def adjust_class_a_nominals_for_target_coupon(
             current_adjustment = 1.0
     except Exception as e:
         logger.error(f"Error evaluating baseline: {str(e)}")
-        return a_nominals, False
+        return a_nominals, False, actual_class_b_percent
     
     # Determine initial direction if not set by direct approach
     if baseline_coupon_rate < target_coupon_rate and adjustment_direction == 0:
@@ -223,6 +237,7 @@ def adjust_class_a_nominals_for_target_coupon(
     
     best_diff = float('inf')
     best_nominals = a_nominals.copy()
+    best_class_b_percent = actual_class_b_percent
     success = False
     
     # Store previous results for interpolation
@@ -249,20 +264,29 @@ def adjust_class_a_nominals_for_target_coupon(
             # Calculate difference from target
             rate_diff = abs(coupon_rate - target_coupon_rate)
             
+            # Calculate actual Class B percentage
+            current_a_total = sum(current_nominals)
+            current_total_nominal = current_a_total + class_b_nominal
+            current_class_b_percent = (class_b_nominal / current_total_nominal) * 100
+            percent_diff = abs(current_class_b_percent - target_class_b_percent)
+            
             logger.info(f"Iteration {iteration+1}, adjustment: {current_adjustment:.4f}, "
                   f"coupon: {coupon_rate:.2f}%, target: {target_coupon_rate:.2f}%, "
-                  f"diff: {rate_diff:.2f}%, min buffer: {min_buffer_actual:.2f}%")
+                  f"diff: {rate_diff:.2f}%, min buffer: {min_buffer_actual:.2f}%, "
+                  f"Class B %: {current_class_b_percent:.2f}%")
             
             # Check if this result is better and meets buffer requirement
             if min_buffer_actual >= min_buffer and rate_diff < best_diff:
                 best_diff = rate_diff
                 best_nominals = current_nominals.copy()
+                best_class_b_percent = current_class_b_percent
                 
                 # If we're close to target, consider it a success
                 if rate_diff <= max_allowed_diff:
                     success = True
                     logger.info(f"Found acceptable solution - coupon rate: {coupon_rate:.2f}%, "
-                          f"diff: {rate_diff:.2f}%, min buffer: {min_buffer_actual:.2f}%")
+                          f"diff: {rate_diff:.2f}%, min buffer: {min_buffer_actual:.2f}%, "
+                          f"Class B %: {current_class_b_percent:.2f}%")
                     
                     # If very close to target, we can exit early
                     if rate_diff < 0.1:  # Tightened from 0.2 to 0.1
@@ -334,7 +358,7 @@ def adjust_class_a_nominals_for_target_coupon(
     elif not success:
         logger.info(f"Failed to find valid solution. Try adjusting min buffer requirement or target coupon rate.")
     
-    return best_nominals, success
+    return best_nominals, success, best_class_b_percent
 
 def evaluate_coupon_rate(
     a_nominals: List[float], 
@@ -485,7 +509,8 @@ def evaluate_params(
     maturity_to_reinvest_rate_A: Dict[int, float],
     class_b_base_rate: float, 
     class_b_reinvest_rate: float,
-    min_class_b_percent: float, 
+    target_class_b_percent: float, 
+    class_b_percent_deviation: float,
     target_class_b_coupon_rate: float, 
     min_buffer: float
 ) -> Dict[str, Any]:
@@ -501,7 +526,8 @@ def evaluate_params(
         maturity_to_reinvest_rate_A: Dictionary mapping maturity days to reinvestment rates
         class_b_base_rate: Base rate for Class B
         class_b_reinvest_rate: Reinvestment rate for Class B
-        min_class_b_percent: Minimum percentage of Class B tranche
+        target_class_b_percent: Target percentage of Class B tranche
+        class_b_percent_deviation: Allowable deviation from target Class B percentage
         target_class_b_coupon_rate: Target coupon rate for Class B
         min_buffer: Minimum buffer requirement
         
@@ -515,7 +541,8 @@ def evaluate_params(
             'score': 0,
             'results': None,
             'error': "Invalid input dimensions",
-            'b_nominal': 0
+            'b_nominal': 0,
+            'class_b_percent': 0
         }
     
     # Convert to lists for key operations and ensure types are correct
@@ -533,7 +560,7 @@ def evaluate_params(
     reinvest_rates = [maturity_to_reinvest_rate_A.get(
         get_nearest_maturity(m, list(maturity_to_reinvest_rate_A.keys())), 30.0) for m in maturities]
     
-    # Calculate Class B nominal based on minimum percentage
+    # Calculate total Class A nominal
     total_a_nominal = sum(nominals)
     if total_a_nominal <= 0:
         return {
@@ -541,11 +568,29 @@ def evaluate_params(
             'score': 0,
             'results': None,
             'error': "Total Class A nominal must be positive",
-            'b_nominal': 0
+            'b_nominal': 0,
+            'class_b_percent': 0
         }
-        
-    class_b_nominal = (total_a_nominal * min_class_b_percent) / (100 - min_class_b_percent)
     
+    # Calculate Class B nominal based on target percentage with dynamic approach
+    # This is a key change from the original algorithm
+    min_class_b_percent = max(0.1, target_class_b_percent - class_b_percent_deviation)
+    max_class_b_percent = min(50, target_class_b_percent + class_b_percent_deviation)
+    
+    # Ideal class B percentage (target)
+    target_b_share = target_class_b_percent / 100
+    
+    # Calculate ideal class B nominal based on target percentage
+    # Formula: class_b_nominal = total_a_nominal * target_b_share / (1 - target_b_share)
+    class_b_nominal = (total_a_nominal * target_b_share) / (1 - target_b_share)
+    
+    # Round to nearest 1000
+    class_b_nominal = round(class_b_nominal / 1000) * 1000
+    
+    # Calculate actual Class B percentage
+    total_nominal = total_a_nominal + class_b_nominal
+    actual_class_b_percent = (class_b_nominal / total_nominal) * 100
+        
     # Set up parameters for calculation
     a_maturity_days = maturities
     a_spreads = [0.0] * len(a_maturity_days)
@@ -657,8 +702,17 @@ def evaluate_params(
         
         min_buffer_actual = min(r['buffer_cf_ratio'] for r in class_a_results) if class_a_results else 0.0
         
-        # Check if valid
+        # Check if valid (meets minimum buffer requirement)
         is_valid = min_buffer_actual >= min_buffer
+        
+        # Calculate Class B percentage deviation from target
+        class_b_percent_diff = abs(actual_class_b_percent - target_class_b_percent)
+        
+        # Check if Class B percentage is within acceptable range
+        is_class_b_percent_valid = min_class_b_percent <= actual_class_b_percent <= max_class_b_percent
+        
+        # A solution is valid only if it meets both buffer and Class B percentage requirements
+        is_valid = is_valid and is_class_b_percent_valid
         
         # Collect results
         result_dict = {
@@ -671,20 +725,32 @@ def evaluate_params(
             'min_buffer_actual': min_buffer_actual,
             'total_principal': class_a_principal + class_b_principal,
             'class_b_coupon_rate': class_b_coupon_rate,
+            'class_b_percent': actual_class_b_percent,
+            'class_b_percent_diff': class_b_percent_diff,
             'num_a_tranches': len(a_maturity_days)
         }
         
-        # Improved scoring - give higher weight to coupon rate match
+        # Improved scoring with both coupon rate match and Class B percentage match
         coupon_rate_diff = abs(class_b_coupon_rate - target_class_b_coupon_rate)
+        
         # Exponential penalty for coupon rate difference - sharper dropoff
-        coupon_rate_weight = np.exp(-coupon_rate_diff / 3.0)  
-        weighted_principal = result_dict['total_principal'] * coupon_rate_weight
+        coupon_rate_weight = np.exp(-coupon_rate_diff / 3.0)
+        
+        # Exponential penalty for Class B percentage difference
+        class_b_percent_weight = np.exp(-class_b_percent_diff / 2.0)
+        
+        # Combined weight with more emphasis on coupon rate (60% vs 40%)
+        combined_weight = (coupon_rate_weight * 0.6) + (class_b_percent_weight * 0.4)
+        
+        # Weighted principal score
+        weighted_principal = result_dict['total_principal'] * combined_weight
         
         return {
             'is_valid': is_valid,
             'score': weighted_principal if is_valid else 0,
             'results': result_dict if is_valid else None,
-            'b_nominal': class_b_nominal
+            'b_nominal': class_b_nominal,
+            'class_b_percent': actual_class_b_percent
         }
     
     except Exception as e:
@@ -696,11 +762,12 @@ def evaluate_params(
             'score': 0,
             'results': None,
             'error': str(e),
-            'b_nominal': class_b_nominal
+            'b_nominal': class_b_nominal,
+            'class_b_percent': actual_class_b_percent
         }
 
 def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, optimization_settings: OptimizationSettings) -> OptimizationResult:
-    """Perform ABS structure optimization with improved coupon rate targeting
+    """Perform ABS structure optimization with improved coupon rate and Class B percentage targeting
     
     Args:
         df: DataFrame containing cash flow data
@@ -720,7 +787,11 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     min_a_tranches, max_a_tranches = optimization_settings.a_tranches_range
     maturity_range = optimization_settings.maturity_range
     maturity_step = optimization_settings.maturity_step
-    min_class_b_percent = optimization_settings.min_class_b_percent
+    
+    # Use the new Class B percentage targeting parameters
+    target_class_b_percent = getattr(optimization_settings, "target_class_b_percent", 15.0)
+    class_b_percent_deviation = getattr(optimization_settings, "class_b_percent_deviation", 2.0)
+    
     target_class_b_coupon_rate = optimization_settings.target_class_b_coupon_rate
     additional_days = optimization_settings.additional_days_for_class_b
     
@@ -735,7 +806,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     max_allowed_diff = 0.5  # Maximum 0.5% difference (reduced from 1.0%)
     
     optimization_progress.update(step=5, 
-                               message=f"Target coupon rate: {target_class_b_coupon_rate}%, preparing data...")
+                               message=f"Target coupon rate: {target_class_b_coupon_rate}%, Target Class B: {target_class_b_percent}±{class_b_percent_deviation}%")
     
     start_date = pd.Timestamp(general_settings.start_date)
     ops_expenses = general_settings.operational_expenses
@@ -775,6 +846,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     best_results_by_strategy = {strategy: None for strategy in strategy_names}
     best_weighted_principal_by_strategy = {strategy: 0 for strategy in strategy_names}
     best_coupon_rate_diff_by_strategy = {strategy: float('inf') for strategy in strategy_names}
+    best_class_b_percent_diff_by_strategy = {strategy: float('inf') for strategy in strategy_names}
     
     # Find last cash flow day
     last_cash_flow_day = get_last_cash_flow_day(df, start_date)
@@ -897,10 +969,19 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
             
             # Process each strategy
             for strategy in distribution_strategies:
-                # Calculate Class B nominal based on minimum percentage
-                total_nominal_amount = total_a_nominal / (1 - min_class_b_percent/100)
-                class_b_nominal = total_nominal_amount * (min_class_b_percent / 100)
-                remaining_nominal = total_nominal_amount - class_b_nominal
+                # Try multiple class B percentages within the allowed deviation range
+                # This is a key enhancement over the original algorithm
+                
+                # Calculate required Class B nominal to achieve target percentage
+                # Formula: class_b_nominal = total_a_nominal * (target_percent / (100 - target_percent))
+                target_b_share = target_class_b_percent / 100
+                class_b_nominal = (total_a_nominal * target_b_share) / (1 - target_b_share)
+                
+                # Round to nearest 1000
+                class_b_nominal = round(class_b_nominal / 1000) * 1000
+                
+                # Calculate total nominal amount based on Class A and B
+                remaining_nominal = total_a_nominal
                 
                 # Distribute nominal amounts based on strategy
                 if strategy == "equal":
@@ -945,7 +1026,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                 a_nominals[-1] += remaining_nominal - sum(a_nominals)
                 
                 # Now adjust the nominals to achieve target coupon rate
-                adjusted_a_nominals, success = adjust_class_a_nominals_for_target_coupon(
+                adjusted_a_nominals, success, actual_class_b_percent = adjust_class_a_nominals_for_target_coupon(
                     a_nominals, 
                     class_b_nominal, 
                     target_class_b_coupon_rate,
@@ -958,6 +1039,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                     start_date, 
                     df_temp, 
                     min_buffer,
+                    target_class_b_percent,
                     max_allowed_diff
                 )
                 
@@ -969,13 +1051,14 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                     # Increment consecutive failures counter
                     consecutive_failures += 1
                 
-                # Evaluate the result
+                # Evaluate the result with the new Class B percentage parameters
                 eval_result = evaluate_params(
                     maturities, a_nominals, 
                     class_b_maturity, start_date, df_temp,
                     maturity_to_base_rate_A, maturity_to_reinvest_rate_A,
                     b_base_rate, b_reinvest_rate,
-                    min_class_b_percent, target_class_b_coupon_rate, min_buffer
+                    target_class_b_percent, class_b_percent_deviation,
+                    target_class_b_coupon_rate, min_buffer
                 )
                 
                 # Check if valid and meets buffer requirement
@@ -984,31 +1067,47 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                     total_principal = result_dict['total_principal']
                     class_b_coupon_rate = result_dict['class_b_coupon_rate']
                     min_buffer_actual = result_dict['min_buffer_actual']
+                    class_b_percent = result_dict['class_b_percent']
+                    class_b_percent_diff = result_dict['class_b_percent_diff']
                     
                     # Calculate difference from target coupon rate
                     coupon_rate_diff = abs(class_b_coupon_rate - target_class_b_coupon_rate)
                     
-                    # Improved scoring function
-                    # Exponential penalty for rate difference - more severe penalty for larger differences
-                    coupon_rate_weight = np.exp(-coupon_rate_diff / 2.0)  # Stronger penalty
-                    weighted_principal = total_principal * coupon_rate_weight
+                    # Improved scoring function combining both objectives
+                    # Exponential penalty for rate difference
+                    coupon_rate_weight = np.exp(-coupon_rate_diff / 2.0)
+                    # Exponential penalty for Class B percentage difference
+                    class_b_percent_weight = np.exp(-class_b_percent_diff / 2.0)
+                    # Combined weight with 60% emphasis on coupon rate, 40% on Class B percentage
+                    combined_weight = (coupon_rate_weight * 0.6) + (class_b_percent_weight * 0.4)
+                    
+                    weighted_principal = total_principal * combined_weight
                     
                     # Check if this is the best solution for this strategy
-                    # Prioritize solutions with smaller coupon rate differences
+                    # Use a balanced approach between coupon rate and Class B percentage matching
+                    # with a slight preference for coupon rate matching
                     is_better = False
                     
-                    if coupon_rate_diff <= best_coupon_rate_diff_by_strategy[strategy]:
-                        # If coupon rate difference is better or equal, check weighted principal
-                        if coupon_rate_diff < best_coupon_rate_diff_by_strategy[strategy] or \
-                           weighted_principal > best_weighted_principal_by_strategy[strategy]:
+                    # Determine if this solution is better based on combined criteria
+                    if coupon_rate_diff <= best_coupon_rate_diff_by_strategy[strategy] * 1.1 and \
+                       class_b_percent_diff <= best_class_b_percent_diff_by_strategy[strategy] * 1.1:
+                        # If both metrics are comparable or better, use weighted principal as tiebreaker
+                        if weighted_principal > best_weighted_principal_by_strategy[strategy]:
                             is_better = True
                     elif coupon_rate_diff <= max_allowed_diff and \
-                         weighted_principal > best_weighted_principal_by_strategy[strategy] * 1.2:  # Must be significantly better
-                        # If within allowed difference and much better weighted principal
+                         class_b_percent_diff <= class_b_percent_deviation and \
+                         weighted_principal > best_weighted_principal_by_strategy[strategy] * 1.15:
+                        # If within allowed differences and significantly better weighted principal
+                        is_better = True
+                    elif (coupon_rate_diff < best_coupon_rate_diff_by_strategy[strategy] * 0.7 or \
+                          class_b_percent_diff < best_class_b_percent_diff_by_strategy[strategy] * 0.7) and \
+                         weighted_principal > best_weighted_principal_by_strategy[strategy] * 0.9:
+                        # If one metric is much better without sacrificing too much weighted principal
                         is_better = True
                     
                     if is_better:
                         best_coupon_rate_diff_by_strategy[strategy] = coupon_rate_diff
+                        best_class_b_percent_diff_by_strategy[strategy] = class_b_percent_diff
                         best_weighted_principal_by_strategy[strategy] = weighted_principal
                         
                         # Reset consecutive failures on finding a good solution
@@ -1026,7 +1125,8 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                             'b_nominal': [class_b_nominal],
                             'strategy': strategy,
                             'last_cash_flow_day': last_cash_flow_day,
-                            'added_days': additional_days
+                            'added_days': additional_days,
+                            'class_b_percent': class_b_percent
                         }
                         
                         best_results_by_strategy[strategy] = {
@@ -1041,14 +1141,17 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                             'class_b_coupon_rate': class_b_coupon_rate,
                             'target_class_b_coupon_rate': target_class_b_coupon_rate,
                             'coupon_rate_diff': coupon_rate_diff,
-                            'coupon_rate_weight': coupon_rate_weight,
+                            'class_b_percent': class_b_percent,
+                            'target_class_b_percent': target_class_b_percent,
+                            'class_b_percent_diff': class_b_percent_diff,
                             'class_b_base_rate': b_base_rate,
                             'num_a_tranches': num_a_tranches
                         }
                         
                         optimization_progress.update(
                             message=f"Found better solution for {strategy}: coupon_rate={class_b_coupon_rate:.2f}%, " +
-                                   f"diff={coupon_rate_diff:.2f}%, total_principal={total_principal:,.2f}"
+                                   f"diff={coupon_rate_diff:.2f}%, Class B={class_b_percent:.2f}%, " +
+                                   f"total_principal={total_principal:,.2f}"
                         )
                 
                 # Update iteration counter
@@ -1070,10 +1173,12 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                     break
             
             # Early termination if we've found very good solutions across multiple strategies
-            good_strategies_count = sum(1 for diff in best_coupon_rate_diff_by_strategy.values() if diff <= 0.2)
+            good_strategies_count = sum(1 for strat in strategy_names if 
+                                      best_coupon_rate_diff_by_strategy[strat] <= 0.3 and
+                                      best_class_b_percent_diff_by_strategy[strat] <= 0.5)
             if good_strategies_count >= 2 and combo_idx > combo_count // 4:
                 optimization_progress.update(
-                    message=f"Found {good_strategies_count} very good solutions (diff <= 0.2%), ending search early"
+                    message=f"Found {good_strategies_count} very good solutions, ending search early"
                 )
                 break
     
@@ -1095,11 +1200,17 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
         )
         raise ValueError("No valid configuration found. Try adjusting optimization parameters.")
     
-    # Improved strategy selection with stronger weight on coupon rate match
-    # Find best overall strategy prioritizing coupon rate match even more
+    # Improved strategy selection with balanced weighting between coupon rate and Class B percentage
+    # Find best overall strategy prioritizing both objectives
     best_overall_strategy = min(
         valid_strategies.items(),
-        key=lambda x: (x[1]['coupon_rate_diff'] * 3, -x[1]['total_principal'])  # Triple weight on diff
+        key=lambda x: (
+            # First sort by normalized combined objective 
+            (x[1]['coupon_rate_diff'] / target_class_b_coupon_rate * 0.6) + 
+            (x[1]['class_b_percent_diff'] / target_class_b_percent * 0.4),
+            # Then by negative principal (higher principal is better)
+            -x[1]['total_principal']
+        )
     )[0]
     
     # Get best parameters and results
@@ -1110,7 +1221,8 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     optimization_progress.update(
         step=95,
         message=f"Selected best strategy: {best_strategy}, coupon_rate: {best_results['class_b_coupon_rate']:.2f}%, " +
-               f"diff: {best_results['coupon_rate_diff']:.2f}%, total_principal: {best_results['total_principal']:,.2f}"
+               f"diff: {best_results['coupon_rate_diff']:.2f}%, Class B: {best_results['class_b_percent']:.2f}%, " +
+               f"total_principal: {best_results['total_principal']:,.2f}"
     )
     
     # Extract values for the result
@@ -1123,14 +1235,16 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     class_b_rate = best_params['b_base_rates'][0]
     class_b_reinvest = best_params['b_reinvest_rates'][0]
     class_b_nominal = best_params['b_nominal'][0]
+    class_b_percent = best_params['class_b_percent']
     
     # Final progress update
     optimization_progress.update(
         step=100,
+        phase="Complete",
         message="Optimization completed successfully."
     )
     
-    # Return the optimization result
+    # Return the optimization result with enhanced data
     return OptimizationResult(
         best_strategy=best_strategy,
         class_a_maturities=class_a_maturities,
@@ -1141,6 +1255,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
         class_b_rate=class_b_rate,
         class_b_reinvest=class_b_reinvest,
         class_b_nominal=class_b_nominal,
+        class_b_percent=class_b_percent,
         class_b_coupon_rate=best_results['class_b_coupon_rate'],
         min_buffer_actual=best_results['min_buffer_actual'],
         last_cash_flow_day=last_cash_flow_day,
@@ -1149,7 +1264,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     )
 
 def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSettings, optimization_settings: OptimizationSettings) -> OptimizationResult:
-    """Genetic algorithm optimization
+    """Genetic algorithm optimization with improved Class B percentage targeting
     
     Args:
         df: DataFrame containing cash flow data
@@ -1171,16 +1286,22 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         start_date = pd.Timestamp(general_settings.start_date)
         ops_expenses = general_settings.operational_expenses
         min_buffer = general_settings.min_buffer
-        min_class_b_percent = optimization_settings.min_class_b_percent
+        
+        # Use the new Class B percentage targeting parameters
+        target_class_b_percent = getattr(optimization_settings, "target_class_b_percent", 15.0)
+        class_b_percent_deviation = getattr(optimization_settings, "class_b_percent_deviation", 2.0)
+        
         target_class_b_coupon_rate = optimization_settings.target_class_b_coupon_rate
         additional_days = optimization_settings.additional_days_for_class_b
         population_size = getattr(optimization_settings, "population_size", 50)
         num_generations = getattr(optimization_settings, "num_generations", 40)
         
         optimization_progress.update(step=5, 
-                                    message=f"Population size: {population_size}, generations: {num_generations}")
+                                    message=f"Population size: {population_size}, generations: {num_generations}, " +
+                                           f"Target Class B: {target_class_b_percent}±{class_b_percent_deviation}%")
         
-        logger.info(f"Parameters: population_size={population_size}, num_generations={num_generations}")
+        logger.info(f"Parameters: population_size={population_size}, num_generations={num_generations}, " +
+                   f"target_class_b_percent={target_class_b_percent}±{class_b_percent_deviation}%")
         
         # Get last cash flow day
         last_cash_flow_day = get_last_cash_flow_day(df, start_date)
@@ -1241,7 +1362,7 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         
         logger.info("Initializing population...")
         
-        # Function to create a valid individual
+        # Function to create a valid individual with Class B percentage gene
         def create_valid_individual():
             # Generate valid maturities - ensure they are integers
             maturities = []
@@ -1265,9 +1386,29 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
             # Convert to nominals
             nominals = [w * total_a_nominal for w in weights]
             
+            # Random Class B percentage within allowed range
+            # This is a key enhancement in the genetic algorithm
+            min_percent = max(0.1, target_class_b_percent - class_b_percent_deviation)
+            max_percent = min(50, target_class_b_percent + class_b_percent_deviation)
+            random_b_percent = random.uniform(min_percent, max_percent)
+            
+            # Calculate Class B nominal based on random percentage
+            # Formula: class_b_nominal = total_a_nominal * (b_percent / (100 - b_percent))
+            b_share = random_b_percent / 100
+            class_b_nominal = (total_a_nominal * b_share) / (1 - b_share)
+            
+            # Round to nearest 1000
+            class_b_nominal = round(class_b_nominal / 1000) * 1000
+            
+            # Calculate actual Class B percentage
+            total_nominal = total_a_nominal + class_b_nominal
+            actual_b_percent = (class_b_nominal / total_nominal) * 100
+            
             return {
                 'maturities': maturities,
                 'nominals': nominals,
+                'class_b_nominal': class_b_nominal,
+                'class_b_percent': actual_b_percent,
                 'fitness': 0  # Will be evaluated
             }
         
@@ -1341,16 +1482,60 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
                 try:
                     maturities = individual['maturities']
                     nominals = individual['nominals']
+                    class_b_nominal = individual['class_b_nominal']
                     
                     # Ensure maturities are integers for evaluation
                     maturities_int = [int(m) for m in maturities]
                     
+                    # Get rates based on nearest maturity
+                    a_base_rates = [maturity_to_base_rate_A.get(
+                        get_nearest_maturity(m, list(maturity_to_base_rate_A.keys())), 42.0) for m in maturities_int]
+                    
+                    a_reinvest_rates = [maturity_to_reinvest_rate_A.get(
+                        get_nearest_maturity(m, list(maturity_to_reinvest_rate_A.keys())), 30.0) for m in maturities_int]
+                    
+                    # Calculate actual Class B percentage
+                    total_a_nominal = sum(nominals)
+                    total_nominal = total_a_nominal + class_b_nominal
+                    actual_b_percent = (class_b_nominal / total_nominal) * 100
+                    
+                    individual['class_b_percent'] = actual_b_percent
+                    
+                    # Try to adjust nominals for target coupon rate
+                    try:
+                        adjusted_nominals, adjustment_success, adjusted_b_percent = adjust_class_a_nominals_for_target_coupon(
+                            nominals, 
+                            class_b_nominal, 
+                            target_class_b_coupon_rate,
+                            class_b_maturity,
+                            maturities_int, 
+                            a_base_rates, 
+                            a_reinvest_rates, 
+                            class_b_base_rate_orig, 
+                            class_b_reinvest_rate_orig,
+                            start_date, 
+                            df_temp, 
+                            min_buffer,
+                            target_class_b_percent,
+                            0.5  # max_allowed_diff
+                        )
+                        if adjustment_success:
+                            nominals = adjusted_nominals
+                            individual['nominals'] = nominals
+                            individual['class_b_percent'] = adjusted_b_percent
+                    except Exception as e:
+                        logger.error(f"Error adjusting nominals: {str(e)}")
+                        # Continue with original nominals
+                        pass
+                    
+                    # Evaluate the adjusted parameters
                     result = evaluate_params(
                         maturities_int, nominals, 
                         class_b_maturity, start_date, df_temp,
                         maturity_to_base_rate_A, maturity_to_reinvest_rate_A,
                         class_b_base_rate_orig, class_b_reinvest_rate_orig,
-                        min_class_b_percent, target_class_b_coupon_rate, min_buffer
+                        target_class_b_percent, class_b_percent_deviation,
+                        target_class_b_coupon_rate, min_buffer
                     )
                     
                     # Set fitness - ensure it's a number
@@ -1371,11 +1556,17 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
                         
                         # Update progress message when finding better solution
                         if 'result' in individual and individual['result'] and 'results' in individual['result']:
-                            if 'class_b_coupon_rate' in individual['result']['results']:
-                                coupon_rate = individual['result']['results']['class_b_coupon_rate']
+                            results = individual['result']['results']
+                            if results and 'class_b_coupon_rate' in results and 'class_b_percent' in results:
+                                coupon_rate = results['class_b_coupon_rate']
                                 coupon_diff = abs(coupon_rate - target_class_b_coupon_rate)
+                                class_b_percent = results['class_b_percent']
+                                percent_diff = abs(class_b_percent - target_class_b_percent)
+                                
                                 optimization_progress.update(
-                                    message=f"Generation {generation+1}: Found better solution with score {best_fitness:.2f}, coupon rate: {coupon_rate:.2f}% (diff: {coupon_diff:.2f}%)"
+                                    message=f"Generation {generation+1}: Found better solution with score {best_fitness:.2f}, " +
+                                           f"coupon rate: {coupon_rate:.2f}% (diff: {coupon_diff:.2f}%), " +
+                                           f"Class B: {class_b_percent:.2f}% (diff: {percent_diff:.2f}%)"
                                 )
                         else:
                             optimization_progress.update(
@@ -1438,6 +1629,21 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
                     child_weights = [w / total_weight for w in child_weights]
                     child_nominals = [w * total_a_nominal for w in child_weights]
                     
+                    # Class B percentage crossover
+                    # Use weighted average of parent percentages
+                    if random.random() < 0.5:
+                        # Weighted average with random weight
+                        weight = random.random()
+                        child_b_percent = (parent1['class_b_percent'] * weight) + (parent2['class_b_percent'] * (1 - weight))
+                    else:
+                        # Pick one parent's value
+                        child_b_percent = parent1['class_b_percent'] if random.random() < 0.5 else parent2['class_b_percent']
+                    
+                    # Calculate Class B nominal from percentage
+                    b_share = child_b_percent / 100
+                    child_b_nominal = (total_a_nominal * b_share) / (1 - b_share)
+                    child_b_nominal = round(child_b_nominal / 1000) * 1000
+                    
                     # Mutation - mutate maturities
                     if random.random() < 0.3:  # 30% mutation rate
                         mutation_idx = random.randint(0, num_a_tranches-1)
@@ -1468,10 +1674,22 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
                         child_weights = [w / total_weight for w in child_weights]
                         child_nominals = [w * total_a_nominal for w in child_weights]
                     
+                    # Mutation - mutate Class B percentage
+                    if random.random() < 0.3:
+                        mutation_amount = random.uniform(-class_b_percent_deviation / 2, class_b_percent_deviation / 2)
+                        child_b_percent = max(0.1, min(50, child_b_percent + mutation_amount))
+                        
+                        # Recalculate B nominal
+                        b_share = child_b_percent / 100
+                        child_b_nominal = (total_a_nominal * b_share) / (1 - b_share)
+                        child_b_nominal = round(child_b_nominal / 1000) * 1000
+                    
                     # Add child to new population
                     new_population.append({
                         'maturities': child_maturities,  # These are already integers
                         'nominals': child_nominals,
+                        'class_b_nominal': child_b_nominal,
+                        'class_b_percent': child_b_percent,
                         'fitness': 0  # Will be evaluated in next generation
                     })
                 except Exception as e:
@@ -1494,11 +1712,14 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
             # Early termination if we have an excellent solution
             if best_individual and best_individual.get('result') and best_individual['result'].get('results'):
                 best_results = best_individual['result']['results']
-                if 'class_b_coupon_rate' in best_results:
+                if 'class_b_coupon_rate' in best_results and 'class_b_percent' in best_results:
                     coupon_diff = abs(best_results['class_b_coupon_rate'] - target_class_b_coupon_rate)
-                    if coupon_diff < 0.2:
+                    percent_diff = abs(best_results['class_b_percent'] - target_class_b_percent)
+                    
+                    # Only terminate early if both objectives are very good
+                    if coupon_diff < 0.2 and percent_diff < 0.5:
                         optimization_progress.update(
-                            message=f"Found excellent solution (coupon diff < 0.2%), ending evolution early"
+                            message=f"Found excellent solution (coupon diff < 0.2%, Class B diff < 0.5%), ending evolution early"
                         )
                         break
         
@@ -1524,6 +1745,8 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         # Get the best result
         best_maturities = best_individual['maturities']
         best_nominals = best_individual['nominals']
+        best_class_b_nominal = best_individual['class_b_nominal']
+        best_class_b_percent = best_individual['class_b_percent']
         best_result = best_individual['result']
         
         # Get rates based on original data
@@ -1545,7 +1768,8 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
             class_b_maturity=int(class_b_maturity),
             class_b_rate=class_b_base_rate_orig,
             class_b_reinvest=class_b_reinvest_rate_orig,
-            class_b_nominal=best_result.get('b_nominal', 0),
+            class_b_nominal=best_class_b_nominal,
+            class_b_percent=best_class_b_percent,
             class_b_coupon_rate=best_result['results'].get('class_b_coupon_rate', 0),
             min_buffer_actual=best_result['results'].get('min_buffer_actual', 0),
             last_cash_flow_day=int(last_cash_flow_day),
