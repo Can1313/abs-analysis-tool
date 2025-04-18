@@ -34,6 +34,7 @@ class OptimizationSettings(BaseModel):
     min_class_b_percent: float = Field(default=10.0)
     target_class_b_coupon_rate: float = Field(default=30.0)
     additional_days_for_class_b: int = Field(default=10)
+    class_b_percent_deviation: float = Field(default=1.0)  # New field with tighter default value
     
     # Evolutionary algorithm parameters
     population_size: Optional[int] = Field(default=50)

@@ -1,37 +1,39 @@
-// frontend/src/pages/CalculationPage.js
 import React, { useState, useEffect } from 'react';
-import { 
-  Container, 
-  Typography, 
-  Box, 
-  Paper, 
-  Tabs, 
-  Tab, 
-  Button, 
+import {
+  Container,
+  Typography,
+  Box,
+  Paper,
+  Tabs,
+  Tab,
+  Button,
   Alert,
   CircularProgress,
   Snackbar,
   IconButton,
   Tooltip,
-  Divider
+  Divider,
 } from '@mui/material';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import CompareIcon from '@mui/icons-material/Compare';
 import ReplayIcon from '@mui/icons-material/Replay';
+
 import { useData } from '../contexts/DataContext';
 import { calculateResults } from '../services/apiService';
+
 import GeneralSettingsForm from '../components/calculation/GeneralSettingsForm';
 import TrancheAForm from '../components/calculation/TrancheAForm';
 import TrancheBForm from '../components/calculation/TrancheBForm';
 import CalculationResults from './CalculationResults';
 import InterestRatesTable from '../components/calculation/InterestRatesTable';
+
 import { useNavigate } from 'react-router-dom';
 
 const CalculationPage = () => {
   const navigate = useNavigate();
-  const { 
+  const {
     cashFlowData,
-    calculationResults, 
+    calculationResults,
     setCalculationResults,
     isLoading,
     setIsLoading,
@@ -42,167 +44,130 @@ const CalculationPage = () => {
     resetToDefaults,
     multipleComparisonResults,
     setMultipleComparisonResults,
-    shouldAutoCalculate,
-    setShouldAutoCalculate
   } = useData();
-  
-  const [tabValue, setTabValue] = useState(0);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
-  const [optimizationData, setOptimizationData] = useState(null);
-  
-  // Auto-calculate when shouldAutoCalculate flag is true
-  useEffect(() => {
-    if (shouldAutoCalculate) {
-      // Check for optimization data in sessionStorage
-      const optimizationDataStr = sessionStorage.getItem('optimizationData');
-      if (optimizationDataStr) {
-        try {
-          const optData = JSON.parse(optimizationDataStr);
-          setOptimizationData(optData);
-          // We'll use this data in handleCalculate
-          sessionStorage.removeItem('optimizationData'); // Clear after reading
-        } catch (e) {
-          console.error("Error parsing optimization data", e);
-        }
-      }
-      
-      handleCalculate();
-      setShouldAutoCalculate(false); // Reset the flag after processing
-    }
-  }, [shouldAutoCalculate, setShouldAutoCalculate]);
 
-  const handleTabChange = (event, newValue) => {
-    setTabValue(newValue);
-  };
-  
-  const handleCalculate = async () => {
+  const [tabValue, setTabValue] = useState(0);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
+  const [optimizationData, setOptimizationData] = useState(null);
+
+  /* ------------- Auto‑calculate after optimization ------------- */
+  useEffect(() => {
+    const stored = sessionStorage.getItem('optimizationData');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        setOptimizationData(parsed);
+        handleCalculate(parsed); // pass optimization data
+      } catch (e) {
+        console.error('Cannot parse optimizationData:', e);
+      } finally {
+        sessionStorage.removeItem('optimizationData');
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ---------------------- Handlers ---------------------- */
+  const handleTabChange = (_, nv) => setTabValue(nv);
+
+  const handleCalculate = async (optData = optimizationData) => {
     try {
       setIsLoading(true);
       setError(null);
-      
-      const request = createCalculationRequest();
-      
-      // Include optimization data if available
-      if (optimizationData) {
-        request.is_optimized = optimizationData.is_optimized;
-        request.optimization_method = optimizationData.optimization_method;
+
+      const req = createCalculationRequest();
+
+      /* pass optimization meta (optional) */
+      if (optData) {
+        req.is_optimized = true;
+        req.optimization_method = optData.optimization_method;
       }
-      
-      const results = await calculateResults(request);
-      
-      // Add metadata for tracking and display
-      if (!results.is_optimized) {
-        // This is a manual calculation
-        results.label = 'Manual Calculation';
-        results.method_type = 'manual';
-        results.timestamp = new Date().toISOString();
+
+      console.log('Calculation request:', req);
+
+      const res = await calculateResults(req, optData); // 2. parametre opsiyonel!
+      console.log('Calculation response:', res);
+
+      /* label & metadata */
+      if (!res.is_optimized) {
+        res.label = 'Manual Calculation';
+        res.method_type = 'manual';
       } else {
-        // For optimized calculations, use the optimization method name
-        const methodDisplayNames = {
-          'classic': 'Standard Optimization',
-          'genetic': 'Evolutionary Algorithm',
-          'equal': 'Equal Distribution',
-          'increasing': 'Increasing by Maturity', 
-          'decreasing': 'Decreasing by Maturity',
-          'middle_weighted': 'Middle Weighted'
+        const map = {
+          classic: 'Standard Optimization',
+          genetic: 'Evolutionary Algorithm',
+          equal: 'Equal Distribution',
+          increasing: 'Increasing by Maturity',
+          decreasing: 'Decreasing by Maturity',
+          middle_weighted: 'Middle Weighted',
         };
-        
-        const methodName = results.optimization_method || 'Optimized';
-        results.label = `${methodDisplayNames[methodName] || methodName} Optimization`;
-        results.method_type = methodName === 'genetic' ? 'genetic' : 'standard';
-        results.timestamp = new Date().toISOString();
+        const mName = res.optimization_method || 'optimized';
+        res.label = `${map[mName] || mName} Optimization`;
+        res.method_type = mName === 'genetic' ? 'genetic' : 'standard';
       }
-      
-      setCalculationResults(results);
-      setTabValue(1); // Switch to results tab
-      
-      // Add to comparison history if it's a new calculation
-      if (!calculationResults || 
-          JSON.stringify(results) !== JSON.stringify(calculationResults)) {
-        
-        setMultipleComparisonResults(prev => {
-          // Create a new array to avoid reference issues
-          const updatedResults = prev ? [...prev] : [];
-          
-          // Check if we already have a result of the same type
-          const existingIndex = updatedResults.findIndex(r => 
-            r.method_type === results.method_type
-          );
-          
-          // If we have a result of this type, replace it
-          if (existingIndex >= 0) {
-            updatedResults[existingIndex] = { ...results };
-          } else {
-            // Otherwise add it to the array
-            // Check if we've reached the maximum number of comparisons (limit to 5 for UI reasons)
-            if (updatedResults.length >= 5) {
-              updatedResults.shift(); // Remove the oldest result
-            }
-            updatedResults.push({ ...results });
-          }
-          
-          console.log("Saving calculation to comparison results:", results.method_type);
-          return updatedResults;
-        });
-      }
-      
-      // Show success message
-      setSnackbarMessage('Calculation completed successfully!');
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
-      
-      // Logging to ensure we have data for comparison
-      console.log("Calculation results saved:", results);
-      console.log("Previous results available:", previousCalculationResults ? "Yes" : "No");
-    } catch (err) {
-      setError('Calculation failed. Please check your parameters and try again.');
-      console.error(err);
-      
-      // Show error message
-      setSnackbarMessage('Calculation failed. Please try again.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
+      res.timestamp = new Date().toISOString();
+
+      setCalculationResults(res);
+      setTabValue(1);
+
+      /* comparison buffer (max 5) */
+      setMultipleComparisonResults((prev) => {
+        const up = prev ? [...prev] : [];
+        const idx = up.findIndex((r) => r.method_type === res.method_type);
+        if (idx >= 0) up[idx] = { ...res };
+        else {
+          if (up.length >= 5) up.shift();
+          up.push({ ...res });
+        }
+        return up;
+      });
+
+      setSnackbar({
+        open: true,
+        message: 'Calculation completed successfully!',
+        severity: 'success',
+      });
+    } catch (e) {
+      setError('Calculation failed. Please check parameters and try again.');
+      console.error(e);
+      setSnackbar({
+        open: true,
+        message: 'Calculation failed. Please try again.',
+        severity: 'error',
+      });
     } finally {
       setIsLoading(false);
-      // Reset optimization data after use
-      setOptimizationData(null);
     }
-  };
-  
-  // Reset to original default values
-  const handleReset = () => {
-    if (resetToDefaults()) {
-      setSnackbarMessage('Reset to original values successfully.');
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
-    } else {
-      setSnackbarMessage('Failed to reset to original values.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-    }
-  };
-  
-  // Navigate to comparison page
-  const goToComparison = () => {
-    navigate('/comparison');
-  };
-  
-  // Handle snackbar close
-  const handleSnackbarClose = (event, reason) => {
-    if (reason === 'clickaway') {
-      return;
-    }
-    setSnackbarOpen(false);
   };
 
+  const goToComparison = () => navigate('/comparison');
+
+  const handleReset = () => {
+    if (resetToDefaults()) {
+      setSnackbar({
+        open: true,
+        message: 'Reset to original values.',
+        severity: 'success',
+      });
+    }
+  };
+
+  const handleSnackClose = (_, r) => {
+    if (r === 'clickaway') return;
+    setSnackbar((s) => ({ ...s, open: false }));
+  };
+
+  /* -------------------- RENDER -------------------- */
   if (!cashFlowData) {
     return (
       <Container>
         <Box sx={{ mt: 4, textAlign: 'center' }}>
           <Typography variant="h5" color="error">
-            Please upload cash flow data first
+            Please upload cash‑flow data first
           </Typography>
         </Box>
       </Container>
@@ -211,27 +176,29 @@ const CalculationPage = () => {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      {/* Snackbar for notifications */}
+      {/* Snackbar */}
       <Snackbar
-        open={snackbarOpen}
+        open={snackbar.open}
         autoHideDuration={6000}
-        onClose={handleSnackbarClose}
+        onClose={handleSnackClose}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
-        <Alert 
-          onClose={handleSnackbarClose} 
-          severity={snackbarSeverity} 
-          sx={{ width: '100%' }}
-        >
-          {snackbarMessage}
+        <Alert severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
         </Alert>
       </Snackbar>
-    
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          ABS Calculation
-        </Typography>
-        
+
+      {/* Header */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 3,
+        }}
+      >
+        <Typography variant="h4">ABS Calculation</Typography>
+
         <Box sx={{ display: 'flex', gap: 2 }}>
           {calculationResults && previousCalculationResults && (
             <Button
@@ -243,23 +210,18 @@ const CalculationPage = () => {
               View Comparisons
             </Button>
           )}
-          
+
           <Tooltip title="Reset to original values">
-            <IconButton 
-              color="primary" 
-              onClick={handleReset}
-              size="small"
-            >
+            <IconButton color="primary" onClick={handleReset} size="small">
               <ReplayIcon />
             </IconButton>
           </Tooltip>
         </Box>
       </Box>
-      
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
-      )}
-      
+
+      {error && <Alert severity="error">{error}</Alert>}
+
+      {/* Tabs */}
       <Paper sx={{ mb: 4 }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={tabValue} onChange={handleTabChange}>
@@ -268,28 +230,30 @@ const CalculationPage = () => {
             <Tab label="Interest Rates" disabled={!calculationResults} />
           </Tabs>
         </Box>
-        
+
         <Box sx={{ p: 3 }}>
           {tabValue === 0 && (
             <>
               <GeneralSettingsForm />
               <TrancheAForm />
               <TrancheBForm />
-              
+
               <Divider sx={{ my: 3 }} />
-              
+
               <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', gap: 2 }}>
                 <Button
                   variant="contained"
                   color="primary"
                   size="large"
-                  onClick={handleCalculate}
+                  onClick={() => handleCalculate()}
                   disabled={isLoading}
-                  startIcon={isLoading ? <CircularProgress size={24} /> : <CalculateIcon />}
+                  startIcon={
+                    isLoading ? <CircularProgress size={24} /> : <CalculateIcon />
+                  }
                 >
-                  {isLoading ? 'Calculating...' : 'Calculate Results'}
+                  {isLoading ? 'Calculating…' : 'Calculate Results'}
                 </Button>
-                
+
                 {calculationResults && previousCalculationResults && (
                   <Button
                     variant="outlined"
@@ -304,11 +268,11 @@ const CalculationPage = () => {
               </Box>
             </>
           )}
-          
+
           {tabValue === 1 && calculationResults && (
             <CalculationResults results={calculationResults} />
           )}
-          
+
           {tabValue === 2 && calculationResults && (
             <InterestRatesTable results={calculationResults} />
           )}

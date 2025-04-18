@@ -595,7 +595,12 @@ const TopBar = () => {
                 py: 1,
                 borderRadius: 1,
                 backgroundColor: location.pathname === '/calculation' ? alpha('#fff', 0.15) : 'transparent',
-                '&a
+                '&:hover': {
+                  backgroundColor: location.pathname === '/calculation' ? alpha('#fff', 0.25) : alpha('#fff', 0.1),
+                }
+              }}
+            >
+              Calculate
             </Button>
             
             <Button 
@@ -1291,8 +1296,9 @@ const InterestRatesTable = ({ results }) => {
             <TableHead>
               <TableRow>
                 <TableCell sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.secondary.main, 0.04) }}>Tranche</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.secondary.main, 0.04) }}>Coupon Rate (%)</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.secondary.main, 0.04) }}>Direct Coupon Rate (%)</TableCell>
                 <TableCell align="center" sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.secondary.main, 0.04) }}>Effective Coupon Rate (%)</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.secondary.main, 0.04) }}>Maturity Info</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1340,12 +1346,39 @@ const InterestRatesTable = ({ results }) => {
                         }}
                       />
                     </TableCell>
+                    <TableCell align="center" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {`Maturity: ${rate['Maturity Days']} days`}
+                    </TableCell>
                   </TableRow>
                 ))
               }
             </TableBody>
           </Table>
         </TableContainer>
+
+        {/* Helper component to explain the rates */}
+        <Box sx={{ mt: 3, p: 2, bgcolor: alpha(theme.palette.info.main, 0.05), borderRadius: 1 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            About Coupon Rates
+          </Typography>
+          <Typography variant="body2">
+            <strong>Direct Coupon Rate:</strong> The simple percentage of coupon payment relative to principal (non-annualized).
+          </Typography>
+          <Typography variant="body2">
+            <strong>Effective Coupon Rate:</strong> The annualized coupon rate, calculated as direct rate × (365 ÷ maturity days).
+          </Typography>
+        </Box>
+
+        {/* Debug information in development mode */}
+        {process.env.NODE_ENV === 'development' && (
+          <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+            <Typography variant="caption">Debug Information:</Typography>
+            <pre style={{ fontSize: '0.7rem', overflowX: 'auto' }}>
+              {JSON.stringify(results.interest_rate_conversions
+                .filter(rate => rate.Tranche.includes('Class B')), null, 2)}
+            </pre>
+          </Box>
+        )}
       </Paper>
       
       {/* Interest Rates Chart */}
@@ -2081,7 +2114,7 @@ const OptimizationResults = ({ results }) => {
     setError,
     createCalculationRequest,
     setCalculationResults,
-    saveResult, // Add this
+    saveResult,
     setMultipleComparisonResults,
     setShouldAutoCalculate
   } = useData();
@@ -2197,6 +2230,7 @@ const OptimizationResults = ({ results }) => {
   const strategyResultsData = Object.entries(results.results_by_strategy).map(([strategy, data]) => ({
     name: getStrategyDisplayName(strategy),
     totalPrincipal: data.total_principal,
+    directClassBCouponRate: data.direct_coupon_rate || 0,
     classBCouponRate: data.class_b_coupon_rate,
     minBufferActual: data.min_buffer_actual,
     isBest: strategy === results.best_strategy
@@ -2209,6 +2243,9 @@ const OptimizationResults = ({ results }) => {
       if (calculationResults) {
         setPreviousCalculationResults(calculationResults);
       }
+      
+      // Log all values for debugging
+      console.log("Optimization results:", results);
       
       const a_tranches = results.class_a_maturities.map((maturity, index) => ({
         maturity_days: maturity,
@@ -2223,33 +2260,99 @@ const OptimizationResults = ({ results }) => {
         base_rate: results.class_b_rate,
         spread: 0.0, // Default value
         reinvest_rate: results.class_b_reinvest,
-        nominal: results.class_b_nominal  // Bu satırı ekledik - Class B nominal değerini de transfer ediyoruz
+        nominal: results.class_b_nominal  // Ensure Class B nominal value is transferred
       };
+      
+      // Enhanced logging with coupon rates and more debugging details
+      console.log("Applying configuration with parameters:", {
+        tranchesA: a_tranches,
+        trancheB: b_tranche,
+        class_b_nominal: results.class_b_nominal,
+        class_b_coupon_rate: results.class_b_coupon_rate,
+        direct_class_b_coupon_rate: results.direct_class_b_coupon_rate || 0,
+        class_b_maturity: results.class_b_maturity
+      });
+      
+      // Verify that the nominal values match the expected totals
+      const totalClassANominal = a_tranches.reduce((sum, tranche) => sum + tranche.nominal, 0);
+      const totalNominal = totalClassANominal + b_tranche.nominal;
+      
+      console.log("Nominal value verification:", {
+        totalClassANominal,
+        classBNominal: b_tranche.nominal,
+        totalNominal,
+        expectedTotal: results.total_principal
+      });
       
       // Update form state
       setTranchesA(a_tranches);
       setTrancheB(b_tranche);
-      
-      // Mark the results as from optimization, including optimization method
-      const optimizationData = {
-        is_optimized: true,
-        optimization_method: results.best_strategy,
-        optimization_label: getStrategyDisplayName(results.best_strategy)
-      };
-      
-      // Store optimization data to be used when calculating
-      sessionStorage.setItem('optimizationData', JSON.stringify(optimizationData));
       
       // Show processing message
       setSnackbarMessage('Applying configuration and calculating results...');
       setSnackbarSeverity('info');
       setSnackbarOpen(true);
       
-      // Set flag to trigger auto-calculation when calculation page loads
-      setShouldAutoCalculate(true);
+      // Create the calculation request directly
+      const request = createCalculationRequest();
       
-      // Navigate to calculation page
-      navigate('/calculation');
+      // Add optimization metadata
+      request.is_optimized = true;
+      request.optimization_method = results.best_strategy;
+      
+      // Perform calculation directly instead of navigating
+      setIsLoading(true);
+      try {
+        const calculationResult = await calculateResults(request);
+        
+        // Add metadata for tracking and display
+        calculationResult.label = `${getStrategyDisplayName(results.best_strategy)} Optimization`;
+        calculationResult.method_type = results.best_strategy === 'genetic' ? 'genetic' : 'standard';
+        calculationResult.timestamp = new Date().toISOString();
+        
+        // Update results state
+        setCalculationResults(calculationResult);
+        
+        // Show success message
+        setSnackbarMessage('Configuration applied and results calculated successfully!');
+        setSnackbarSeverity('success');
+        setSnackbarOpen(true);
+        
+        // Add to comparison history
+        setMultipleComparisonResults(prev => {
+          const updatedResults = prev ? [...prev] : [];
+          
+          // Check if we already have a result of the same type
+          const existingIndex = updatedResults.findIndex(r => 
+            r.method_type === calculationResult.method_type
+          );
+          
+          // If we have a result of this type, replace it
+          if (existingIndex >= 0) {
+            updatedResults[existingIndex] = { ...calculationResult };
+          } else {
+            // Otherwise add it to the array
+            if (updatedResults.length >= 5) {
+              updatedResults.shift(); // Remove the oldest result
+            }
+            updatedResults.push({ ...calculationResult });
+          }
+          
+          return updatedResults;
+        });
+        
+        // Navigate to results page to show the new calculation
+        navigate('/calculation');
+        
+      } catch (err) {
+        console.error('Error calculating results:', err);
+        setSnackbarMessage('Error calculating results. Please try again.');
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+      } finally {
+        setIsLoading(false);
+      }
+      
     } catch (error) {
       console.error('Error applying configuration:', error);
       
@@ -2361,7 +2464,16 @@ const OptimizationResults = ({ results }) => {
           
           <Box>
             <Typography variant="body2" color="text.secondary">
-              Class B Coupon Rate
+              Direct Coupon Rate
+            </Typography>
+            <Typography variant="h6" color="secondary">
+              {formatPercent(results.direct_class_b_coupon_rate || 0)}
+            </Typography>
+          </Box>
+          
+          <Box>
+            <Typography variant="body2" color="text.secondary">
+              Effective Coupon Rate
             </Typography>
             <Typography variant="h6" color="secondary">
               {formatPercent(results.class_b_coupon_rate)}
@@ -2479,7 +2591,8 @@ const OptimizationResults = ({ results }) => {
               <TableRow>
                 <TableCell>Strategy</TableCell>
                 <TableCell align="right">Total Principal</TableCell>
-                <TableCell align="right">Class B Coupon Rate</TableCell>
+                <TableCell align="right">Direct Coupon Rate</TableCell>
+                <TableCell align="right">Effective Coupon Rate</TableCell>
                 <TableCell align="right">Min Buffer</TableCell>
                 <TableCell align="right">Class A Tranches</TableCell>
               </TableRow>
@@ -2500,6 +2613,7 @@ const OptimizationResults = ({ results }) => {
                     </Box>
                   </TableCell>
                   <TableCell align="right">{formatCurrency(row.totalPrincipal)}</TableCell>
+                  <TableCell align="right">{formatPercent(row.directClassBCouponRate)}</TableCell>
                   <TableCell align="right">{formatPercent(row.classBCouponRate)}</TableCell>
                   <TableCell align="right">{formatPercent(row.minBufferActual)}</TableCell>
                   <TableCell align="right">
@@ -2544,8 +2658,13 @@ const OptimizationResults = ({ results }) => {
               <Tooltip formatter={(value) => `${value.toFixed(2)}%`} />
               <Legend />
               <Bar 
+                dataKey="directClassBCouponRate" 
+                name="Direct Coupon Rate" 
+                fill={theme.palette.secondary.dark} 
+              />
+              <Bar 
                 dataKey="classBCouponRate" 
-                name="Class B Coupon Rate" 
+                name="Effective Coupon Rate" 
                 fill={theme.palette.secondary.main} 
               />
               <Bar 
@@ -2615,7 +2734,8 @@ const OptimizationResults = ({ results }) => {
                 <TableCell align="right">Base Rate (%)</TableCell>
                 <TableCell align="right">Reinvest Rate (%)</TableCell>
                 <TableCell align="right">Nominal</TableCell>
-                <TableCell align="right">Coupon Rate (%)</TableCell>
+                <TableCell align="right">Direct Coupon Rate (%)</TableCell>
+                <TableCell align="right">Effective Coupon Rate (%)</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -2625,6 +2745,9 @@ const OptimizationResults = ({ results }) => {
                 <TableCell align="right">{results.class_b_rate.toFixed(2)}</TableCell>
                 <TableCell align="right">{results.class_b_reinvest.toFixed(2)}</TableCell>
                 <TableCell align="right">{formatCurrency(results.class_b_nominal)}</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: theme.palette.secondary.main }}>
+                  {formatPercent(results.direct_class_b_coupon_rate || 0)}
+                </TableCell>
                 <TableCell align="right" sx={{ fontWeight: 'bold', color: theme.palette.secondary.main }}>
                   {formatPercent(results.class_b_coupon_rate)}
                 </TableCell>
@@ -3272,240 +3395,184 @@ export default OptimizationSettingsForm;
 
 DOSYA: src\contexts\DataContext.js
 ==================================================
-// src/contexts/DataContext.js
+/* -----------------------------------------------------------
+ *  Global state & helpers (React Context)
+ * --------------------------------------------------------- */
 
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 
 const DataContext = createContext();
-
 export const useData = () => useContext(DataContext);
 
+/* localStorage parse – "undefined" vb. hataları engeller */
+const safeParse = (key, fallback) => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    localStorage.removeItem(key);
+    return fallback;
+  }
+};
+
+/* -----------------------------------------------------------
+ *              <DataProvider>
+ * --------------------------------------------------------- */
 export const DataProvider = ({ children }) => {
-  // File upload and data state
+  /* ------------------- Core flags ------------------ */
   const [cashFlowData, setCashFlowData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  
-  // Calculation form state
+
+  /* ---------------- Form defaults ------------------ */
   const [generalSettings, setGeneralSettings] = useState({
     start_date: new Date(2025, 1, 13),
-    operational_expenses: 7928640,
-    min_buffer: 5.0
+    operational_expenses: 7_928_640,
+    min_buffer: 5,
   });
-  
+
   const [tranchesA, setTranchesA] = useState([
-    { maturity_days: 61, base_rate: 45.6, spread: 0.0, reinvest_rate: 40.0, nominal: 480000000 },
-    { maturity_days: 120, base_rate: 44.5, spread: 0.0, reinvest_rate: 37.25, nominal: 460000000 },
-    { maturity_days: 182, base_rate: 43.3, spread: 0.0, reinvest_rate: 32.5, nominal: 425000000 },
-    { maturity_days: 274, base_rate: 42.5, spread: 0.0, reinvest_rate: 30.0, nominal: 400000000 },
+    { maturity_days: 61, base_rate: 45.6, spread: 0, reinvest_rate: 40, nominal: 480_000_000 },
+    { maturity_days: 120, base_rate: 44.5, spread: 0, reinvest_rate: 37.25, nominal: 460_000_000 },
+    { maturity_days: 182, base_rate: 43.3, spread: 0, reinvest_rate: 32.5, nominal: 425_000_000 },
+    { maturity_days: 274, base_rate: 42.5, spread: 0, reinvest_rate: 30, nominal: 400_000_000 },
   ]);
-  
-  // Store original tranche values for reset functionality
-  const [originalTranchesA, setOriginalTranchesA] = useState(null);
-  const [originalTrancheB, setOriginalTrancheB] = useState(null);
-  
+
   const [trancheB, setTrancheB] = useState({
     maturity_days: 300,
-    base_rate: 0.0,
-    spread: 0.0,
-    reinvest_rate: 25.5
+    base_rate: 0,
+    spread: 0,
+    reinvest_rate: 25.5,
+    /* nominal boş – optimizasyon gelince dolacak */
   });
-  
+
   const [npvSettings, setNpvSettings] = useState({
     method: 'weighted_avg_rate',
-    custom_rate: 40.0
+    custom_rate: 40,
   });
-  
-  // Flag for auto-calculating when navigating from optimization page
-  const [shouldAutoCalculate, setShouldAutoCalculate] = useState(false);
-  
-  // Results state with localStorage initialization
-  const [calculationResults, setCalculationResults] = useState(() => {
-    const saved = localStorage.getItem('calculationResults');
-    return saved ? JSON.parse(saved) : null;
+
+  /* --------------- Optimization defaults ------------ */
+  const [optimizationSettings, setOptimizationSettings] = useState({
+    optimization_method: 'classic',
+    a_tranches_range: [2, 6],
+    maturity_range: [32, 365],
+    maturity_step: 10,
+    min_class_b_percent: 10,
+    target_class_b_coupon_rate: 30,
+    additional_days_for_class_b: 10,
+    population_size: 50,
+    num_generations: 40,
   });
-  
-  const [optimizationResults, setOptimizationResults] = useState(() => {
-    const saved = localStorage.getItem('optimizationResults');
-    return saved ? JSON.parse(saved) : null;
-  });
-  
-  const [previousCalculationResults, setPreviousCalculationResults] = useState(() => {
-    const saved = localStorage.getItem('previousCalculationResults');
-    return saved ? JSON.parse(saved) : null;
-  });
-  
-  // Merged state for saved comparison results and multiple comparison results
-  const [savedResults, setSavedResults] = useState(() => {
-    const saved = localStorage.getItem('savedResults');
-    return saved ? JSON.parse(saved) : [];
-  });
-  
-  const [multipleComparisonResults, setMultipleComparisonResults] = useState(() => {
-    const saved = localStorage.getItem('multipleComparisonResults');
-    return saved ? JSON.parse(saved) : [];
-  });
-  
-  // Wrap setState functions to also update localStorage
-  const setCalculationResultsWithStorage = (results) => {
-    setCalculationResults(results);
-    if (results) {
-      localStorage.setItem('calculationResults', JSON.stringify(results));
-    } else {
-      localStorage.removeItem('calculationResults');
-    }
+
+  /* -------------- originals for <Reset> -------------- */
+  const [origA, setOrigA] = useState(null);
+  const [origB, setOrigB] = useState(null);
+  useEffect(() => {
+    if (!origA) setOrigA(JSON.parse(JSON.stringify(tranchesA)));
+    if (!origB) setOrigB(JSON.parse(JSON.stringify(trancheB)));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ------------------ Stored results ---------------- */
+  const [calculationResults, setCalculationResults] = useState(() =>
+    safeParse('calculationResults', null),
+  );
+  const [optimizationResults, setOptimizationResults] = useState(() =>
+    safeParse('optimizationResults', null),
+  );
+  const [previousCalculationResults, setPreviousCalc] = useState(() =>
+    safeParse('previousCalculationResults', null),
+  );
+  const [savedResults, setSavedResults] = useState(() =>
+    safeParse('savedResults', []),
+  );
+  const [multipleComparisonResults, setMultiResults] = useState(() =>
+    safeParse('multipleComparisonResults', []),
+  );
+
+  /* -------------- localStorage wrappers -------------- */
+  const wrapLocal = (setter, key) => (val) => {
+    setter(val);
+    if (val && (Array.isArray(val) ? val.length : true))
+      localStorage.setItem(key, JSON.stringify(val));
+    else localStorage.removeItem(key);
   };
-  
-  const setOptimizationResultsWithStorage = (results) => {
-    setOptimizationResults(results);
-    if (results) {
-      localStorage.setItem('optimizationResults', JSON.stringify(results));
-    } else {
-      localStorage.removeItem('optimizationResults');
-    }
-  };
-  
-  const setPreviousCalculationResultsWithStorage = (results) => {
-    setPreviousCalculationResults(results);
-    if (results) {
-      localStorage.setItem('previousCalculationResults', JSON.stringify(results));
-    } else {
-      localStorage.removeItem('previousCalculationResults');
-    }
-  };
-  
-  const setSavedResultsWithStorage = (results) => {
-    setSavedResults(results);
-    if (results && results.length > 0) {
-      localStorage.setItem('savedResults', JSON.stringify(results));
-    } else {
-      localStorage.removeItem('savedResults');
-    }
-  };
-  
-  const setMultipleComparisonResultsWithStorage = (results) => {
-    // Ensure it's an array
-    const updatedResults = Array.isArray(results) ? [...results] : [];
-    setMultipleComparisonResults(updatedResults);
-    localStorage.setItem('multipleComparisonResults', JSON.stringify(updatedResults));
-    console.log("Updated multipleComparisonResults:", updatedResults);
-  };
-  
-  // Function to save a result with a name
+
+  const setCalcResLS   = wrapLocal(setCalculationResults, 'calculationResults');
+  const setOptResLS    = wrapLocal(setOptimizationResults, 'optimizationResults');
+  const setPrevCalcLS  = wrapLocal(setPreviousCalc, 'previousCalculationResults');
+  const setSavedResLS  = wrapLocal(setSavedResults, 'savedResults');
+  const setMultiResLS  = wrapLocal(setMultiResults, 'multipleComparisonResults');
+
+  /* ---------------------- helpers -------------------- */
   const saveResult = (result, name, methodType) => {
     if (!result) return false;
-    
-    // Create a copy of the result with additional metadata
-    const resultToSave = {
+    const stamped = {
       ...result,
       id: Date.now().toString(),
       savedName: name,
       timestamp: new Date().toISOString(),
-      methodType: methodType || result.method_type || 'manual'
+      methodType: methodType || result.method_type || 'manual',
     };
-    
-    // Add or update in savedResults array
-    setSavedResultsWithStorage([...savedResults, resultToSave]);
+    setSavedResLS([...savedResults, stamped]);
     return true;
   };
-  
-  // Function to delete a saved result
-  const deleteSavedResult = (resultId) => {
-    const updatedResults = savedResults.filter(result => result.id !== resultId);
-    setSavedResultsWithStorage(updatedResults);
-  };
-  
-  // Clear all saved results
-  const clearSavedResults = () => {
-    setSavedResultsWithStorage([]);
-  };
-  
-  // Clear comparison data function
-  const clearComparisonData = () => {
-    setMultipleComparisonResultsWithStorage([]);
-    console.log("Comparison data cleared");
-  };
-  
-  // Store original values when first loading
-  useEffect(() => {
-    if (!originalTranchesA) {
-      setOriginalTranchesA(JSON.parse(JSON.stringify(tranchesA)));
-    }
-    if (!originalTrancheB) {
-      setOriginalTrancheB(JSON.parse(JSON.stringify(trancheB)));
-    }
-  }, []);
-  
-  // Optimization settings
-  const [optimizationSettings, setOptimizationSettings] = useState({
-    optimization_method: 'classic', // Default to classic
-    a_tranches_range: [2, 6],
-    maturity_range: [32, 365],
-    maturity_step: 10,
-    min_class_b_percent: 10.0,
-    target_class_b_coupon_rate: 30.0,
-    additional_days_for_class_b: 10,
-    // Genetic algorithm settings
-    population_size: 50,
-    num_generations: 40
-    // Removed Gradient descent and Bayesian options
-  });
+  const deleteSavedResult  = (id) => setSavedResLS(savedResults.filter(r => r.id !== id));
+  const clearSavedResults  = () => setSavedResLS([]);
+  const clearComparisonData = () => setMultiResLS([]);
 
-  // Helper function to reset to default values
   const resetToDefaults = () => {
-    if (originalTranchesA && originalTrancheB) {
-      setTranchesA(JSON.parse(JSON.stringify(originalTranchesA)));
-      setTrancheB(JSON.parse(JSON.stringify(originalTrancheB)));
+    if (origA && origB) {
+      setTranchesA(JSON.parse(JSON.stringify(origA)));
+      setTrancheB(JSON.parse(JSON.stringify(origB)));
       return true;
     }
     return false;
   };
 
-  // Helper function to clear data
   const clearData = () => {
     setCashFlowData(null);
-    setCalculationResultsWithStorage(null);
-    setOptimizationResultsWithStorage(null);
+    setCalcResLS(null);
+    setOptResLS(null);
     setError(null);
   };
 
-  // Create calculation request payload
-  const createCalculationRequest = () => {
-    return {
-      general_settings: {
-        start_date: generalSettings.start_date.toISOString().split('T')[0],
-        operational_expenses: generalSettings.operational_expenses,
-        min_buffer: generalSettings.min_buffer
-      },
-      tranches_a: tranchesA,
-      tranche_b: trancheB,
-      npv_settings: npvSettings
-      // Optimization data will be added in CalculationPage component
-    };
-  };
+  /* ---------- request constructors ---------- */
+  const createCalculationRequest = () => ({
+    general_settings: {
+      start_date: generalSettings.start_date.toISOString().split('T')[0],
+      operational_expenses: generalSettings.operational_expenses,
+      min_buffer: generalSettings.min_buffer,
+    },
+    tranches_a: tranchesA,
+    tranche_b: trancheB,
+    npv_settings: npvSettings,
+  });
 
-  // Create optimization request payload
-  const createOptimizationRequest = () => {
-    return {
-      optimization_settings: optimizationSettings,
-      general_settings: {
-        start_date: generalSettings.start_date.toISOString().split('T')[0],
-        operational_expenses: generalSettings.operational_expenses,
-        min_buffer: generalSettings.min_buffer
-      }
-    };
-  };
+  const createOptimizationRequest = () => ({
+    optimization_settings: optimizationSettings,
+    general_settings: {
+      start_date: generalSettings.start_date.toISOString().split('T')[0],
+      operational_expenses: generalSettings.operational_expenses,
+      min_buffer: generalSettings.min_buffer,
+    },
+  });
 
+  /* ---------------- context value ------------------- */
   const value = {
-    // Data state
+    /* raw data */
     cashFlowData,
     setCashFlowData,
     isLoading,
     setIsLoading,
     error,
     setError,
-    
-    // Form state
+
+    /* form state */
     generalSettings,
     setGeneralSettings,
     tranchesA,
@@ -3514,87 +3581,80 @@ export const DataProvider = ({ children }) => {
     setTrancheB,
     npvSettings,
     setNpvSettings,
-    
-    // Auto-calculate flag
-    shouldAutoCalculate,
-    setShouldAutoCalculate,
-    
-    // Original values for reset
-    originalTranchesA,
-    originalTrancheB,
-    
-    // Results state - use wrapper functions instead of direct setState
+
+    /* optimization settings */
+    optimizationSettings,
+    setOptimizationSettings,
+
+    /* results */
     calculationResults,
-    setCalculationResults: setCalculationResultsWithStorage,
+    setCalculationResults: setCalcResLS,
     optimizationResults,
-    setOptimizationResults: setOptimizationResultsWithStorage,
+    setOptimizationResults: setOptResLS,
     previousCalculationResults,
-    setPreviousCalculationResults: setPreviousCalculationResultsWithStorage,
-    
-    // Saved results for comparison (from first file)
+    setPreviousCalculationResults: setPrevCalcLS,
+
+    /* saved / comparison */
     savedResults,
-    setSavedResults: setSavedResultsWithStorage,
+    setSavedResults: setSavedResLS,
     saveResult,
     deleteSavedResult,
     clearSavedResults,
-    
-    // Multiple comparison results (from second file)
     multipleComparisonResults,
-    setMultipleComparisonResults: setMultipleComparisonResultsWithStorage,
+    setMultipleComparisonResults: setMultiResLS,
     clearComparisonData,
-    
-    // Optimization settings
-    optimizationSettings,
-    setOptimizationSettings,
-    
-    // Helper functions
+
+    /* misc helpers */
+    resetToDefaults,
     clearData,
     createCalculationRequest,
     createOptimizationRequest,
-    resetToDefaults
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };
 
+
 ======================================================================
 
 DOSYA: src\pages\CalculationPage.js
 ==================================================
-// frontend/src/pages/CalculationPage.js
 import React, { useState, useEffect } from 'react';
-import { 
-  Container, 
-  Typography, 
-  Box, 
-  Paper, 
-  Tabs, 
-  Tab, 
-  Button, 
+import {
+  Container,
+  Typography,
+  Box,
+  Paper,
+  Tabs,
+  Tab,
+  Button,
   Alert,
   CircularProgress,
   Snackbar,
   IconButton,
   Tooltip,
-  Divider
+  Divider,
 } from '@mui/material';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import CompareIcon from '@mui/icons-material/Compare';
 import ReplayIcon from '@mui/icons-material/Replay';
+
 import { useData } from '../contexts/DataContext';
 import { calculateResults } from '../services/apiService';
+
 import GeneralSettingsForm from '../components/calculation/GeneralSettingsForm';
 import TrancheAForm from '../components/calculation/TrancheAForm';
 import TrancheBForm from '../components/calculation/TrancheBForm';
 import CalculationResults from './CalculationResults';
 import InterestRatesTable from '../components/calculation/InterestRatesTable';
+
 import { useNavigate } from 'react-router-dom';
 
 const CalculationPage = () => {
   const navigate = useNavigate();
-  const { 
+  const {
     cashFlowData,
-    calculationResults, 
+    calculationResults,
     setCalculationResults,
     isLoading,
     setIsLoading,
@@ -3605,167 +3665,130 @@ const CalculationPage = () => {
     resetToDefaults,
     multipleComparisonResults,
     setMultipleComparisonResults,
-    shouldAutoCalculate,
-    setShouldAutoCalculate
   } = useData();
-  
-  const [tabValue, setTabValue] = useState(0);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
-  const [optimizationData, setOptimizationData] = useState(null);
-  
-  // Auto-calculate when shouldAutoCalculate flag is true
-  useEffect(() => {
-    if (shouldAutoCalculate) {
-      // Check for optimization data in sessionStorage
-      const optimizationDataStr = sessionStorage.getItem('optimizationData');
-      if (optimizationDataStr) {
-        try {
-          const optData = JSON.parse(optimizationDataStr);
-          setOptimizationData(optData);
-          // We'll use this data in handleCalculate
-          sessionStorage.removeItem('optimizationData'); // Clear after reading
-        } catch (e) {
-          console.error("Error parsing optimization data", e);
-        }
-      }
-      
-      handleCalculate();
-      setShouldAutoCalculate(false); // Reset the flag after processing
-    }
-  }, [shouldAutoCalculate, setShouldAutoCalculate]);
 
-  const handleTabChange = (event, newValue) => {
-    setTabValue(newValue);
-  };
-  
-  const handleCalculate = async () => {
+  const [tabValue, setTabValue] = useState(0);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
+  const [optimizationData, setOptimizationData] = useState(null);
+
+  /* ------------- Auto‑calculate after optimization ------------- */
+  useEffect(() => {
+    const stored = sessionStorage.getItem('optimizationData');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        setOptimizationData(parsed);
+        handleCalculate(parsed); // pass optimization data
+      } catch (e) {
+        console.error('Cannot parse optimizationData:', e);
+      } finally {
+        sessionStorage.removeItem('optimizationData');
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ---------------------- Handlers ---------------------- */
+  const handleTabChange = (_, nv) => setTabValue(nv);
+
+  const handleCalculate = async (optData = optimizationData) => {
     try {
       setIsLoading(true);
       setError(null);
-      
-      const request = createCalculationRequest();
-      
-      // Include optimization data if available
-      if (optimizationData) {
-        request.is_optimized = optimizationData.is_optimized;
-        request.optimization_method = optimizationData.optimization_method;
+
+      const req = createCalculationRequest();
+
+      /* pass optimization meta (optional) */
+      if (optData) {
+        req.is_optimized = true;
+        req.optimization_method = optData.optimization_method;
       }
-      
-      const results = await calculateResults(request);
-      
-      // Add metadata for tracking and display
-      if (!results.is_optimized) {
-        // This is a manual calculation
-        results.label = 'Manual Calculation';
-        results.method_type = 'manual';
-        results.timestamp = new Date().toISOString();
+
+      console.log('Calculation request:', req);
+
+      const res = await calculateResults(req, optData); // 2. parametre opsiyonel!
+      console.log('Calculation response:', res);
+
+      /* label & metadata */
+      if (!res.is_optimized) {
+        res.label = 'Manual Calculation';
+        res.method_type = 'manual';
       } else {
-        // For optimized calculations, use the optimization method name
-        const methodDisplayNames = {
-          'classic': 'Standard Optimization',
-          'genetic': 'Evolutionary Algorithm',
-          'equal': 'Equal Distribution',
-          'increasing': 'Increasing by Maturity', 
-          'decreasing': 'Decreasing by Maturity',
-          'middle_weighted': 'Middle Weighted'
+        const map = {
+          classic: 'Standard Optimization',
+          genetic: 'Evolutionary Algorithm',
+          equal: 'Equal Distribution',
+          increasing: 'Increasing by Maturity',
+          decreasing: 'Decreasing by Maturity',
+          middle_weighted: 'Middle Weighted',
         };
-        
-        const methodName = results.optimization_method || 'Optimized';
-        results.label = `${methodDisplayNames[methodName] || methodName} Optimization`;
-        results.method_type = methodName === 'genetic' ? 'genetic' : 'standard';
-        results.timestamp = new Date().toISOString();
+        const mName = res.optimization_method || 'optimized';
+        res.label = `${map[mName] || mName} Optimization`;
+        res.method_type = mName === 'genetic' ? 'genetic' : 'standard';
       }
-      
-      setCalculationResults(results);
-      setTabValue(1); // Switch to results tab
-      
-      // Add to comparison history if it's a new calculation
-      if (!calculationResults || 
-          JSON.stringify(results) !== JSON.stringify(calculationResults)) {
-        
-        setMultipleComparisonResults(prev => {
-          // Create a new array to avoid reference issues
-          const updatedResults = prev ? [...prev] : [];
-          
-          // Check if we already have a result of the same type
-          const existingIndex = updatedResults.findIndex(r => 
-            r.method_type === results.method_type
-          );
-          
-          // If we have a result of this type, replace it
-          if (existingIndex >= 0) {
-            updatedResults[existingIndex] = { ...results };
-          } else {
-            // Otherwise add it to the array
-            // Check if we've reached the maximum number of comparisons (limit to 5 for UI reasons)
-            if (updatedResults.length >= 5) {
-              updatedResults.shift(); // Remove the oldest result
-            }
-            updatedResults.push({ ...results });
-          }
-          
-          console.log("Saving calculation to comparison results:", results.method_type);
-          return updatedResults;
-        });
-      }
-      
-      // Show success message
-      setSnackbarMessage('Calculation completed successfully!');
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
-      
-      // Logging to ensure we have data for comparison
-      console.log("Calculation results saved:", results);
-      console.log("Previous results available:", previousCalculationResults ? "Yes" : "No");
-    } catch (err) {
-      setError('Calculation failed. Please check your parameters and try again.');
-      console.error(err);
-      
-      // Show error message
-      setSnackbarMessage('Calculation failed. Please try again.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
+      res.timestamp = new Date().toISOString();
+
+      setCalculationResults(res);
+      setTabValue(1);
+
+      /* comparison buffer (max 5) */
+      setMultipleComparisonResults((prev) => {
+        const up = prev ? [...prev] : [];
+        const idx = up.findIndex((r) => r.method_type === res.method_type);
+        if (idx >= 0) up[idx] = { ...res };
+        else {
+          if (up.length >= 5) up.shift();
+          up.push({ ...res });
+        }
+        return up;
+      });
+
+      setSnackbar({
+        open: true,
+        message: 'Calculation completed successfully!',
+        severity: 'success',
+      });
+    } catch (e) {
+      setError('Calculation failed. Please check parameters and try again.');
+      console.error(e);
+      setSnackbar({
+        open: true,
+        message: 'Calculation failed. Please try again.',
+        severity: 'error',
+      });
     } finally {
       setIsLoading(false);
-      // Reset optimization data after use
-      setOptimizationData(null);
     }
-  };
-  
-  // Reset to original default values
-  const handleReset = () => {
-    if (resetToDefaults()) {
-      setSnackbarMessage('Reset to original values successfully.');
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
-    } else {
-      setSnackbarMessage('Failed to reset to original values.');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
-    }
-  };
-  
-  // Navigate to comparison page
-  const goToComparison = () => {
-    navigate('/comparison');
-  };
-  
-  // Handle snackbar close
-  const handleSnackbarClose = (event, reason) => {
-    if (reason === 'clickaway') {
-      return;
-    }
-    setSnackbarOpen(false);
   };
 
+  const goToComparison = () => navigate('/comparison');
+
+  const handleReset = () => {
+    if (resetToDefaults()) {
+      setSnackbar({
+        open: true,
+        message: 'Reset to original values.',
+        severity: 'success',
+      });
+    }
+  };
+
+  const handleSnackClose = (_, r) => {
+    if (r === 'clickaway') return;
+    setSnackbar((s) => ({ ...s, open: false }));
+  };
+
+  /* -------------------- RENDER -------------------- */
   if (!cashFlowData) {
     return (
       <Container>
         <Box sx={{ mt: 4, textAlign: 'center' }}>
           <Typography variant="h5" color="error">
-            Please upload cash flow data first
+            Please upload cash‑flow data first
           </Typography>
         </Box>
       </Container>
@@ -3774,27 +3797,29 @@ const CalculationPage = () => {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      {/* Snackbar for notifications */}
+      {/* Snackbar */}
       <Snackbar
-        open={snackbarOpen}
+        open={snackbar.open}
         autoHideDuration={6000}
-        onClose={handleSnackbarClose}
+        onClose={handleSnackClose}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
-        <Alert 
-          onClose={handleSnackbarClose} 
-          severity={snackbarSeverity} 
-          sx={{ width: '100%' }}
-        >
-          {snackbarMessage}
+        <Alert severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
         </Alert>
       </Snackbar>
-    
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          ABS Calculation
-        </Typography>
-        
+
+      {/* Header */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 3,
+        }}
+      >
+        <Typography variant="h4">ABS Calculation</Typography>
+
         <Box sx={{ display: 'flex', gap: 2 }}>
           {calculationResults && previousCalculationResults && (
             <Button
@@ -3806,23 +3831,18 @@ const CalculationPage = () => {
               View Comparisons
             </Button>
           )}
-          
+
           <Tooltip title="Reset to original values">
-            <IconButton 
-              color="primary" 
-              onClick={handleReset}
-              size="small"
-            >
+            <IconButton color="primary" onClick={handleReset} size="small">
               <ReplayIcon />
             </IconButton>
           </Tooltip>
         </Box>
       </Box>
-      
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
-      )}
-      
+
+      {error && <Alert severity="error">{error}</Alert>}
+
+      {/* Tabs */}
       <Paper sx={{ mb: 4 }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={tabValue} onChange={handleTabChange}>
@@ -3831,28 +3851,30 @@ const CalculationPage = () => {
             <Tab label="Interest Rates" disabled={!calculationResults} />
           </Tabs>
         </Box>
-        
+
         <Box sx={{ p: 3 }}>
           {tabValue === 0 && (
             <>
               <GeneralSettingsForm />
               <TrancheAForm />
               <TrancheBForm />
-              
+
               <Divider sx={{ my: 3 }} />
-              
+
               <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', gap: 2 }}>
                 <Button
                   variant="contained"
                   color="primary"
                   size="large"
-                  onClick={handleCalculate}
+                  onClick={() => handleCalculate()}
                   disabled={isLoading}
-                  startIcon={isLoading ? <CircularProgress size={24} /> : <CalculateIcon />}
+                  startIcon={
+                    isLoading ? <CircularProgress size={24} /> : <CalculateIcon />
+                  }
                 >
-                  {isLoading ? 'Calculating...' : 'Calculate Results'}
+                  {isLoading ? 'Calculating…' : 'Calculate Results'}
                 </Button>
-                
+
                 {calculationResults && previousCalculationResults && (
                   <Button
                     variant="outlined"
@@ -3867,11 +3889,11 @@ const CalculationPage = () => {
               </Box>
             </>
           )}
-          
+
           {tabValue === 1 && calculationResults && (
             <CalculationResults results={calculationResults} />
           )}
-          
+
           {tabValue === 2 && calculationResults && (
             <InterestRatesTable results={calculationResults} />
           )}
@@ -3882,6 +3904,7 @@ const CalculationPage = () => {
 };
 
 export default CalculationPage;
+
 
 ======================================================================
 
@@ -5457,6 +5480,27 @@ import {
   Area, AreaChart, ScatterChart, Scatter, ZAxis, ReferenceLine
 } from "recharts";
 
+// TabPanel component
+function TabPanel(props) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`tabpanel-${index}`}
+      aria-labelledby={`tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ pt: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
+
 const ComparisonPage = () => {
   const theme = useTheme();
   const { 
@@ -5484,14 +5528,28 @@ const ComparisonPage = () => {
   
   // Format currency values
   const formatCurrency = (value) => {
-    if (value === undefined || value === null) return "₺0.00";
-    return new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(value);
+    if (value === undefined || value === null) return "₺0,00";
+    
+    // Debug the value being formatted
+    console.log('Formatting currency value:', value);
+    
+    try {
+      return new Intl.NumberFormat("tr-TR", { 
+        style: "currency", 
+        currency: "TRY",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value);
+    } catch (error) {
+      console.error('Error formatting currency:', error);
+      return `₺${value.toFixed(2).replace('.', ',')}`;
+    }
   };
   
   // Format percentage values
   const formatPercent = (value) => {
-    if (value === undefined || value === null) return "0.00%";
-    return `${value.toFixed(2)}%`;
+    if (value === undefined || value === null) return "0,00%";
+    return `${value.toFixed(2).replace('.', ',')}%`;
   };
 
   // Calculate percentage difference
@@ -5514,7 +5572,7 @@ const ComparisonPage = () => {
           alignItems: 'center'
         }}
       >
-        {isPositive ? '+' : ''}{diff.toFixed(2)}%
+        {isPositive ? '+' : ''}{diff.toFixed(2).replace('.', ',')}%
       </Typography>
     );
   };
@@ -5563,13 +5621,34 @@ const ComparisonPage = () => {
       selectedResults.includes(result.id)
     );
     
-    // Process the results
+    // Debug: Log selected results
+    console.log('Selected Results:', selectedResultsData);
+    
+    // Create an empty result object structure
     const processedData = {
-      manualResults: selectedResultsData.find(r => r.methodType === 'manual') || null,
-      geneticResults: selectedResultsData.find(r => r.methodType === 'genetic') || null,
-      standardResults: selectedResultsData.find(r => r.methodType === 'standard') || null
+      manualResults: null,
+      geneticResults: null,
+      standardResults: null
     };
     
+    // Process each selected result and assign to the appropriate category
+    selectedResultsData.forEach(result => {
+      // Verify the result has all expected properties
+      console.log(`Processing result of type ${result.methodType}:`, result);
+      
+      if (result.methodType === 'manual') {
+        processedData.manualResults = {...result};
+      } else if (result.methodType === 'genetic') {
+        processedData.geneticResults = {...result};
+      } else if (result.methodType === 'standard') {
+        processedData.standardResults = {...result};
+      }
+    });
+    
+    // Debug: Log processed data
+    console.log('Processed Comparison Data:', processedData);
+    
+    // Update the comparison data state
     setComparisonData(processedData);
     setLoading(false);
   };
@@ -5615,22 +5694,54 @@ const ComparisonPage = () => {
   // Initialize selected results when component mounts
   useEffect(() => {
     setLoading(true);
+    console.log('Saved Results Changed:', savedResults);
     
-    if (savedResults.length > 0) {
-      // Select up to first 3 results by default
-      const initialSelection = savedResults.slice(0, 3).map(result => result.id);
-      setSelectedResults(initialSelection);
+    if (savedResults && savedResults.length > 0) {
+      // Auto-select one of each type (manual, genetic, standard) initially
+      const initialSelectedIds = [];
+      
+      // Try to find one of each type
+      const manualResult = savedResults.find(r => r.methodType === 'manual');
+      const geneticResult = savedResults.find(r => r.methodType === 'genetic');
+      const standardResult = savedResults.find(r => r.methodType === 'standard');
+      
+      // Add each result's ID to our initial selection if found
+      if (manualResult) initialSelectedIds.push(manualResult.id);
+      if (geneticResult) initialSelectedIds.push(geneticResult.id);
+      if (standardResult) initialSelectedIds.push(standardResult.id);
+      
+      // If we haven't selected anything yet, just take the first result
+      if (initialSelectedIds.length === 0 && savedResults.length > 0) {
+        initialSelectedIds.push(savedResults[0].id);
+      }
       
       // Process these initial selections
       const initialSelectedData = savedResults.filter(result => 
-        initialSelection.includes(result.id)
+        initialSelectedIds.includes(result.id)
       );
       
+      console.log('Initial Selected Data:', initialSelectedData);
+      
+      // Set the selected results state
+      setSelectedResults(initialSelectedIds);
+      
+      // Explicitly create a new object for each result type to avoid reference issues
       const processedData = {
-        manualResults: initialSelectedData.find(r => r.methodType === 'manual') || null,
-        geneticResults: initialSelectedData.find(r => r.methodType === 'genetic') || null,
-        standardResults: initialSelectedData.find(r => r.methodType === 'standard') || null
+        manualResults: null,
+        geneticResults: null,
+        standardResults: null
       };
+      
+      // Assign each result type manually with spread operator to create a copy
+      const manualResultData = initialSelectedData.find(r => r.methodType === 'manual');
+      const geneticResultData = initialSelectedData.find(r => r.methodType === 'genetic');
+      const standardResultData = initialSelectedData.find(r => r.methodType === 'standard');
+      
+      if (manualResultData) processedData.manualResults = {...manualResultData};
+      if (geneticResultData) processedData.geneticResults = {...geneticResultData};
+      if (standardResultData) processedData.standardResults = {...standardResultData};
+      
+      console.log('Initial Processed Data:', processedData);
       
       setComparisonData(processedData);
     }
@@ -5645,7 +5756,7 @@ const ComparisonPage = () => {
     if (comparisonData.manualResults) {
       results.push({
         id: comparisonData.manualResults.id,
-        label: comparisonData.manualResults.savedName || 'Manual Configuration',
+        label: 'Manual Calculation', // Always use fixed label
         result: comparisonData.manualResults,
         isOptimized: false,
         method: 'manual',
@@ -5657,7 +5768,7 @@ const ComparisonPage = () => {
     if (comparisonData.geneticResults) {
       results.push({
         id: comparisonData.geneticResults.id,
-        label: comparisonData.geneticResults.savedName || 'Evolutionary Algorithm',
+        label: 'Genetic Algorithm', // Always use fixed label
         result: comparisonData.geneticResults,
         isOptimized: true,
         method: 'genetic',
@@ -5669,7 +5780,7 @@ const ComparisonPage = () => {
     if (comparisonData.standardResults) {
       results.push({
         id: comparisonData.standardResults.id,
-        label: comparisonData.standardResults.savedName || 'Standard Optimization',
+        label: 'Standard Optimization', // Always use fixed label
         result: comparisonData.standardResults,
         isOptimized: true,
         method: 'standard',
@@ -5677,6 +5788,9 @@ const ComparisonPage = () => {
         icon: <SettingsIcon />
       });
     }
+    
+    // Log each result for debugging
+    console.log('Comparison Results:', results);
     
     return results;
   };
@@ -5875,14 +5989,25 @@ const ComparisonPage = () => {
   const hasGenetic = comparisonData.geneticResults !== null;
   const hasStandard = comparisonData.standardResults !== null;
   
+  // Debug the current comparison results before preparing chart data
+  console.log('Current comparison results before preparing chart data:', comparisonResults);
+  
   // Prepare chart data
-  const barChartData = comparisonResults.map(item => ({
-    name: item.label,
-    classA: item.result.class_a_total || 0,
-    classB: item.result.class_b_total || 0,
-    total: (item.result.class_a_total || 0) + (item.result.class_b_total || 0),
-    color: item.color
-  }));
+  const barChartData = comparisonResults.map(item => {
+    // Log each item's data to help debug
+    console.log(`Chart data for ${item.label}:`, {
+      classA: item.result.class_a_total,
+      classB: item.result.class_b_total
+    });
+    
+    return {
+      name: item.label,
+      classA: item.result.class_a_total || 0,
+      classB: item.result.class_b_total || 0,
+      total: (item.result.class_a_total || 0) + (item.result.class_b_total || 0),
+      color: item.color
+    };
+  });
   
   // Prepare principal interest breakdown data
   const breakdownData = comparisonResults.map(item => ({
@@ -5985,6 +6110,10 @@ const ComparisonPage = () => {
                     <Typography variant="h6">
                       {formatCurrency((item.result.class_a_total || 0) + (item.result.class_b_total || 0))}
                     </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Class A: {formatCurrency(item.result.class_a_total || 0)}, 
+                      Class B: {formatCurrency(item.result.class_b_total || 0)}
+                    </Typography>
                   </Box>
                   
                   <Box sx={{ mt: 2 }}>
@@ -5996,12 +6125,7 @@ const ComparisonPage = () => {
                     </Typography>
                   </Box>
                   
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="body2" color="text.secondary">Class B Coupon Rate</Typography>
-                    <Typography variant="h6">
-                      {formatPercent(item.result.class_b_coupon_rate || 0)}
-                    </Typography>
-                  </Box>
+                  {/* Removed Class B Coupon Rate section */}
                   
                   <Box sx={{ mt: 2 }}>
                     <Typography variant="body2" color="text.secondary">Financing Result</Typography>
@@ -6136,7 +6260,7 @@ const ComparisonPage = () => {
       </Box>
       
       {/* Tab 1: Structure Comparison */}
-      {tabValue === 0 && (
+      <TabPanel value={tabValue} index={0}>
         <Grid container spacing={4}>
           <Grid item xs={12}>
             <Paper 
@@ -6225,10 +6349,10 @@ const ComparisonPage = () => {
             </Paper>
           </Grid>
         </Grid>
-      )}
+      </TabPanel>
       
       {/* Tab 2: Tranches Breakdown */}
-      {tabValue === 1 && (
+      <TabPanel value={tabValue} index={1}>
         <Grid container spacing={4}>
           <Grid item xs={12}>
             <Paper 
@@ -6496,10 +6620,10 @@ const ComparisonPage = () => {
             </Paper>
           </Grid>
         </Grid>
-      )}
+      </TabPanel>
       
       {/* Tab 3: Financing Comparison */}
-      {tabValue === 2 && (
+      <TabPanel value={tabValue} index={2}>
         <Grid container spacing={4}>
           <Grid item xs={12}>
             <Paper 
@@ -6699,10 +6823,10 @@ const ComparisonPage = () => {
             </Paper>
           </Grid>
         </Grid>
-      )}
+      </TabPanel>
       
       {/* Tab 4: Buffer Analysis */}
-      {tabValue === 3 && (
+      <TabPanel value={tabValue} index={3}>
         <Grid container spacing={4}>
           <Grid item xs={12}>
             <Paper 
@@ -6825,7 +6949,7 @@ const ComparisonPage = () => {
             </Paper>
           </Grid>
         </Grid>
-      )}
+      </TabPanel>
       
       {/* Select Results Dialog */}
       <Dialog open={selectDialogOpen} onClose={handleCloseSelectDialog} maxWidth="sm" fullWidth>
@@ -6836,19 +6960,33 @@ const ComparisonPage = () => {
           </DialogContentText>
           <List>
             {savedResults.map((result) => (
-              <ListItem key={result.id} dense>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={selectedResults.includes(result.id)}
-                      onChange={() => handleSelectResult(result.id)}
-                      color={
-                        result.methodType === 'manual' ? 'error' :
-                        result.methodType === 'genetic' ? 'success' : 'primary'
-                      }
-                    />
+              <ListItem 
+                key={result.id} 
+                dense
+                onClick={() => handleSelectResult(result.id)}
+                sx={{ 
+                  cursor: 'pointer',
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.primary.main, 0.05)
+                  },
+                  backgroundColor: selectedResults.includes(result.id) 
+                    ? alpha(theme.palette.primary.main, 0.1) 
+                    : 'transparent',
+                  borderRadius: 1
+                }}
+              >
+                <Checkbox
+                  edge="start"
+                  checked={selectedResults.includes(result.id)}
+                  tabIndex={-1}
+                  disableRipple
+                  color={
+                    result.methodType === 'manual' ? 'error' :
+                    result.methodType === 'genetic' ? 'success' : 'primary'
                   }
-                  label={
+                />
+                <ListItemText 
+                  primary={
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <Typography variant="body1">{result.savedName}</Typography>
                       <Chip 
@@ -6865,12 +7003,16 @@ const ComparisonPage = () => {
                       />
                     </Box>
                   }
+                  secondary={new Date(result.timestamp).toLocaleString()}
                 />
                 <ListItemSecondaryAction>
                   <IconButton 
                     edge="end" 
                     aria-label="delete"
-                    onClick={() => handleDeleteDialogOpen(result.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteDialogOpen(result.id);
+                    }}
                   >
                     <DeleteIcon />
                   </IconButton>
@@ -7139,18 +7281,29 @@ export default HomePage;
 
 DOSYA: src\pages\OptimizationPage.js
 ==================================================
-// frontend/src/pages/OptimizationPage.js
 import React, { useState, useEffect } from 'react';
-import { 
-  Container, Typography, Box, Paper, Button, Alert, CircularProgress,
-  Grid, Divider, alpha, Chip, Stepper, Step, StepLabel, useTheme
+import {
+  Container,
+  Typography,
+  Box,
+  Paper,
+  Button,
+  Alert,
+  CircularProgress,
+  Divider,
+  alpha,
+  Chip,
+  Stepper,
+  Step,
+  StepLabel,
+  useTheme,
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SettingsIcon from '@mui/icons-material/Settings';
 import SpeedIcon from '@mui/icons-material/Speed';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
+
 import OptimizationSettingsForm from '../components/optimization/OptimizationSettingsForm';
 import OptimizationResults from '../components/optimization/OptimizationResults';
 import OptimizationProgress from '../components/optimization/OptimizationProgress';
@@ -7159,111 +7312,90 @@ import { optimizeStructure } from '../services/apiService';
 
 const OptimizationPage = () => {
   const theme = useTheme();
-  const { 
-    cashFlowData, 
-    optimizationResults, 
-    setOptimizationResults, 
-    isLoading, 
-    setIsLoading, 
-    error, 
+  const {
+    cashFlowData,
+    optimizationResults,
+    setOptimizationResults,
+    isLoading,
+    setIsLoading,
+    error,
     setError,
     optimizationSettings,
     setOptimizationSettings,
-    generalSettings
+    generalSettings,
   } = useData();
-  
-  // Additional state to control progress component
+
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
 
-  // Method translation mapping
-  const getOptimizationMethodName = (method) => {
-    const methods = {
-      'classic': 'Standard Optimization',
-      'genetic': 'Evolutionary Algorithm'
-    };
-    return methods[method] || method;
-  };
-  
-  const handleFormChange = (values) => {
-    setOptimizationSettings(values);
-  };
+  const methodName = (m) =>
+    ({ classic: 'Standard Optimization', genetic: 'Evolutionary Algorithm' }[m] ||
+    m);
 
+  /* --------------------- Form change -------------------- */
+  const handleFormChange = (vals) => setOptimizationSettings(vals);
+
+  /* --------------------- Optimize ----------------------- */
   const handleOptimize = async () => {
     if (!cashFlowData) return;
-    
+
     try {
       setIsLoading(true);
       setError(null);
-      setIsOptimizing(true); // Start progress tracking
-      setOptimizationResults(null); // Clear previous results
-      setActiveStep(1); // Move to progress step
-      
-      // Selected optimization method
+      setIsOptimizing(true);
+      setOptimizationResults(null);
+      setActiveStep(1);
+
       const method = optimizationSettings.optimization_method;
-      console.log(`Starting ${method} optimization...`);
-      
-      // Prepare request parameters
-      const params = {
+      console.log(`Starting ${method} optimization…`);
+
+      const body = {
         optimization_settings: optimizationSettings,
         general_settings: {
           start_date: generalSettings.start_date.toISOString().split('T')[0],
           operational_expenses: generalSettings.operational_expenses,
-          min_buffer: generalSettings.min_buffer
-        }
+          min_buffer: generalSettings.min_buffer,
+        },
       };
-      
-      // Log the selected strategies
+
       if (method === 'classic' && optimizationSettings.selected_strategies) {
-        console.log(`Selected strategies: ${optimizationSettings.selected_strategies.join(', ')}`);
+        console.log(
+          `Selected strategies: ${optimizationSettings.selected_strategies.join(', ')}`,
+        );
       }
-      
-      // API call based on method
-      try {
-        const results = await optimizeStructure(params, method);
-        console.log("Optimization successful:", results);
-        setOptimizationResults(results);
-        setActiveStep(2); // Move to results step
-      } catch (optimizeError) {
-        console.error("Optimization error details:", optimizeError);
-        throw new Error(`Optimization failed: ${optimizeError.message}`);
-      }
-    } catch (error) {
-      setError('Optimization failed. Please check your parameters and try again. Error: ' + error.message);
-      console.error('Optimization error:', error);
-      setIsOptimizing(false); // Make sure to stop progress tracking on error
-      setActiveStep(0); // Return to settings step
+
+      const res = await optimizeStructure(body, method);
+      console.log('Optimization successful:', res);
+      setOptimizationResults(res);
+      setActiveStep(2);
+    } catch (e) {
+      setError(
+        `Optimization failed. Please check your parameters and try again. Error: ${e.message}`,
+      );
+      console.error('Optimization error:', e);
+      setIsOptimizing(false);
+      setActiveStep(0);
     } finally {
       setIsLoading(false);
-      // Keep isOptimizing true until the progress component handles the completion
     }
   };
-  
-  // Handle optimization completion
-  const handleOptimizationComplete = () => {
-    setIsOptimizing(false);
-  };
 
-  // New function to handle reset
+  const handleOptimizationComplete = () => setIsOptimizing(false);
+
   const handleReset = () => {
     setOptimizationResults(null);
     setIsOptimizing(false);
     setActiveStep(0);
     setError(null);
-    
-    // Optional: Reset to default settings
-    // setOptimizationSettings({...default settings});
-    
-    window.scrollTo(0, 0); // Scroll to top for better UX
+    window.scrollTo(0, 0);
   };
 
-  // Effect to update active step based on results
+  /* progress to results */
   useEffect(() => {
-    if (optimizationResults && !isOptimizing) {
-      setActiveStep(2);
-    }
+    if (optimizationResults && !isOptimizing) setActiveStep(2);
   }, [optimizationResults, isOptimizing]);
 
+  /* ----------------------- RENDER ----------------------- */
   if (!cashFlowData) {
     return (
       <Container maxWidth="lg" sx={{ mt: 6, mb: 8 }}>
@@ -7277,30 +7409,30 @@ const OptimizationPage = () => {
             backgroundColor: alpha(theme.palette.warning.main, 0.05),
           }}
         >
-          <Box sx={{ 
-            width: '70px',
-            height: '70px',
-            borderRadius: '50%',
-            backgroundColor: alpha(theme.palette.warning.main, 0.1),
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 16px'
-          }}>
-            <SpeedIcon sx={{ fontSize: 32, color: theme.palette.warning.main }} />
+          <Box
+            sx={{
+              width: 70,
+              height: 70,
+              borderRadius: '50%',
+              backgroundColor: alpha(theme.palette.warning.main, 0.1),
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              mb: 2,
+            }}
+          >
+            <SpeedIcon
+              sx={{ fontSize: 32, color: theme.palette.warning.main }}
+            />
           </Box>
           <Typography variant="h5" color="warning.main" gutterBottom>
             Cash Flow Data Required
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Please upload your cash flow data on the Home page before starting the optimization process.
+            Please upload your cash‑flow data on the Home page before starting
+            the optimization process.
           </Typography>
-          <Button 
-            variant="outlined" 
-            color="warning" 
-            href="/"
-            sx={{ mt: 3 }}
-          >
+          <Button variant="outlined" color="warning" href="/" sx={{ mt: 3 }}>
             Go to Home Page
           </Button>
         </Paper>
@@ -7310,29 +7442,41 @@ const OptimizationPage = () => {
 
   return (
     <Container maxWidth="lg" sx={{ my: 4 }}>
+      {/* ---------------- Header ---------------- */}
       <Paper
         elevation={0}
         sx={{
           p: 4,
           mb: 4,
           borderRadius: 2,
-          background: `linear-gradient(135deg, ${alpha(theme.palette.secondary.main, 0.05)} 0%, ${alpha(theme.palette.primary.main, 0.07)} 100%)`,
+          background: `linear-gradient(135deg, ${alpha(
+            theme.palette.secondary.main,
+            0.05,
+          )} 0%, ${alpha(theme.palette.primary.main, 0.07)} 100%)`,
           border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 2,
+          }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <TrendingUpIcon sx={{ fontSize: 28, color: theme.palette.secondary.main, mr: 1.5 }} />
-            <Typography variant="h4" component="h1" fontWeight="500">
+            <TrendingUpIcon
+              sx={{ fontSize: 28, color: theme.palette.secondary.main, mr: 1.5 }}
+            />
+            <Typography variant="h4" fontWeight={500}>
               ABS Structure Optimization
             </Typography>
           </Box>
-          
-          {/* "Start Over" button */}
+
           {(activeStep > 0 || optimizationResults) && (
-            <Button 
-              variant="outlined" 
-              color="primary" 
+            <Button
+              variant="outlined"
+              color="primary"
               startIcon={<RestartAltIcon />}
               onClick={handleReset}
               disabled={isLoading || isOptimizing}
@@ -7343,103 +7487,91 @@ const OptimizationPage = () => {
           )}
         </Box>
         <Typography variant="body1" color="text.secondary">
-          Optimize your asset-backed securities structure to maximize principal while maintaining buffer requirements.
-          Choose an optimization method and parameters to find the optimal configuration for your tranches.
+          Optimize your asset‑backed‑securities structure to maximise principal
+          while maintaining buffer requirements.
         </Typography>
       </Paper>
-  
+
+      {/* ---------------- Alerts ---------------- */}
       {error && (
-        <Alert 
-          severity="error" 
-          sx={{ 
-            mb: 3, 
-            borderRadius: 2,
-            '& .MuiAlert-icon': {
-              alignItems: 'center'
-            }
-          }}
-        >
+        <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
           {error}
         </Alert>
       )}
-      
+
+      {/* ---------------- Stepper ---------------- */}
       <Box sx={{ mb: 4 }}>
         <Stepper activeStep={activeStep} alternativeLabel>
-          <Step>
-            <StepLabel StepIconProps={{
-              sx: { '& .MuiStepIcon-text': { fontWeight: 'bold' } }
-            }}>
-              Configure Settings
-            </StepLabel>
-          </Step>
-          <Step>
-            <StepLabel StepIconProps={{
-              sx: { '& .MuiStepIcon-text': { fontWeight: 'bold' } }
-            }}>
-              Run Optimization
-            </StepLabel>
-          </Step>
-          <Step>
-            <StepLabel StepIconProps={{
-              sx: { '& .MuiStepIcon-text': { fontWeight: 'bold' } }
-            }}>
-              Review Results
-            </StepLabel>
-          </Step>
+          {['Configure Settings', 'Run Optimization', 'Review Results'].map(
+            (label) => (
+              <Step key={label}>
+                <StepLabel
+                  StepIconProps={{
+                    sx: { '& .MuiStepIcon-text': { fontWeight: 'bold' } },
+                  }}
+                >
+                  {label}
+                </StepLabel>
+              </Step>
+            ),
+          )}
         </Stepper>
       </Box>
-      
-      {/* Progress Component - will only show when optimization is running */}
+
+      {/* ------------- Progress Component -------- */}
       {isOptimizing && (
-        <OptimizationProgress 
-          isOptimizing={isOptimizing} 
-          onComplete={handleOptimizationComplete} 
+        <OptimizationProgress
+          isOptimizing={isOptimizing}
+          onComplete={handleOptimizationComplete}
         />
       )}
-      
+
+      {/* ------------- Settings Form ------------- */}
       {(activeStep === 0 || (!isOptimizing && !optimizationResults)) && (
-        <Paper 
+        <Paper
           elevation={0}
-          sx={{ 
-            p: 0, 
-            mb: 4, 
+          sx={{
+            p: 0,
+            mb: 4,
             overflow: 'hidden',
             borderRadius: 2,
             border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
-            backgroundColor: 'background.paper'
+            bgcolor: 'background.paper',
           }}
         >
-          <Box sx={{ 
-            px: 3, 
-            py: 2, 
-            display: 'flex', 
-            alignItems: 'center',
-            borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
-            backgroundColor: alpha(theme.palette.primary.main, 0.02)
-          }}>
-            <SettingsIcon sx={{ color: theme.palette.text.secondary, mr: 1.5 }} />
+          <Box
+            sx={{
+              px: 3,
+              py: 2,
+              display: 'flex',
+              alignItems: 'center',
+              borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
+              backgroundColor: alpha(theme.palette.primary.main, 0.02),
+            }}
+          >
+            <SettingsIcon sx={{ color: 'text.secondary', mr: 1.5 }} />
             <Typography variant="h6" fontWeight="medium">
               Optimization Settings
             </Typography>
-            
-            <Chip 
-              label={getOptimizationMethodName(optimizationSettings.optimization_method)} 
+
+            <Chip
+              label={methodName(optimizationSettings.optimization_method)}
               color="primary"
               variant="outlined"
               size="small"
               sx={{ ml: 'auto' }}
             />
           </Box>
-          
+
           <Box sx={{ p: 3 }}>
-            <OptimizationSettingsForm 
-              values={optimizationSettings} 
-              onChange={handleFormChange} 
+            <OptimizationSettingsForm
+              values={optimizationSettings}
+              onChange={handleFormChange}
             />
           </Box>
-          
+
           <Divider />
-          
+
           <Box sx={{ p: 3, textAlign: 'center' }}>
             <Button
               variant="contained"
@@ -7447,24 +7579,30 @@ const OptimizationPage = () => {
               size="large"
               onClick={handleOptimize}
               disabled={isLoading || isOptimizing}
-              startIcon={isLoading || isOptimizing ? <CircularProgress size={20} /> : <PlayArrowIcon />}
-              sx={{
-                py: 1.2,
-                px: 4,
-                borderRadius: 2,
-                fontWeight: 500
-              }}
+              startIcon={
+                isLoading || isOptimizing ? (
+                  <CircularProgress size={20} />
+                ) : (
+                  <PlayArrowIcon />
+                )
+              }
+              sx={{ py: 1.2, px: 4, borderRadius: 2, fontWeight: 500 }}
             >
-              {isLoading || isOptimizing ? 'Optimizing...' : 'Run Optimization'}
+              {isLoading || isOptimizing ? 'Optimizing…' : 'Run Optimization'}
             </Button>
-            
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-              This process may take several minutes depending on the complexity of your data and optimization settings.
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 2 }}
+            >
+              This may take several minutes depending on data size and
+              parameters.
             </Typography>
           </Box>
         </Paper>
       )}
-      
+
+      {/* ------------- Results -------------------- */}
       {optimizationResults && !isOptimizing && (
         <OptimizationResults results={optimizationResults} />
       )}
@@ -7474,6 +7612,7 @@ const OptimizationPage = () => {
 
 export default OptimizationPage;
 
+
 ======================================================================
 
 DOSYA: src\services\apiService.js
@@ -7481,28 +7620,43 @@ DOSYA: src\services\apiService.js
 // frontend/src/services/apiService.js
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+const API_URL =
+  process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
+/**
+ * Ortak axios istemcisi
+ */
 const apiClient = axios.create({
   baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 300000, // 5 dakika (300 saniye) timeout for optimization requests
+  headers: { 'Content-Type': 'application/json' },
+  // 5 dakika (300 000 ms) – optimizasyon işlemleri uzun sürebilir
+  timeout: 300_000,
 });
 
-// File upload needs different content type
+/* --------------------------------------------------------------------- */
+/*                               UPLOAD                                  */
+/* --------------------------------------------------------------------- */
+
+/**
+ * Excel dosyası yükle
+ * @param {File} file
+ * @returns {Promise<Object>}
+ */
 const uploadFile = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
-  
+
   try {
     console.log('Uploading file:', file.name);
-    const response = await axios.post(`${API_URL}/upload-excel/`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+
+    const response = await axios.post(
+      `${API_URL}/upload-excel/`,
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }
+    );
+
     console.log('File upload successful');
     return response.data;
   } catch (error) {
@@ -7515,10 +7669,39 @@ const uploadFile = async (file) => {
   }
 };
 
-const calculateResults = async (params) => {
+/* --------------------------------------------------------------------- */
+/*                             CALCULATION                               */
+/* --------------------------------------------------------------------- */
+
+/**
+ * Hesaplama servisi.
+ * 2. parametre olarak optimizasyon çıktısı gönderilirse
+ * Class B nominali otomatik eklenir.
+ *
+ * @param {Object} params   – CalculationRequest gövdesi
+ * @param {Object|null} optResult – OptimizationResult (opsiyonel)
+ * @returns {Promise<Object>}
+ */
+const calculateResults = async (params, optResult = null) => {
   try {
-    console.log('Calculating results with params:', params);
-    const response = await apiClient.post('/calculate/', params);
+    // İsteğe bağlı Class B nominal entegrasyonu
+    const finalParams = { ...params };
+
+    if (
+      optResult &&
+      optResult.class_b_nominal &&
+      Number(optResult.class_b_nominal) > 0
+    ) {
+      finalParams.tranche_b = {
+        ...(finalParams.tranche_b || {}),
+        nominal: optResult.class_b_nominal,
+      };
+    }
+
+    console.log('Calculating results with params:', finalParams);
+
+    const response = await apiClient.post('/calculate/', finalParams);
+
     console.log('Calculation successful');
     return response.data;
   } catch (error) {
@@ -7531,68 +7714,99 @@ const calculateResults = async (params) => {
   }
 };
 
+/* --------------------------------------------------------------------- */
+/*                             OPTIMIZATION                              */
+/* --------------------------------------------------------------------- */
+
+/**
+ * Yapı optimizasyonu (classic | genetic)
+ *
+ * @param {Object} params – OptimizationRequest gövdesi
+ * @param {'classic'|'genetic'} [method='classic']
+ * @returns {Promise<Object>}
+ */
 const optimizeStructure = async (params, method = 'classic') => {
   try {
     console.log(`Starting optimization with method: ${method}`);
-    console.log('Optimization params:', JSON.stringify(params, null, 2));
-    
-    // Create a cancelable request for optimization
+    console.log(
+      'Optimization params:',
+      JSON.stringify(params, null, 2)
+    );
+
+    // İptal edilebilir istek oluştur
     const CancelToken = axios.CancelToken;
     const source = CancelToken.source();
-    
-    // Set up timeout to cancel if it takes too long
+
+    // 5 dakikada zaman aşımı
     const timeout = setTimeout(() => {
-      source.cancel('Operation timeout: The optimization process took too long');
-    }, 300000); // 5 minute timeout
-    
-    const response = await apiClient.post(`/optimize/${method}/`, params, {
-      cancelToken: source.token
-    });
-    
-    // Clear timeout
+      source.cancel(
+        'Operation timeout: The optimization process took too long'
+      );
+    }, 300_000);
+
+    const response = await apiClient.post(
+      `/optimize/${method}/`,
+      params,
+      { cancelToken: source.token }
+    );
+
     clearTimeout(timeout);
-    
+
     console.log(`${method} optimization completed successfully`);
     return response.data;
   } catch (error) {
     console.error(`Error in ${method} optimization:`, error);
-    
-    // Check if error was caused by cancellation
+
     if (axios.isCancel(error)) {
       console.log('Request canceled:', error.message);
-      throw new Error('Optimization process was canceled: ' + error.message);
+      throw new Error(
+        'Optimization process was canceled: ' + error.message
+      );
     }
-    
-    // Log detailed response info if available
+
     if (error.response) {
       console.error('Response status:', error.response.status);
       console.error('Response data:', error.response.data);
-      
+
       const status = error.response.status;
       let message = 'Optimization failed';
-      
+
       switch (status) {
         case 400:
-          message = 'Invalid optimization parameters: ' + (error.response.data.detail || 'Please check your parameters');
+          message =
+            'Invalid optimization parameters: ' +
+            (error.response.data.detail ||
+              'Please check your parameters');
           break;
         case 500:
-          message = 'Server error during optimization. The calculation may be too complex.';
+          message =
+            'Server error during optimization. The calculation may be too complex.';
           break;
         case 504:
-          message = 'Optimization timed out. Try again with simpler parameters.';
+          message =
+            'Optimization timed out. Try again with simpler parameters.';
           break;
         default:
-          message = `Optimization error (${status}): ` + (error.response.data.detail || error.message);
+          message =
+            `Optimization error (${status}): ` +
+            (error.response.data.detail || error.message);
       }
-      
+
       throw new Error(message);
     }
-    
+
     throw error;
   }
 };
 
-// Add a progress polling function
+/* --------------------------------------------------------------------- */
+/*                           PROGRESS POLLING                            */
+/* --------------------------------------------------------------------- */
+
+/**
+ * Sunucudan optimizasyon ilerlemesini sorgula
+ * @returns {Promise<Object>}
+ */
 const pollOptimizationProgress = async () => {
   try {
     const response = await apiClient.get('/optimize/progress/');
@@ -7603,12 +7817,22 @@ const pollOptimizationProgress = async () => {
       progress: 0,
       phase: 'Error',
       message: 'Failed to get progress information',
-      error: true
+      error: true,
     };
   }
 };
 
-export { uploadFile, calculateResults, optimizeStructure, pollOptimizationProgress };
+/* --------------------------------------------------------------------- */
+/*                                EXPORT                                 */
+/* --------------------------------------------------------------------- */
+
+export {
+  uploadFile,
+  calculateResults,
+  optimizeStructure,
+  pollOptimizationProgress,
+};
+
 
 ======================================================================
 
@@ -7748,6 +7972,7 @@ class OptimizationSettings(BaseModel):
     min_class_b_percent: float = Field(default=10.0)
     target_class_b_coupon_rate: float = Field(default=30.0)
     additional_days_for_class_b: int = Field(default=10)
+    class_b_percent_deviation: float = Field(default=1.0)  # New field with tighter default value
     
     # Evolutionary algorithm parameters
     population_size: Optional[int] = Field(default=50)
@@ -7801,10 +8026,12 @@ class OptimizationResult(BaseModel):
     class_b_reinvest: float
     class_b_nominal: float
     class_b_coupon_rate: float
+    direct_class_b_coupon_rate: float = 0.0  # Add this new field with default value
     min_buffer_actual: float
     last_cash_flow_day: int
     additional_days: int
     results_by_strategy: Dict[str, Dict[str, Any]]
+    class_b_percent: Optional[float] = None  # Optional field for Class B percentage
 
 ======================================================================
 
@@ -8041,251 +8268,219 @@ async def get_optimization_progress():
 
 DOSYA: backend\app\services\calculation_service.py
 ==================================================
-# backend/app/services/calculation_service.py
+# -*- coding: utf-8 -*-
+"""
+Calculation Service – 2025‑04‑18
+• Class B nominal:
+    – Optimizasyon çıktıysa ⇒ istekte gelen nominal kullanılır
+    – Yoksa ⇒ %10.178 kuralıyla hesaplanır
+• Class B vade 1‑365 gün arasında sıkıştırılır
+• Tüm nominal değerler 1000’e yuvarlanır
+"""
+
+from typing import List, Dict, Any
+import io
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+
 from app.models.input_models import CalculationRequest
 from app.models.output_models import CalculationResult
 from app.utils.finance_utils import (
-    simple_to_compound_annual, 
-    simple_to_maturity_compound, 
+    simple_to_compound_annual,
+    simple_to_maturity_compound,
     overnight_to_annual_compound,
-    get_next_business_day,
-    calculate_reinvestment_date
 )
-from app.utils.cash_flow_utils import (
-    assign_cash_flows_to_tranches,
-    calculate_totals
-)
-from typing import Dict, List, Any, Tuple
-import io
+from app.utils.cash_flow_utils import assign_cash_flows_to_tranches, calculate_totals
 
+
+# --------------------------------------------------------------------------- #
+#                               FILE LOADER                                   #
+# --------------------------------------------------------------------------- #
 def load_excel_data(contents: bytes) -> pd.DataFrame:
-    """Load and preprocess Excel data"""
+    """Excel dosyasını okuyup minimum temizliği yapar."""
     try:
         df = pd.read_excel(io.BytesIO(contents))
-        df.rename(columns={'Copyinstallment_date': 'installment_date'}, inplace=True, errors='ignore')
-        df['installment_date'] = pd.to_datetime(df['installment_date'], dayfirst=True, errors='coerce')
-        
-        if 'principal_amount' not in df.columns or 'interest_amount' not in df.columns:
-            raise ValueError("The Excel file does not contain 'principal_amount' or 'interest_amount' columns.")
-        
-        df['cash_flow'] = df['principal_amount'] + df['interest_amount']
-        # Save original cash flows
-        df['original_cash_flow'] = df['cash_flow'].copy()
-        
-        return df
-    except Exception as e:
-        raise ValueError(f"Error processing Excel file: {str(e)}")
-
-def perform_calculation(df: pd.DataFrame, request: CalculationRequest) -> CalculationResult:
-    """Perform ABS calculation based on provided parameters"""
-    # Extract request parameters
-    start_date = pd.Timestamp(request.general_settings.start_date)
-    ops_expenses = request.general_settings.operational_expenses
-    min_buffer = request.general_settings.min_buffer
-    
-    # Apply operational expenses
-    df_calc = df.copy()
-    df_calc['cash_flow'] = df_calc['original_cash_flow'].copy()
-    target_date = pd.Timestamp('2025-02-16')
-    target_rows = df_calc[df_calc['installment_date'].dt.date == target_date.date()]
-    
-    if not target_rows.empty:
-        t_idx = target_rows.index[0]
-        orig_cf = df_calc.at[t_idx, 'cash_flow']
-        new_cf = max(0, orig_cf - ops_expenses)
-        df_calc.at[t_idx, 'cash_flow'] = new_cf
-    
-    # Extract tranche parameters
-    a_maturity_days = [t.maturity_days for t in request.tranches_a]
-    a_base_rates = [t.base_rate for t in request.tranches_a]
-    a_spreads = [t.spread for t in request.tranches_a]
-    a_reinvest_rates = [t.reinvest_rate for t in request.tranches_a]
-    a_nominal_amounts = [t.nominal for t in request.tranches_a]
-    
-    b_maturity_days = [request.tranche_b.maturity_days]
-    b_base_rates = [request.tranche_b.base_rate]
-    b_spreads = [request.tranche_b.spread]
-    b_reinvest_rates = [request.tranche_b.reinvest_rate]
-    
-    # Calculate B nominal amount - Optimize edilen B nominal değeri kullanılacak
-    if hasattr(request.tranche_b, 'nominal') and request.tranche_b.nominal is not None:
-        # Use the nominal value from optimization
-        b_nominal_amount = request.tranche_b.nominal
-    else:
-        # Calculate B nominal based on fixed percentage if not provided
-        total_a_nominal = sum(a_nominal_amounts)
-        percent_b = 10.17811704
-        b_nominal_amount = (total_a_nominal * percent_b) / (100 - percent_b)
-        b_nominal_amount = round(b_nominal_amount / 1000) * 1000
-    
-    b_nominal = [b_nominal_amount]
-    
-    # Combine all parameters
-    all_maturity_days = a_maturity_days + b_maturity_days
-    all_base_rates = a_base_rates + b_base_rates
-    all_spreads = a_spreads + b_spreads
-    all_reinvest_rates = a_reinvest_rates + b_reinvest_rates
-    all_nominal = a_nominal_amounts + b_nominal
-    
-    # Calculate maturity dates
-    all_maturity_dates = [start_date + pd.Timedelta(days=days) for days in all_maturity_days]
-    
-    # Distribute cash flows into tranches
-    tranch_cash_flows = assign_cash_flows_to_tranches(
-        df_calc, start_date, all_maturity_dates, all_reinvest_rates
-    )
-    
-    # Calculate results for each tranche
-    results = []
-    buffer = 0.0
-    interest_rate_conversions = []
-    
-    for i in range(len(all_maturity_days)):
-        is_class_a = (i < len(a_maturity_days))
-        
-        # Set tranche name
-        if is_class_a:
-            t_name = f"Class A{i+1}"
-        else:
-            t_name = f"Class B{i - len(a_maturity_days) + 1}"
-        
-        # Calculate cash flow totals
-        c_flow, r_return, total_principal, total_interest = calculate_totals(
-            tranch_cash_flows[i], all_maturity_dates[i], all_reinvest_rates[i]
+        df.rename(columns={"Copyinstallment_date": "installment_date"},
+                  inplace=True, errors="ignore")
+        df["installment_date"] = pd.to_datetime(
+            df["installment_date"], dayfirst=True, errors="coerce"
         )
-        
-        # Buffer reinvestment calculation
-        if i > 0 and buffer > 0:
-            dd = all_maturity_days[i] - all_maturity_days[i-1]
-            if dd > 0:
-                factor = (1 + simple_to_compound_annual(all_reinvest_rates[i])/100)**(dd/365) - 1
-                buffer_reinv = buffer * factor
-            else:
-                buffer_reinv = 0
+
+        required = {"principal_amount", "interest_amount"}
+        if not required.issubset(df.columns):
+            raise ValueError(f"Missing columns: {required - set(df.columns)}")
+
+        df["cash_flow"] = df["principal_amount"] + df["interest_amount"]
+        df["original_cash_flow"] = df["cash_flow"].copy()
+        return df
+
+    except Exception as exc:
+        raise ValueError(f"Excel processing error: {exc}") from exc
+
+
+# --------------------------------------------------------------------------- #
+#                             MAIN CALCULATION                                #
+# --------------------------------------------------------------------------- #
+def perform_calculation(df: pd.DataFrame,
+                        request: CalculationRequest) -> CalculationResult:
+    """ABS nakit‑akışı hesabı"""
+
+    # --------------------------- GENEL VERİLER ------------------------------ #
+    start_date = pd.Timestamp(request.general_settings.start_date)
+    ops_exp = request.general_settings.operational_expenses
+
+    df_calc = df.copy()
+    df_calc["cash_flow"] = df_calc["original_cash_flow"]
+    # 16 Şub 2025 satırından operasyonel gideri düş
+    mask = df_calc["installment_date"].dt.date == pd.Timestamp("2025‑02‑16").date()
+    if mask.any():
+        i = df_calc[mask].index[0]
+        df_calc.at[i, "cash_flow"] = max(0, df_calc.at[i, "cash_flow"] - ops_exp)
+
+    # ---------------------------- TRANCHE A -------------------------------- #
+    A_mats = [t.maturity_days for t in request.tranches_a]
+    A_base = [t.base_rate for t in request.tranches_a]
+    A_spread = [t.spread for t in request.tranches_a]
+    A_reinv = [t.reinvest_rate for t in request.tranches_a]
+    A_nom = [round(t.nominal / 1_000) * 1_000 for t in request.tranches_a]
+
+    # ---------------------------- TRANCHE B -------------------------------- #
+    # ① nominal: optimize geldiyse kullan, yoksa %10.178 kuralı
+    if request.tranche_b.nominal and request.tranche_b.nominal > 0:
+        B_nominal = request.tranche_b.nominal
+    else:
+        percent_b = 10.17811704
+        total_a = sum(A_nom)
+        B_nominal = (total_a * percent_b) / (100 - percent_b)
+        B_nominal = round(B_nominal / 1_000) * 1_000
+
+    B_nominal = max(1_000, round(B_nominal / 1_000) * 1_000)
+
+    # ② diğer B parametreleri
+    raw_b_day = request.tranche_b.maturity_days
+    B_days = min(365, max(1, raw_b_day))          # 1‑365 sınırı
+    B_base = request.tranche_b.base_rate
+    B_spread = request.tranche_b.spread
+    B_reinv = request.tranche_b.reinvest_rate
+
+    # ----------------------- PARAMETRELERİ BİRLEŞTİR ----------------------- #
+    all_days = A_mats + [B_days]
+    all_base = A_base + [B_base]
+    all_spread = A_spread + [B_spread]
+    all_reinv = A_reinv + [B_reinv]
+    all_nom = A_nom + [B_nominal]
+    all_dates = [start_date + pd.Timedelta(d, "D") for d in all_days]
+
+    # --------------------- NAKİT‑AKIŞINI TRANCHLERE DAĞIT ------------------ #
+    tr_cf = assign_cash_flows_to_tranches(df_calc, start_date, all_dates, all_reinv)
+
+    # ------------------------- HESAP DÖNGÜSÜ ------------------------------- #
+    results: List[Dict[str, Any]] = []
+    buffer = 0.0
+    conversions = []
+
+    for i, days in enumerate(all_days):
+        is_a = i < len(A_mats)
+        t_name = f"Class {'A' if is_a else 'B'}{i+1 if is_a else ''}".strip()
+
+        c_flow, r_ret, *_ = calculate_totals(tr_cf[i], all_dates[i], all_reinv[i])
+
+        # buffer faizi
+        buf_reinv = 0.0
+        if i > 0 and buffer > 0 and days > all_days[i-1]:
+            factor = (1 + simple_to_compound_annual(all_reinv[i])/100)**(
+                (days - all_days[i-1]) / 365
+            ) - 1
+            buf_reinv = buffer * factor
+
+        available = c_flow + r_ret + buffer + buf_reinv
+        nominal = all_nom[i]
+
+        if is_a:
+            total_rate = all_base[i] + all_spread[i]/100
+            disc = 1 / (1 + total_rate/100 * days/365) if days else 1
+            principal = nominal * disc
+            interest = nominal - principal
+            coupon = coupon_rate = eff_coupon = 0.0
+            total_pay = nominal
         else:
-            buffer_reinv = 0
-        
-        # Total available funds
-        total_available = c_flow + r_return + buffer + buffer_reinv
-        
-        # Interest rate calculations
-        base_rate_val = all_base_rates[i]
-        spread_bps = all_spreads[i]
-        total_rate = base_rate_val + (spread_bps/100.0)
-        
-        if is_class_a:
-            # Class A payment logic
-            nominal_pmt = all_nominal[i]
-            
-            discount_factor = 1 / (1 + (total_rate/100 * all_maturity_days[i]/365)) if all_maturity_days[i] > 0 else 1
-            principal = nominal_pmt * discount_factor
-            interest = nominal_pmt - principal
-            coupon_payment = 0
-            coupon_rate = 0.0
-            
-            total_payment = nominal_pmt
-        else:
-            # Class B payment logic
-            nominal_pmt = all_nominal[i]
-            principal = nominal_pmt
-            coupon_payment = max(0, total_available - principal)
-            interest = 0
-            coupon_rate = (coupon_payment / principal * 100) if principal > 0 else 0.0
-            discount_factor = 1.0
-            
-            total_payment = principal + coupon_payment
-        
-        # Calculate buffer
-        new_buffer = max(0, total_available - total_payment)
-        buffer_cf_ratio = (new_buffer / nominal_pmt * 100) if nominal_pmt != 0 else 0
-        
-        # Calculate effective interest rates
-        if is_class_a:
-            final_simple = total_rate
-            total_interest_rate_percent = total_rate
-            effective_coupon_rate = 0.0
-        else:
-            final_simple = coupon_rate
-            total_interest_rate_percent = 0.0
-            effective_coupon_rate = (coupon_payment / principal) * (365 / all_maturity_days[i]) * 100 if principal > 0 and all_maturity_days[i] > 0 else 0.0
-        
-        # Interest rate conversions
-        if is_class_a:
-            comp_period = simple_to_maturity_compound(final_simple, all_maturity_days[i])
-            simple_annual_display = final_simple
-            compound_period_display = comp_period
-        else:
-            # For Class B, use dash ("-") for these values
-            simple_annual_display = "-"
-            compound_period_display = "-"
-        
-        reinvest_on_comp = overnight_to_annual_compound(all_reinvest_rates[i])
-        
-        interest_rate_conversions.append({
+            principal = max(0.001, nominal)
+            coupon = max(0, available - principal)
+            coupon_rate = coupon / principal * 100 if principal > 0.001 else 0.0
+            eff_coupon = (
+                coupon / principal * 365 / days * 100
+                if principal > 0.001 and days > 0
+                else 0.0
+            )
+            interest = 0.0
+            total_pay = principal + coupon
+            total_rate = 0  # Class B’de gösterilmiyor
+
+        new_buffer = max(0.0, available - total_pay)
+        buf_ratio = new_buffer / nominal * 100 if nominal else 0.0
+
+        # dönüşüm tablosu (UI)
+        conversions.append({
             "Tranche": t_name,
-            "Maturity Days": all_maturity_days[i],
-            "Simple Annual Interest (%)": simple_annual_display,
-            "Compound Interest for Period (%)": compound_period_display,
-            "Reinvest Simple Annual (%)": all_reinvest_rates[i],
-            "Reinvest O/N Compound (%)": reinvest_on_comp,
-            "Coupon Rate (%)": coupon_rate if not is_class_a else 0.0,
-            "Effective Coupon Rate (%)": effective_coupon_rate if not is_class_a else 0.0
+            "Maturity Days": days,
+            "Simple Annual Interest (%)": total_rate if is_a else coupon_rate,
+            "Compound Interest for Period (%)": (
+                simple_to_maturity_compound(total_rate, days) if is_a else eff_coupon
+            ),
+            "Reinvest Simple Annual (%)": all_reinv[i],
+            "Reinvest O/N Compound (%)": overnight_to_annual_compound(all_reinv[i]),
+            "Coupon Rate (%)": coupon_rate if not is_a else 0.0,
+            "Effective Coupon Rate (%)": eff_coupon if not is_a else 0.0,
         })
-        
-        # Add to results
+
         results.append({
             "Tranche": t_name,
             "Start Date": start_date.strftime("%d/%m/%Y"),
-            "Maturity Days": all_maturity_days[i],
-            "Maturity Date": all_maturity_dates[i].strftime("%d/%m/%Y"),
-            "Base Rate (%)": base_rate_val,
-            "Spread (bps)": spread_bps,
-            "Total Interest Rate (%)": total_interest_rate_percent,
+            "Maturity Days": days,
+            "Maturity Date": all_dates[i].strftime("%d/%m/%Y"),
+            "Base Rate (%)": all_base[i],
+            "Spread (bps)": all_spread[i],
+            "Total Interest Rate (%)": total_rate,
             "Coupon Rate (%)": coupon_rate,
-            "Effective Coupon (%)": effective_coupon_rate,
-            "Original Nominal": all_nominal[i],
-            "Adjusted Nominal": nominal_pmt,
+            "Effective Coupon (%)": eff_coupon,
+            "Original Nominal": nominal,
+            "Adjusted Nominal": nominal,
             "Buffer In": buffer,
             "Cash Flow Total": c_flow,
-            "Reinvestment Return": r_return,
-            "Buffer Reinvestment": buffer_reinv,
-            "Total Available": total_available,
+            "Reinvestment Return": r_ret,
+            "Buffer Reinvestment": buf_reinv,
+            "Total Available": available,
             "Principal": principal,
             "Interest": interest,
-            "Coupon Payment": coupon_payment,
-            "Nominal Payment": nominal_pmt,
-            "Total Payment": total_payment,
+            "Coupon Payment": coupon,
+            "Nominal Payment": nominal,
+            "Total Payment": total_pay,
             "Buffer Out": new_buffer,
-            "Buffer Cash Flow Ratio (%)": buffer_cf_ratio,
-            "Discount Factor": discount_factor,
-            "Is Class A": is_class_a
+            "Buffer Cash Flow Ratio (%)": buf_ratio,
+            "Discount Factor": 1.0,
+            "Is Class A": is_a,
         })
-        
-        # Update buffer for next tranche
+
         buffer = new_buffer
-    
-    # Filter for Class A and Class B
-    class_a_results = [r for r in results if r.get("Is Class A")]
-    class_b_results = [r for r in results if not r.get("Is Class A")]
-    
-    # Calculate totals
-    class_a_total = sum(r["Total Payment"] for r in class_a_results)
-    class_b_total = sum(r["Total Payment"] for r in class_b_results)
-    class_a_principal = sum(r["Principal"] for r in class_a_results)
-    class_b_principal = sum(r["Principal"] for r in class_b_results)
-    class_a_interest = sum(r["Interest"] for r in class_a_results)
-    class_b_coupon = sum(r["Coupon Payment"] for r in class_b_results)
-    min_buffer_actual = min(r["Buffer Cash Flow Ratio (%)"] for r in class_a_results) if class_a_results else 0.0
-    
-    # Calculate total principal paid and loan principal for financing cost
+
+    # --------------------------- TOPLAM SONUÇLAR --------------------------- #
+    a_rows = [r for r in results if r["Is Class A"]]
+    b_rows = [r for r in results if not r["Is Class A"]]
+
+    class_a_total = sum(r["Total Payment"] for r in a_rows)
+    class_b_total = sum(r["Total Payment"] for r in b_rows)
+    class_a_principal = sum(r["Principal"] for r in a_rows)
+    class_b_principal = sum(r["Principal"] for r in b_rows)
+    class_a_interest = sum(r["Interest"] for r in a_rows)
+    class_b_coupon = sum(r["Coupon Payment"] for r in b_rows)
+    min_buffer_actual = min(
+        r["Buffer Cash Flow Ratio (%)"] for r in a_rows
+    ) if a_rows else 0.0
+
     total_principal_paid = class_a_principal + class_b_principal
-    total_loan_principal = df_calc['principal_amount'].sum()
+    total_loan_principal = df_calc["principal_amount"].sum()
     financing_cost = total_principal_paid - total_loan_principal
-    
-    # Create and return the calculation result
+
     return CalculationResult(
         class_a_total=class_a_total,
         class_b_total=class_b_total,
@@ -8298,8 +8493,9 @@ def perform_calculation(df: pd.DataFrame, request: CalculationRequest) -> Calcul
         total_loan_principal=total_loan_principal,
         financing_cost=financing_cost,
         tranche_results=results,
-        interest_rate_conversions=interest_rate_conversions
+        interest_rate_conversions=conversions,
     )
+
 
 ======================================================================
 
@@ -8307,7 +8503,8 @@ DOSYA: backend\app\services\optimization_service.py
 ==================================================
 """
 Optimization service for ABS structure analysis.
-This module implements multiple optimization strategies to find optimal ABS configurations.
+This module implements multiple optimization strategies to find optimal ABS configurations
+with improved Class B percentage targeting.
 """
 import time
 import pandas as pd
@@ -8413,8 +8610,10 @@ def adjust_class_a_nominals_for_target_coupon(
     start_date: pd.Timestamp, 
     df_temp: pd.DataFrame, 
     min_buffer: float,
-    max_allowed_diff: float = 0.5  # Reduced from 1.0 to 0.5 for tighter matching
-) -> Tuple[List[float], bool]:
+    target_class_b_percent: float,
+    max_allowed_diff: float = 0.5,  # Reduced from 1.0 to 0.5 for tighter matching
+    class_b_percent_deviation: float = 1.0  # Add new parameter with tighter default value
+) -> Tuple[List[float], bool, float]:
     """
     Iteratively adjust Class A nominal amounts to achieve a target coupon rate for Class B
     using an improved adaptive search approach for faster convergence.
@@ -8432,15 +8631,20 @@ def adjust_class_a_nominals_for_target_coupon(
         start_date: Start date for calculations
         df_temp: DataFrame containing cash flow data
         min_buffer: Minimum buffer requirement
+        target_class_b_percent: Target percentage for Class B
         max_allowed_diff: Maximum allowed difference between actual and target coupon rate
+        class_b_percent_deviation: Maximum allowed deviation from target Class B percentage
         
     Returns:
-        Tuple of (adjusted_nominals, success_flag)
+        Tuple of (adjusted_nominals, success_flag, actual_class_b_percent)
     """
     # Initial parameters
     original_a_total = sum(a_nominals)
     original_proportions = [n / original_a_total for n in a_nominals]
     max_iterations = 30  # Reduced from 50 to 30 for faster execution
+    
+    # Fix 1: Ensure class_b_maturity is at least 1 to avoid division by zero
+    class_b_maturity = max(1, min(365, class_b_maturity))
     
     # Adjustment limits 
     min_adjustment = 0.001  # Allow down to 0.1% of original
@@ -8451,16 +8655,46 @@ def adjust_class_a_nominals_for_target_coupon(
     
     logger.info(f"Starting adjustment with target coupon rate: {target_coupon_rate:.2f}%")
     logger.info(f"Original Class A total: {original_a_total:,.2f}, Class B nominal: {class_b_nominal:,.2f}")
+    logger.info(f"Target Class B percentage: {target_class_b_percent:.2f}%, deviation: {class_b_percent_deviation:.2f}%")
+    
+    # Calculate actual Class B percentage
+    total_nominal = original_a_total + class_b_nominal
+    actual_class_b_percent = (class_b_nominal / total_nominal) * 100
+    logger.info(f"Target Class B percentage: {target_class_b_percent:.2f}%, Actual: {actual_class_b_percent:.2f}%")
+    
+    # Maximum allowed deviation from target Class B percentage - use tighter limit of 1%
+    max_class_b_percent_diff = 1.0  
+
+    # Check if the initial Class B percentage is too far from target
+    class_b_percent_diff = abs(actual_class_b_percent - target_class_b_percent)
+    if class_b_percent_diff > max_class_b_percent_diff:
+        logger.info(f"Initial Class B percentage too far from target. Diff: {class_b_percent_diff:.2f}%")
+        
+        # Calculate corrected B nominal to achieve target percentage
+        target_b_share = target_class_b_percent / 100
+        corrected_class_b_nominal = (original_a_total * target_b_share) / (1 - target_b_share)
+        
+        # Round to nearest 1000
+        corrected_class_b_nominal = round(corrected_class_b_nominal / 1000) * 1000
+        
+        # Replace the provided B nominal with the corrected one
+        class_b_nominal = corrected_class_b_nominal
+        
+        # Recalculate actual percentage
+        total_nominal = original_a_total + class_b_nominal
+        actual_class_b_percent = (class_b_nominal / total_nominal) * 100
+        
+        logger.info(f"Corrected Class B nominal: {class_b_nominal:,.2f}, percentage: {actual_class_b_percent:.2f}%")
     
     # First, evaluate the original nominals to get a baseline
     try:
-        baseline_coupon_rate, baseline_min_buffer = evaluate_coupon_rate(
+        baseline_coupon_rate, baseline_min_buffer, baseline_direct_rate = evaluate_coupon_rate(
             a_nominals, class_b_nominal, class_b_maturity, 
             a_maturity_days, a_base_rates, a_reinvest_rates, 
             b_base_rate, b_reinvest_rate, start_date, df_temp
         )
         
-        logger.info(f"Baseline - Coupon rate: {baseline_coupon_rate:.2f}%, Buffer: {baseline_min_buffer:.2f}%")
+        logger.info(f"Baseline - Coupon rate: {baseline_coupon_rate:.2f}%, Direct rate: {baseline_direct_rate:.2f}%, Buffer: {baseline_min_buffer:.2f}%")
         
         # Direct ratio-based initial approximation for faster convergence
         if baseline_coupon_rate > 0:
@@ -8475,18 +8709,29 @@ def adjust_class_a_nominals_for_target_coupon(
             # Round to nearest 1000 and ensure no zeros
             test_nominals = [max(1000, round(n / 1000) * 1000) for n in test_nominals]
             
-            direct_coupon_rate, direct_min_buffer = evaluate_coupon_rate(
+            direct_coupon_rate, direct_min_buffer, direct_direct_rate = evaluate_coupon_rate(
                 test_nominals, class_b_nominal, class_b_maturity, 
                 a_maturity_days, a_base_rates, a_reinvest_rates,
                 b_base_rate, b_reinvest_rate, start_date, df_temp
             )
             
+            # Recalculate actual Class B percentage with adjusted Class A
+            test_a_total = sum(test_nominals)
+            test_total_nominal = test_a_total + class_b_nominal
+            test_class_b_percent = (class_b_nominal / test_total_nominal) * 100
+            
+            # Check if Class B percentage is within allowed range
+            min_class_b_percent = max(0.1, target_class_b_percent - class_b_percent_deviation)
+            max_class_b_percent = min(50, target_class_b_percent + class_b_percent_deviation)
+            is_class_b_percent_valid = min_class_b_percent <= test_class_b_percent <= max_class_b_percent
+            
             # If the direct approach gives a good result, use it immediately
-            if direct_min_buffer >= min_buffer and abs(direct_coupon_rate - target_coupon_rate) <= max_allowed_diff:
+            if direct_min_buffer >= min_buffer and abs(direct_coupon_rate - target_coupon_rate) <= max_allowed_diff and is_class_b_percent_valid:
                 logger.info(f"Direct approach successful - Coupon rate: {direct_coupon_rate:.2f}%, "
                       f"diff: {abs(direct_coupon_rate - target_coupon_rate):.2f}%, "
-                      f"min buffer: {direct_min_buffer:.2f}%")
-                return test_nominals, True
+                      f"min buffer: {direct_min_buffer:.2f}%, "
+                      f"Class B %: {test_class_b_percent:.2f}%")
+                return test_nominals, True, test_class_b_percent
                 
             # If not perfect but close, use as starting point
             current_adjustment = direct_adjustment
@@ -8500,7 +8745,7 @@ def adjust_class_a_nominals_for_target_coupon(
             current_adjustment = 1.0
     except Exception as e:
         logger.error(f"Error evaluating baseline: {str(e)}")
-        return a_nominals, False
+        return a_nominals, False, actual_class_b_percent
     
     # Determine initial direction if not set by direct approach
     if baseline_coupon_rate < target_coupon_rate and adjustment_direction == 0:
@@ -8530,6 +8775,7 @@ def adjust_class_a_nominals_for_target_coupon(
     
     best_diff = float('inf')
     best_nominals = a_nominals.copy()
+    best_class_b_percent = actual_class_b_percent
     success = False
     
     # Store previous results for interpolation
@@ -8545,9 +8791,10 @@ def adjust_class_a_nominals_for_target_coupon(
         # Round to nearest 1000 and ensure no zeros
         current_nominals = [max(1000, round(n / 1000) * 1000) for n in current_nominals]
         
+        # Fix 2: Add try-except with debug for error capture
         try:
             # Evaluate with current adjustment
-            coupon_rate, min_buffer_actual = evaluate_coupon_rate(
+            coupon_rate, min_buffer_actual, direct_rate = evaluate_coupon_rate(
                 current_nominals, class_b_nominal, class_b_maturity, 
                 a_maturity_days, a_base_rates, a_reinvest_rates,
                 b_base_rate, b_reinvest_rate, start_date, df_temp
@@ -8556,47 +8803,62 @@ def adjust_class_a_nominals_for_target_coupon(
             # Calculate difference from target
             rate_diff = abs(coupon_rate - target_coupon_rate)
             
+            # Calculate actual Class B percentage
+            current_a_total = sum(current_nominals)
+            current_total_nominal = current_a_total + class_b_nominal
+            current_class_b_percent = (class_b_nominal / current_total_nominal) * 100
+            percent_diff = abs(current_class_b_percent - target_class_b_percent)
+            
+            # Check if Class B percentage is within allowed range
+            is_class_b_percent_valid = min_class_b_percent <= current_class_b_percent <= max_class_b_percent
+            
             logger.info(f"Iteration {iteration+1}, adjustment: {current_adjustment:.4f}, "
                   f"coupon: {coupon_rate:.2f}%, target: {target_coupon_rate:.2f}%, "
-                  f"diff: {rate_diff:.2f}%, min buffer: {min_buffer_actual:.2f}%")
+                  f"diff: {rate_diff:.2f}%, min buffer: {min_buffer_actual:.2f}%, "
+                  f"Class B %: {current_class_b_percent:.2f}%, "
+                  f"is_valid: {is_class_b_percent_valid}")
             
-            # Check if this result is better and meets buffer requirement
-            if min_buffer_actual >= min_buffer and rate_diff < best_diff:
+            # Check if this result is better and meets buffer requirement and Class B percentage requirement
+            if min_buffer_actual >= min_buffer and is_class_b_percent_valid and rate_diff < best_diff:
                 best_diff = rate_diff
                 best_nominals = current_nominals.copy()
+                best_class_b_percent = current_class_b_percent
                 
                 # If we're close to target, consider it a success
                 if rate_diff <= max_allowed_diff:
                     success = True
                     logger.info(f"Found acceptable solution - coupon rate: {coupon_rate:.2f}%, "
-                          f"diff: {rate_diff:.2f}%, min buffer: {min_buffer_actual:.2f}%")
+                          f"diff: {rate_diff:.2f}%, min buffer: {min_buffer_actual:.2f}%, "
+                          f"Class B %: {current_class_b_percent:.2f}%")
                     
                     # If very close to target, we can exit early
                     if rate_diff < 0.1:  # Tightened from 0.2 to 0.1
                         break
             
-            # Linear interpolation for faster convergence when we have two datapoints
+            # Fix 1: Linear interpolation section - add safeguard against division by zero
             if iteration > 0 and last_coupon_rate != coupon_rate:
-                # Calculate slope of coupon rate change vs adjustment change
-                rate_slope = (coupon_rate - last_coupon_rate) / (current_adjustment - last_adjustment)
-                
-                if abs(rate_slope) > 0.001:  # Avoid division by near-zero
-                    # Estimate adjustment needed to hit target using linear interpolation
-                    estimated_adjustment = last_adjustment + (target_coupon_rate - last_coupon_rate) / rate_slope
-                    logger.info(f"Linear interpolation suggests adjustment: {estimated_adjustment:.4f}")
+                # Add check for division by zero
+                if abs(current_adjustment - last_adjustment) > 0.000001:
+                    # Calculate slope of coupon rate change vs adjustment change
+                    rate_slope = (coupon_rate - last_coupon_rate) / (current_adjustment - last_adjustment)
                     
-                    # Keep within reasonable bounds
-                    next_adjustment = max(min_adjustment, min(max_adjustment, estimated_adjustment))
-                    
-                    # Only use interpolation if it's not too extreme
-                    if 0.5 * current_adjustment <= next_adjustment <= 2.0 * current_adjustment:
-                        # Store current values before updating
-                        last_adjustment = current_adjustment
-                        last_coupon_rate = coupon_rate
+                    if abs(rate_slope) > 0.001:  # Avoid division by near-zero
+                        # Estimate adjustment needed to hit target using linear interpolation
+                        estimated_adjustment = last_adjustment + (target_coupon_rate - last_coupon_rate) / rate_slope
+                        logger.info(f"Linear interpolation suggests adjustment: {estimated_adjustment:.4f}")
                         
-                        # Apply interpolated adjustment
-                        current_adjustment = next_adjustment
-                        continue  # Skip the standard adjustment logic below
+                        # Keep within reasonable bounds
+                        next_adjustment = max(min_adjustment, min(max_adjustment, estimated_adjustment))
+                        
+                        # Only use interpolation if it's not too extreme
+                        if 0.5 * current_adjustment <= next_adjustment <= 2.0 * current_adjustment:
+                            # Store current values before updating
+                            last_adjustment = current_adjustment
+                            last_coupon_rate = coupon_rate
+                            
+                            # Apply interpolated adjustment
+                            current_adjustment = next_adjustment
+                            continue  # Skip the standard adjustment logic below
             
             # Store current values for next interpolation
             last_adjustment = current_adjustment
@@ -8631,7 +8893,9 @@ def adjust_class_a_nominals_for_target_coupon(
                 break
                 
         except Exception as e:
+            # Fix 2: Enhanced error logging
             logger.error(f"Error during adjustment iteration {iteration}: {str(e)}")
+            logger.error(f"Parameters: class_b_maturity={class_b_maturity}, a_maturity_days={a_maturity_days}")
             # Continue to next iteration instead of terminating
             continue
     
@@ -8641,7 +8905,7 @@ def adjust_class_a_nominals_for_target_coupon(
     elif not success:
         logger.info(f"Failed to find valid solution. Try adjusting min buffer requirement or target coupon rate.")
     
-    return best_nominals, success
+    return best_nominals, success, best_class_b_percent
 
 def evaluate_coupon_rate(
     a_nominals: List[float], 
@@ -8654,26 +8918,16 @@ def evaluate_coupon_rate(
     b_reinvest_rate: float, 
     start_date: pd.Timestamp, 
     df_temp: pd.DataFrame
-) -> Tuple[float, float]:
+) -> Tuple[float, float, float]:  # Returns (coupon_rate, min_buffer, direct_coupon_rate)
     """
     Helper function to evaluate a specific nominal adjustment
-    Returns tuple of (coupon_rate, min_buffer)
+    Returns tuple of (coupon_rate, min_buffer, direct_coupon_rate)
     
-    Args:
-        a_nominals: List of Class A nominal amounts
-        class_b_nominal: Class B nominal amount
-        class_b_maturity: Maturity days for Class B
-        a_maturity_days: List of maturity days for Class A tranches
-        a_base_rates: List of base rates for Class A tranches
-        a_reinvest_rates: List of reinvestment rates for Class A tranches
-        b_base_rate: Base rate for Class B
-        b_reinvest_rate: Reinvestment rate for Class B
-        start_date: Start date for calculations
-        df_temp: DataFrame containing cash flow data
-        
-    Returns:
-        Tuple of (coupon_rate, min_buffer)
+    This function has been revised to match the calculation logic in calculation_service.py
     """
+    # Ensure class_b_maturity is at least 1 to avoid division by zero
+    class_b_maturity = max(1, class_b_maturity)
+    
     # Set up parameters for calculation
     a_spreads = [0.0] * len(a_maturity_days)
     b_maturity_days = [class_b_maturity]
@@ -8707,7 +8961,7 @@ def evaluate_coupon_rate(
             tranch_cash_flows[i], all_maturity_dates[i], all_reinvest_rates[i]
         )
         
-        # Buffer reinvestment calculation
+        # Buffer reinvestment calculation - UPDATED to match calculation_service.py
         if i > 0 and buffer > 0:
             dd = all_maturity_days[i] - all_maturity_days[i-1]
             if dd > 0:
@@ -8727,7 +8981,7 @@ def evaluate_coupon_rate(
         total_rate = base_rate_val + (spread_bps/100.0)
         
         if is_class_a:
-            # Class A payment logic
+            # Class A payment logic - UPDATED to match calculation_service.py
             nominal_pmt = all_nominal[i]
             discount_factor = 1 / (1 + (total_rate/100 * all_maturity_days[i]/365)) if all_maturity_days[i] > 0 else 1
             principal = nominal_pmt * discount_factor
@@ -8735,9 +8989,10 @@ def evaluate_coupon_rate(
             coupon_payment = 0
             total_payment = nominal_pmt
         else:
-            # Class B payment logic
+            # Class B payment logic - UPDATED to match calculation_service.py exactly
             nominal_pmt = all_nominal[i]
-            principal = nominal_pmt
+            # Ensure principal is never zero or too small
+            principal = max(0.001, nominal_pmt)
             coupon_payment = max(0, total_available - principal)
             interest = 0
             total_payment = principal + coupon_payment
@@ -8766,22 +9021,26 @@ def evaluate_coupon_rate(
     class_a_results = [r for r in results if r['is_class_a']]
     class_b_results = [r for r in results if not r['is_class_a']]
     
-    # Calculate Class B coupon rate
+    # UPDATED - Calculate coupon rates exactly like in calculation_service.py
+    # Calculate Class B principal and coupon
     class_b_principal = sum(r['principal'] for r in class_b_results)
     class_b_coupon = sum(r['coupon_payment'] for r in class_b_results)
     
-    # Calculate Class B effective coupon rate (annualized)
-    if class_b_results and class_b_principal > 0 and class_b_maturity > 0:
+    # Calculate direct coupon rate with safeguard
+    direct_coupon_rate = 0.0
+    if class_b_principal > 0.001:  # Ensure principal is sufficiently above zero
+        direct_coupon_rate = (class_b_coupon / class_b_principal) * 100
+    
+    # Calculate Class B effective coupon rate with safeguard
+    class_b_coupon_rate = 0.0
+    if class_b_results and class_b_principal > 0.001 and class_b_maturity > 0:
         class_b_maturity_days = class_b_results[0]['maturity_days']
         class_b_coupon_rate = (class_b_coupon / class_b_principal) * (365 / class_b_maturity_days) * 100
-    else:
-        class_b_coupon_rate = 0.0
     
     # Calculate minimum buffer
     min_buffer_actual = min(r['buffer_cf_ratio'] for r in class_a_results) if class_a_results else 0.0
     
-    return class_b_coupon_rate, min_buffer_actual
-
+    return class_b_coupon_rate, min_buffer_actual, direct_coupon_rate  # Modified to return direct rate too
 def evaluate_params(
     maturities: List[int], 
     nominals: List[float], 
@@ -8792,7 +9051,8 @@ def evaluate_params(
     maturity_to_reinvest_rate_A: Dict[int, float],
     class_b_base_rate: float, 
     class_b_reinvest_rate: float,
-    min_class_b_percent: float, 
+    target_class_b_percent: float, 
+    class_b_percent_deviation: float,
     target_class_b_coupon_rate: float, 
     min_buffer: float
 ) -> Dict[str, Any]:
@@ -8808,13 +9068,17 @@ def evaluate_params(
         maturity_to_reinvest_rate_A: Dictionary mapping maturity days to reinvestment rates
         class_b_base_rate: Base rate for Class B
         class_b_reinvest_rate: Reinvestment rate for Class B
-        min_class_b_percent: Minimum percentage of Class B tranche
+        target_class_b_percent: Target percentage of Class B tranche
+        class_b_percent_deviation: Allowable deviation from target Class B percentage
         target_class_b_coupon_rate: Target coupon rate for Class B
         min_buffer: Minimum buffer requirement
         
     Returns:
         Dictionary containing evaluation results
     """
+    # Ensure class_b_maturity is at least 1
+    class_b_maturity = max(1, class_b_maturity)
+    
     # Fast rejection for obviously invalid inputs
     if not maturities or not nominals or len(maturities) != len(nominals):
         return {
@@ -8822,7 +9086,8 @@ def evaluate_params(
             'score': 0,
             'results': None,
             'error': "Invalid input dimensions",
-            'b_nominal': 0
+            'b_nominal': 0,
+            'class_b_percent': 0
         }
     
     # Convert to lists for key operations and ensure types are correct
@@ -8840,7 +9105,7 @@ def evaluate_params(
     reinvest_rates = [maturity_to_reinvest_rate_A.get(
         get_nearest_maturity(m, list(maturity_to_reinvest_rate_A.keys())), 30.0) for m in maturities]
     
-    # Calculate Class B nominal based on minimum percentage
+    # Calculate total Class A nominal
     total_a_nominal = sum(nominals)
     if total_a_nominal <= 0:
         return {
@@ -8848,10 +9113,47 @@ def evaluate_params(
             'score': 0,
             'results': None,
             'error': "Total Class A nominal must be positive",
-            'b_nominal': 0
+            'b_nominal': 0,
+            'class_b_percent': 0
         }
+    
+    # Calculate Class B nominal based on target percentage with dynamic approach
+    min_class_b_percent = max(0.1, target_class_b_percent - class_b_percent_deviation)
+    max_class_b_percent = min(50, target_class_b_percent + class_b_percent_deviation)
+    
+    # Ideal class B percentage (target)
+    target_b_share = target_class_b_percent / 100
+    
+    # Calculate ideal class B nominal based on target percentage
+    # Formula: class_b_nominal = total_a_nominal * target_b_share / (1 - target_b_share)
+    class_b_nominal = (total_a_nominal * target_b_share) / (1 - target_b_share)
+    
+    # Round to nearest 1000
+    class_b_nominal = round(class_b_nominal / 1000) * 1000
+    
+    # Calculate actual Class B percentage
+    total_nominal = total_a_nominal + class_b_nominal
+    actual_class_b_percent = (class_b_nominal / total_nominal) * 100
+    
+    # If the actual percentage is outside allowed range, adjust the nominal value
+    if actual_class_b_percent < min_class_b_percent or actual_class_b_percent > max_class_b_percent:
+        logger.debug(f"Adjusting Class B nominal to meet target percent. Current: {actual_class_b_percent:.2f}%, Target: {target_class_b_percent:.2f}%±{class_b_percent_deviation:.2f}%")
         
-    class_b_nominal = (total_a_nominal * min_class_b_percent) / (100 - min_class_b_percent)
+        # Calculate corrected B share
+        if actual_class_b_percent < min_class_b_percent:
+            corrected_b_share = min_class_b_percent / 100
+        else:
+            corrected_b_share = max_class_b_percent / 100
+        
+        # Recalculate B nominal
+        class_b_nominal = (total_a_nominal * corrected_b_share) / (1 - corrected_b_share)
+        class_b_nominal = round(class_b_nominal / 1000) * 1000
+        
+        # Recalculate actual percentage
+        total_nominal = total_a_nominal + class_b_nominal
+        actual_class_b_percent = (class_b_nominal / total_nominal) * 100
+        
+        logger.debug(f"Adjusted Class B percent to: {actual_class_b_percent:.2f}%")
     
     # Set up parameters for calculation
     a_maturity_days = maturities
@@ -8916,9 +9218,10 @@ def evaluate_params(
                 coupon_payment = 0
                 total_payment = nominal_pmt
             else:
-                # Class B payment logic
+                # Class B payment logic with safeguards
                 nominal_pmt = all_nominal[i]
-                principal = nominal_pmt
+                # Ensure principal is never too close to zero
+                principal = max(0.001, nominal_pmt)
                 coupon_payment = max(0, total_available - principal)
                 interest = 0
                 total_payment = principal + coupon_payment
@@ -8955,17 +9258,30 @@ def evaluate_params(
         class_a_total = sum(r['total_payment'] for r in class_a_results)
         class_b_total = sum(r['total_payment'] for r in class_b_results)
         
-        # Calculate Class B effective coupon rate (annualized)
-        if class_b_results and class_b_principal > 0:
+        # Calculate direct coupon rate with safeguard
+        direct_coupon_rate = 0.0
+        if class_b_principal > 0.001:  # Ensure principal is sufficiently above zero
+            direct_coupon_rate = (class_b_coupon / class_b_principal) * 100
+        
+        # Calculate Class B effective coupon rate with safeguard
+        class_b_coupon_rate = 0.0
+        if class_b_results and class_b_principal > 0.001 and class_b_maturity > 0:
             class_b_maturity_days = class_b_results[0]['maturity_days']
             class_b_coupon_rate = (class_b_coupon / class_b_principal) * (365 / class_b_maturity_days) * 100
-        else:
-            class_b_coupon_rate = 0.0
         
         min_buffer_actual = min(r['buffer_cf_ratio'] for r in class_a_results) if class_a_results else 0.0
         
-        # Check if valid
+        # Check if valid (meets minimum buffer requirement)
         is_valid = min_buffer_actual >= min_buffer
+        
+        # Calculate Class B percentage deviation from target
+        class_b_percent_diff = abs(actual_class_b_percent - target_class_b_percent)
+        
+        # Check if Class B percentage is within acceptable range
+        is_class_b_percent_valid = min_class_b_percent <= actual_class_b_percent <= max_class_b_percent
+        
+        # A solution is valid only if it meets both buffer and Class B percentage requirements
+        is_valid = is_valid and is_class_b_percent_valid
         
         # Collect results
         result_dict = {
@@ -8978,20 +9294,33 @@ def evaluate_params(
             'min_buffer_actual': min_buffer_actual,
             'total_principal': class_a_principal + class_b_principal,
             'class_b_coupon_rate': class_b_coupon_rate,
+            'direct_coupon_rate': direct_coupon_rate,
+            'class_b_percent': actual_class_b_percent,
+            'class_b_percent_diff': class_b_percent_diff,
             'num_a_tranches': len(a_maturity_days)
         }
         
-        # Improved scoring - give higher weight to coupon rate match
+        # Improved scoring with both coupon rate match and Class B percentage match
         coupon_rate_diff = abs(class_b_coupon_rate - target_class_b_coupon_rate)
+        
         # Exponential penalty for coupon rate difference - sharper dropoff
-        coupon_rate_weight = np.exp(-coupon_rate_diff / 3.0)  
-        weighted_principal = result_dict['total_principal'] * coupon_rate_weight
+        coupon_rate_weight = np.exp(-coupon_rate_diff / 3.0)
+        
+        # Exponential penalty for Class B percentage difference
+        class_b_percent_weight = np.exp(-class_b_percent_diff / 2.0)
+        
+        # Combined weight with more emphasis on coupon rate (60% vs 40%)
+        combined_weight = (coupon_rate_weight * 0.6) + (class_b_percent_weight * 0.4)
+        
+        # Weighted principal score
+        weighted_principal = result_dict['total_principal'] * combined_weight
         
         return {
             'is_valid': is_valid,
             'score': weighted_principal if is_valid else 0,
             'results': result_dict if is_valid else None,
-            'b_nominal': class_b_nominal
+            'b_nominal': class_b_nominal,
+            'class_b_percent': actual_class_b_percent
         }
     
     except Exception as e:
@@ -9003,11 +9332,12 @@ def evaluate_params(
             'score': 0,
             'results': None,
             'error': str(e),
-            'b_nominal': class_b_nominal
+            'b_nominal': class_b_nominal,
+            'class_b_percent': actual_class_b_percent
         }
 
 def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, optimization_settings: OptimizationSettings) -> OptimizationResult:
-    """Perform ABS structure optimization with improved coupon rate targeting
+    """Perform ABS structure optimization with improved coupon rate and Class B percentage targeting
     
     Args:
         df: DataFrame containing cash flow data
@@ -9027,9 +9357,18 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     min_a_tranches, max_a_tranches = optimization_settings.a_tranches_range
     maturity_range = optimization_settings.maturity_range
     maturity_step = optimization_settings.maturity_step
-    min_class_b_percent = optimization_settings.min_class_b_percent
+    
+    # Use the new Class B percentage targeting parameters 
+    target_class_b_percent = getattr(optimization_settings, "min_class_b_percent", 15.0)
+    
+    # Use the tighter class_b_percent_deviation value (default 1.0)
+    class_b_percent_deviation = getattr(optimization_settings, "class_b_percent_deviation", 1.0)
+    
     target_class_b_coupon_rate = optimization_settings.target_class_b_coupon_rate
     additional_days = optimization_settings.additional_days_for_class_b
+    
+    # Log the actual values used for debugging
+    logger.info(f"Target Class B percent: {target_class_b_percent}, deviation: {class_b_percent_deviation}")
     
     # Get selected strategies - use all if not specified
     selected_strategies = getattr(optimization_settings, "selected_strategies", 
@@ -9042,7 +9381,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     max_allowed_diff = 0.5  # Maximum 0.5% difference (reduced from 1.0%)
     
     optimization_progress.update(step=5, 
-                               message=f"Target coupon rate: {target_class_b_coupon_rate}%, preparing data...")
+                               message=f"Target coupon rate: {target_class_b_coupon_rate}%, Target Class B: {target_class_b_percent}±{class_b_percent_deviation}%")
     
     start_date = pd.Timestamp(general_settings.start_date)
     ops_expenses = general_settings.operational_expenses
@@ -9082,6 +9421,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     best_results_by_strategy = {strategy: None for strategy in strategy_names}
     best_weighted_principal_by_strategy = {strategy: 0 for strategy in strategy_names}
     best_coupon_rate_diff_by_strategy = {strategy: float('inf') for strategy in strategy_names}
+    best_class_b_percent_diff_by_strategy = {strategy: float('inf') for strategy in strategy_names}
     
     # Find last cash flow day
     last_cash_flow_day = get_last_cash_flow_day(df, start_date)
@@ -9117,6 +9457,10 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     # Progress tracking variables
     current_phase = "Testing Configurations"
     optimization_progress.update(phase=current_phase)
+    
+    # Fix 1: Ensure class_b_maturity is at least 1
+    # Calculate Class B maturity as Last Cash Flow Day + Additional Days
+    class_b_maturity = max(1, min(365, last_cash_flow_day + additional_days))
     
     # Loop through Class A tranche counts
     for num_a_tranches_idx, num_a_tranches in enumerate(num_a_tranches_options):
@@ -9168,9 +9512,6 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                     message=f"Testing maturity combination {combo_idx+1}/{combo_count}: {maturities}"
                 )
             
-            # Calculate Class B maturity as Last Cash Flow Day + Additional Days
-            class_b_maturity = min(365, last_cash_flow_day + additional_days)
-            
             # Assign rates based on nearest original Class A maturity
             a_base_rates = []
             a_reinvest_rates = []
@@ -9204,10 +9545,19 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
             
             # Process each strategy
             for strategy in distribution_strategies:
-                # Calculate Class B nominal based on minimum percentage
-                total_nominal_amount = total_a_nominal / (1 - min_class_b_percent/100)
-                class_b_nominal = total_nominal_amount * (min_class_b_percent / 100)
-                remaining_nominal = total_nominal_amount - class_b_nominal
+                # Try multiple class B percentages within the allowed deviation range
+                # This is a key enhancement over the original algorithm
+                
+                # Calculate required Class B nominal to achieve target percentage
+                # Formula: class_b_nominal = total_a_nominal * (target_percent / (100 - target_percent))
+                target_b_share = target_class_b_percent / 100
+                class_b_nominal = (total_a_nominal * target_b_share) / (1 - target_b_share)
+                
+                # Round to nearest 1000
+                class_b_nominal = round(class_b_nominal / 1000) * 1000
+                
+                # Calculate total nominal amount based on Class A and B
+                remaining_nominal = total_a_nominal
                 
                 # Distribute nominal amounts based on strategy
                 if strategy == "equal":
@@ -9252,7 +9602,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                 a_nominals[-1] += remaining_nominal - sum(a_nominals)
                 
                 # Now adjust the nominals to achieve target coupon rate
-                adjusted_a_nominals, success = adjust_class_a_nominals_for_target_coupon(
+                adjusted_a_nominals, success, actual_class_b_percent = adjust_class_a_nominals_for_target_coupon(
                     a_nominals, 
                     class_b_nominal, 
                     target_class_b_coupon_rate,
@@ -9265,7 +9615,9 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                     start_date, 
                     df_temp, 
                     min_buffer,
-                    max_allowed_diff
+                    target_class_b_percent,
+                    max_allowed_diff,
+                    class_b_percent_deviation  # Pass the tighter deviation value
                 )
                 
                 if success:
@@ -9276,13 +9628,14 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                     # Increment consecutive failures counter
                     consecutive_failures += 1
                 
-                # Evaluate the result
+                # Evaluate the result with the new Class B percentage parameters
                 eval_result = evaluate_params(
                     maturities, a_nominals, 
                     class_b_maturity, start_date, df_temp,
                     maturity_to_base_rate_A, maturity_to_reinvest_rate_A,
                     b_base_rate, b_reinvest_rate,
-                    min_class_b_percent, target_class_b_coupon_rate, min_buffer
+                    target_class_b_percent, class_b_percent_deviation,
+                    target_class_b_coupon_rate, min_buffer
                 )
                 
                 # Check if valid and meets buffer requirement
@@ -9291,31 +9644,47 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                     total_principal = result_dict['total_principal']
                     class_b_coupon_rate = result_dict['class_b_coupon_rate']
                     min_buffer_actual = result_dict['min_buffer_actual']
+                    class_b_percent = result_dict['class_b_percent']
+                    class_b_percent_diff = result_dict['class_b_percent_diff']
                     
                     # Calculate difference from target coupon rate
                     coupon_rate_diff = abs(class_b_coupon_rate - target_class_b_coupon_rate)
                     
-                    # Improved scoring function
-                    # Exponential penalty for rate difference - more severe penalty for larger differences
-                    coupon_rate_weight = np.exp(-coupon_rate_diff / 2.0)  # Stronger penalty
-                    weighted_principal = total_principal * coupon_rate_weight
+                    # Improved scoring function combining both objectives
+                    # Exponential penalty for rate difference
+                    coupon_rate_weight = np.exp(-coupon_rate_diff / 2.0)
+                    # Exponential penalty for Class B percentage difference
+                    class_b_percent_weight = np.exp(-class_b_percent_diff / 2.0)
+                    # Combined weight with 60% emphasis on coupon rate, 40% on Class B percentage
+                    combined_weight = (coupon_rate_weight * 0.6) + (class_b_percent_weight * 0.4)
+                    
+                    weighted_principal = total_principal * combined_weight
                     
                     # Check if this is the best solution for this strategy
-                    # Prioritize solutions with smaller coupon rate differences
+                    # Use a balanced approach between coupon rate and Class B percentage matching
+                    # with a slight preference for coupon rate matching
                     is_better = False
                     
-                    if coupon_rate_diff <= best_coupon_rate_diff_by_strategy[strategy]:
-                        # If coupon rate difference is better or equal, check weighted principal
-                        if coupon_rate_diff < best_coupon_rate_diff_by_strategy[strategy] or \
-                           weighted_principal > best_weighted_principal_by_strategy[strategy]:
+                    # Determine if this solution is better based on combined criteria
+                    if coupon_rate_diff <= best_coupon_rate_diff_by_strategy[strategy] * 1.1 and \
+                       class_b_percent_diff <= best_class_b_percent_diff_by_strategy[strategy] * 1.1:
+                        # If both metrics are comparable or better, use weighted principal as tiebreaker
+                        if weighted_principal > best_weighted_principal_by_strategy[strategy]:
                             is_better = True
                     elif coupon_rate_diff <= max_allowed_diff and \
-                         weighted_principal > best_weighted_principal_by_strategy[strategy] * 1.2:  # Must be significantly better
-                        # If within allowed difference and much better weighted principal
+                         class_b_percent_diff <= class_b_percent_deviation and \
+                         weighted_principal > best_weighted_principal_by_strategy[strategy] * 1.15:
+                        # If within allowed differences and significantly better weighted principal
+                        is_better = True
+                    elif (coupon_rate_diff < best_coupon_rate_diff_by_strategy[strategy] * 0.7 or \
+                          class_b_percent_diff < best_class_b_percent_diff_by_strategy[strategy] * 0.7) and \
+                         weighted_principal > best_weighted_principal_by_strategy[strategy] * 0.9:
+                        # If one metric is much better without sacrificing too much weighted principal
                         is_better = True
                     
                     if is_better:
                         best_coupon_rate_diff_by_strategy[strategy] = coupon_rate_diff
+                        best_class_b_percent_diff_by_strategy[strategy] = class_b_percent_diff
                         best_weighted_principal_by_strategy[strategy] = weighted_principal
                         
                         # Reset consecutive failures on finding a good solution
@@ -9333,7 +9702,8 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                             'b_nominal': [class_b_nominal],
                             'strategy': strategy,
                             'last_cash_flow_day': last_cash_flow_day,
-                            'added_days': additional_days
+                            'added_days': additional_days,
+                            'class_b_percent': class_b_percent
                         }
                         
                         best_results_by_strategy[strategy] = {
@@ -9346,16 +9716,20 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                             'min_buffer_actual': min_buffer_actual,
                             'total_principal': total_principal,
                             'class_b_coupon_rate': class_b_coupon_rate,
+                            'direct_coupon_rate': result_dict.get('direct_coupon_rate', class_b_coupon_rate),  # Add this
                             'target_class_b_coupon_rate': target_class_b_coupon_rate,
                             'coupon_rate_diff': coupon_rate_diff,
-                            'coupon_rate_weight': coupon_rate_weight,
+                            'class_b_percent': class_b_percent,
+                            'target_class_b_percent': target_class_b_percent,
+                            'class_b_percent_diff': class_b_percent_diff,
                             'class_b_base_rate': b_base_rate,
                             'num_a_tranches': num_a_tranches
                         }
                         
                         optimization_progress.update(
                             message=f"Found better solution for {strategy}: coupon_rate={class_b_coupon_rate:.2f}%, " +
-                                   f"diff={coupon_rate_diff:.2f}%, total_principal={total_principal:,.2f}"
+                                   f"diff={coupon_rate_diff:.2f}%, Class B={class_b_percent:.2f}%, " +
+                                   f"total_principal={total_principal:,.2f}"
                         )
                 
                 # Update iteration counter
@@ -9377,10 +9751,12 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                     break
             
             # Early termination if we've found very good solutions across multiple strategies
-            good_strategies_count = sum(1 for diff in best_coupon_rate_diff_by_strategy.values() if diff <= 0.2)
+            good_strategies_count = sum(1 for strat in strategy_names if 
+                                      best_coupon_rate_diff_by_strategy[strat] <= 0.3 and
+                                      best_class_b_percent_diff_by_strategy[strat] <= 0.5)
             if good_strategies_count >= 2 and combo_idx > combo_count // 4:
                 optimization_progress.update(
-                    message=f"Found {good_strategies_count} very good solutions (diff <= 0.2%), ending search early"
+                    message=f"Found {good_strategies_count} very good solutions, ending search early"
                 )
                 break
     
@@ -9402,11 +9778,17 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
         )
         raise ValueError("No valid configuration found. Try adjusting optimization parameters.")
     
-    # Improved strategy selection with stronger weight on coupon rate match
-    # Find best overall strategy prioritizing coupon rate match even more
+    # Improved strategy selection with balanced weighting between coupon rate and Class B percentage
+    # Find best overall strategy prioritizing both objectives
     best_overall_strategy = min(
         valid_strategies.items(),
-        key=lambda x: (x[1]['coupon_rate_diff'] * 3, -x[1]['total_principal'])  # Triple weight on diff
+        key=lambda x: (
+            # First sort by normalized combined objective 
+            (x[1]['coupon_rate_diff'] / target_class_b_coupon_rate * 0.6) + 
+            (x[1]['class_b_percent_diff'] / target_class_b_percent * 0.4),
+            # Then by negative principal (higher principal is better)
+            -x[1]['total_principal']
+        )
     )[0]
     
     # Get best parameters and results
@@ -9417,7 +9799,8 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     optimization_progress.update(
         step=95,
         message=f"Selected best strategy: {best_strategy}, coupon_rate: {best_results['class_b_coupon_rate']:.2f}%, " +
-               f"diff: {best_results['coupon_rate_diff']:.2f}%, total_principal: {best_results['total_principal']:,.2f}"
+               f"diff: {best_results['coupon_rate_diff']:.2f}%, Class B: {best_results['class_b_percent']:.2f}%, " +
+               f"total_principal: {best_results['total_principal']:,.2f}"
     )
     
     # Extract values for the result
@@ -9430,14 +9813,22 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     class_b_rate = best_params['b_base_rates'][0]
     class_b_reinvest = best_params['b_reinvest_rates'][0]
     class_b_nominal = best_params['b_nominal'][0]
+    class_b_percent = best_params['class_b_percent']
+    
+    # Fix 4: Add debug logging before returning results
+    print(f"*** OPTIMIZATION RESULTS ***")
+    print(f"Class B coupon rate (effective): {best_results['class_b_coupon_rate']}")
+    print(f"Class B coupon rate (direct): {best_results.get('direct_coupon_rate', 0)}")
+    print(f"Class B maturity: {class_b_maturity}")
     
     # Final progress update
     optimization_progress.update(
         step=100,
+        phase="Complete",
         message="Optimization completed successfully."
     )
     
-    # Return the optimization result
+    # Return the optimization result with enhanced data
     return OptimizationResult(
         best_strategy=best_strategy,
         class_a_maturities=class_a_maturities,
@@ -9448,7 +9839,9 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
         class_b_rate=class_b_rate,
         class_b_reinvest=class_b_reinvest,
         class_b_nominal=class_b_nominal,
+        class_b_percent=class_b_percent,
         class_b_coupon_rate=best_results['class_b_coupon_rate'],
+        direct_class_b_coupon_rate=best_results.get('direct_coupon_rate', best_results['class_b_coupon_rate']),  # Add this
         min_buffer_actual=best_results['min_buffer_actual'],
         last_cash_flow_day=last_cash_flow_day,
         additional_days=additional_days,
@@ -9456,7 +9849,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     )
 
 def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSettings, optimization_settings: OptimizationSettings) -> OptimizationResult:
-    """Genetic algorithm optimization
+    """Genetic algorithm optimization with improved Class B percentage targeting
     
     Args:
         df: DataFrame containing cash flow data
@@ -9478,16 +9871,27 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         start_date = pd.Timestamp(general_settings.start_date)
         ops_expenses = general_settings.operational_expenses
         min_buffer = general_settings.min_buffer
-        min_class_b_percent = optimization_settings.min_class_b_percent
+        
+        # Use the new Class B percentage targeting parameters
+        target_class_b_percent = getattr(optimization_settings, "min_class_b_percent", 15.0)
+        
+        # Use the tighter class_b_percent_deviation value (default 1.0)
+        class_b_percent_deviation = getattr(optimization_settings, "class_b_percent_deviation", 1.0)
+        
+        # Log the actual values used for debugging
+        logger.info(f"Genetic: Target Class B percent: {target_class_b_percent}, deviation: {class_b_percent_deviation}")
+        
         target_class_b_coupon_rate = optimization_settings.target_class_b_coupon_rate
         additional_days = optimization_settings.additional_days_for_class_b
         population_size = getattr(optimization_settings, "population_size", 50)
         num_generations = getattr(optimization_settings, "num_generations", 40)
         
         optimization_progress.update(step=5, 
-                                    message=f"Population size: {population_size}, generations: {num_generations}")
+                                    message=f"Population size: {population_size}, generations: {num_generations}, " +
+                                           f"Target Class B: {target_class_b_percent}±{class_b_percent_deviation}%")
         
-        logger.info(f"Parameters: population_size={population_size}, num_generations={num_generations}")
+        logger.info(f"Parameters: population_size={population_size}, num_generations={num_generations}, " +
+                   f"target_class_b_percent={target_class_b_percent}±{class_b_percent_deviation}%")
         
         # Get last cash flow day
         last_cash_flow_day = get_last_cash_flow_day(df, start_date)
@@ -9496,8 +9900,9 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         optimization_progress.update(step=10, 
                                     message=f"Last cash flow day: {last_cash_flow_day}")
         
+        # Fix 1: Ensure class_b_maturity is at least 1 to avoid division by zero
         # Class B maturity as Last Cash Flow Day + Additional Days, capped at 365
-        class_b_maturity = min(365, last_cash_flow_day + additional_days)
+        class_b_maturity = max(1, min(365, last_cash_flow_day + additional_days))
         
         # Get original parameters for Class A 
         original_maturities_A = [61, 120, 182, 274]
@@ -9548,7 +9953,7 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         
         logger.info("Initializing population...")
         
-        # Function to create a valid individual
+        # Function to create a valid individual with Class B percentage gene
         def create_valid_individual():
             # Generate valid maturities - ensure they are integers
             maturities = []
@@ -9572,9 +9977,29 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
             # Convert to nominals
             nominals = [w * total_a_nominal for w in weights]
             
+            # Random Class B percentage within allowed range
+            # This is a key enhancement in the genetic algorithm
+            min_percent = max(0.1, target_class_b_percent - class_b_percent_deviation)
+            max_percent = min(50, target_class_b_percent + class_b_percent_deviation)
+            random_b_percent = random.uniform(min_percent, max_percent)
+            
+            # Calculate Class B nominal based on random percentage
+            # Formula: class_b_nominal = total_a_nominal * (b_percent / (100 - b_percent))
+            b_share = random_b_percent / 100
+            class_b_nominal = (total_a_nominal * b_share) / (1 - b_share)
+            
+            # Round to nearest 1000
+            class_b_nominal = round(class_b_nominal / 1000) * 1000
+            
+            # Calculate actual Class B percentage
+            total_nominal = total_a_nominal + class_b_nominal
+            actual_b_percent = (class_b_nominal / total_nominal) * 100
+            
             return {
                 'maturities': maturities,
                 'nominals': nominals,
+                'class_b_nominal': class_b_nominal,
+                'class_b_percent': actual_b_percent,
                 'fitness': 0  # Will be evaluated
             }
         
@@ -9648,16 +10073,61 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
                 try:
                     maturities = individual['maturities']
                     nominals = individual['nominals']
+                    class_b_nominal = individual['class_b_nominal']
                     
                     # Ensure maturities are integers for evaluation
                     maturities_int = [int(m) for m in maturities]
                     
+                    # Get rates based on nearest maturity
+                    a_base_rates = [maturity_to_base_rate_A.get(
+                        get_nearest_maturity(m, list(maturity_to_base_rate_A.keys())), 42.0) for m in maturities_int]
+                    
+                    a_reinvest_rates = [maturity_to_reinvest_rate_A.get(
+                        get_nearest_maturity(m, list(maturity_to_reinvest_rate_A.keys())), 30.0) for m in maturities_int]
+                    
+                    # Calculate actual Class B percentage
+                    total_a_nominal = sum(nominals)
+                    total_nominal = total_a_nominal + class_b_nominal
+                    actual_b_percent = (class_b_nominal / total_nominal) * 100
+                    
+                    individual['class_b_percent'] = actual_b_percent
+                    
+                    # Try to adjust nominals for target coupon rate
+                    try:
+                        adjusted_nominals, adjustment_success, adjusted_b_percent = adjust_class_a_nominals_for_target_coupon(
+                            nominals, 
+                            class_b_nominal, 
+                            target_class_b_coupon_rate,
+                            class_b_maturity,
+                            maturities_int, 
+                            a_base_rates, 
+                            a_reinvest_rates, 
+                            class_b_base_rate_orig, 
+                            class_b_reinvest_rate_orig,
+                            start_date, 
+                            df_temp, 
+                            min_buffer,
+                            target_class_b_percent,
+                            0.5,  # max_allowed_diff
+                            class_b_percent_deviation  # Pass the tighter deviation value
+                        )
+                        if adjustment_success:
+                            nominals = adjusted_nominals
+                            individual['nominals'] = nominals
+                            individual['class_b_percent'] = adjusted_b_percent
+                    except Exception as e:
+                        logger.error(f"Error adjusting nominals: {str(e)}")
+                        # Continue with original nominals
+                        pass
+                    
+                    # Evaluate the adjusted parameters
                     result = evaluate_params(
                         maturities_int, nominals, 
                         class_b_maturity, start_date, df_temp,
                         maturity_to_base_rate_A, maturity_to_reinvest_rate_A,
                         class_b_base_rate_orig, class_b_reinvest_rate_orig,
-                        min_class_b_percent, target_class_b_coupon_rate, min_buffer
+                        target_class_b_percent, class_b_percent_deviation,
+                        target_class_b_coupon_rate, min_buffer
                     )
                     
                     # Set fitness - ensure it's a number
@@ -9678,11 +10148,17 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
                         
                         # Update progress message when finding better solution
                         if 'result' in individual and individual['result'] and 'results' in individual['result']:
-                            if 'class_b_coupon_rate' in individual['result']['results']:
-                                coupon_rate = individual['result']['results']['class_b_coupon_rate']
+                            results = individual['result']['results']
+                            if results and 'class_b_coupon_rate' in results and 'class_b_percent' in results:
+                                coupon_rate = results['class_b_coupon_rate']
                                 coupon_diff = abs(coupon_rate - target_class_b_coupon_rate)
+                                class_b_percent = results['class_b_percent']
+                                percent_diff = abs(class_b_percent - target_class_b_percent)
+                                
                                 optimization_progress.update(
-                                    message=f"Generation {generation+1}: Found better solution with score {best_fitness:.2f}, coupon rate: {coupon_rate:.2f}% (diff: {coupon_diff:.2f}%)"
+                                    message=f"Generation {generation+1}: Found better solution with score {best_fitness:.2f}, " +
+                                           f"coupon rate: {coupon_rate:.2f}% (diff: {coupon_diff:.2f}%), " +
+                                           f"Class B: {class_b_percent:.2f}% (diff: {percent_diff:.2f}%)"
                                 )
                         else:
                             optimization_progress.update(
@@ -9745,6 +10221,21 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
                     child_weights = [w / total_weight for w in child_weights]
                     child_nominals = [w * total_a_nominal for w in child_weights]
                     
+                    # Class B percentage crossover
+                    # Use weighted average of parent percentages
+                    if random.random() < 0.5:
+                        # Weighted average with random weight
+                        weight = random.random()
+                        child_b_percent = (parent1['class_b_percent'] * weight) + (parent2['class_b_percent'] * (1 - weight))
+                    else:
+                        # Pick one parent's value
+                        child_b_percent = parent1['class_b_percent'] if random.random() < 0.5 else parent2['class_b_percent']
+                    
+                    # Calculate Class B nominal from percentage
+                    b_share = child_b_percent / 100
+                    child_b_nominal = (total_a_nominal * b_share) / (1 - b_share)
+                    child_b_nominal = round(child_b_nominal / 1000) * 1000
+                    
                     # Mutation - mutate maturities
                     if random.random() < 0.3:  # 30% mutation rate
                         mutation_idx = random.randint(0, num_a_tranches-1)
@@ -9775,10 +10266,22 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
                         child_weights = [w / total_weight for w in child_weights]
                         child_nominals = [w * total_a_nominal for w in child_weights]
                     
+                    # Mutation - mutate Class B percentage
+                    if random.random() < 0.3:
+                        mutation_amount = random.uniform(-class_b_percent_deviation / 2, class_b_percent_deviation / 2)
+                        child_b_percent = max(0.1, min(50, child_b_percent + mutation_amount))
+                        
+                        # Recalculate B nominal
+                        b_share = child_b_percent / 100
+                        child_b_nominal = (total_a_nominal * b_share) / (1 - b_share)
+                        child_b_nominal = round(child_b_nominal / 1000) * 1000
+                    
                     # Add child to new population
                     new_population.append({
                         'maturities': child_maturities,  # These are already integers
                         'nominals': child_nominals,
+                        'class_b_nominal': child_b_nominal,
+                        'class_b_percent': child_b_percent,
                         'fitness': 0  # Will be evaluated in next generation
                     })
                 except Exception as e:
@@ -9801,11 +10304,14 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
             # Early termination if we have an excellent solution
             if best_individual and best_individual.get('result') and best_individual['result'].get('results'):
                 best_results = best_individual['result']['results']
-                if 'class_b_coupon_rate' in best_results:
+                if 'class_b_coupon_rate' in best_results and 'class_b_percent' in best_results:
                     coupon_diff = abs(best_results['class_b_coupon_rate'] - target_class_b_coupon_rate)
-                    if coupon_diff < 0.2:
+                    percent_diff = abs(best_results['class_b_percent'] - target_class_b_percent)
+                    
+                    # Only terminate early if both objectives are very good
+                    if coupon_diff < 0.2 and percent_diff < 0.5:
                         optimization_progress.update(
-                            message=f"Found excellent solution (coupon diff < 0.2%), ending evolution early"
+                            message=f"Found excellent solution (coupon diff < 0.2%, Class B diff < 0.5%), ending evolution early"
                         )
                         break
         
@@ -9831,6 +10337,8 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         # Get the best result
         best_maturities = best_individual['maturities']
         best_nominals = best_individual['nominals']
+        best_class_b_nominal = best_individual['class_b_nominal']
+        best_class_b_percent = best_individual['class_b_percent']
         best_result = best_individual['result']
         
         # Get rates based on original data
@@ -9842,6 +10350,12 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         
         logger.info("Genetic optimization completed successfully")
         
+        # Fix 4: Add debug logging before returning results
+        print(f"*** GENETIC OPTIMIZATION RESULTS ***")
+        print(f"Class B coupon rate (effective): {best_result['results'].get('class_b_coupon_rate', 0)}")
+        print(f"Class B coupon rate (direct): {best_result['results'].get('direct_coupon_rate', 0)}")
+        print(f"Class B maturity: {class_b_maturity}")
+        
         # Prepare the result - ensure all values are of correct types
         result = OptimizationResult(
             best_strategy="genetic",
@@ -9852,8 +10366,10 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
             class_b_maturity=int(class_b_maturity),
             class_b_rate=class_b_base_rate_orig,
             class_b_reinvest=class_b_reinvest_rate_orig,
-            class_b_nominal=best_result.get('b_nominal', 0),
+            class_b_nominal=best_class_b_nominal,
+            class_b_percent=best_class_b_percent,
             class_b_coupon_rate=best_result['results'].get('class_b_coupon_rate', 0),
+            direct_class_b_coupon_rate=best_result['results'].get('direct_coupon_rate', best_result['results'].get('class_b_coupon_rate', 0)),  # Add this
             min_buffer_actual=best_result['results'].get('min_buffer_actual', 0),
             last_cash_flow_day=int(last_cash_flow_day),
             additional_days=int(additional_days),

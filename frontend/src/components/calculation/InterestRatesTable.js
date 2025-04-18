@@ -67,8 +67,9 @@ const InterestRatesTable = ({ results }) => {
             <TableHead>
               <TableRow>
                 <TableCell sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.secondary.main, 0.04) }}>Tranche</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.secondary.main, 0.04) }}>Coupon Rate (%)</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.secondary.main, 0.04) }}>Direct Coupon Rate (%)</TableCell>
                 <TableCell align="center" sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.secondary.main, 0.04) }}>Effective Coupon Rate (%)</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.secondary.main, 0.04) }}>Maturity Info</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -116,12 +117,39 @@ const InterestRatesTable = ({ results }) => {
                         }}
                       />
                     </TableCell>
+                    <TableCell align="center" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {`Maturity: ${rate['Maturity Days']} days`}
+                    </TableCell>
                   </TableRow>
                 ))
               }
             </TableBody>
           </Table>
         </TableContainer>
+
+        {/* Helper component to explain the rates */}
+        <Box sx={{ mt: 3, p: 2, bgcolor: alpha(theme.palette.info.main, 0.05), borderRadius: 1 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            About Coupon Rates
+          </Typography>
+          <Typography variant="body2">
+            <strong>Direct Coupon Rate:</strong> The simple percentage of coupon payment relative to principal (non-annualized).
+          </Typography>
+          <Typography variant="body2">
+            <strong>Effective Coupon Rate:</strong> The annualized coupon rate, calculated as direct rate × (365 ÷ maturity days).
+          </Typography>
+        </Box>
+
+        {/* Debug information in development mode */}
+        {process.env.NODE_ENV === 'development' && (
+          <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+            <Typography variant="caption">Debug Information:</Typography>
+            <pre style={{ fontSize: '0.7rem', overflowX: 'auto' }}>
+              {JSON.stringify(results.interest_rate_conversions
+                .filter(rate => rate.Tranche.includes('Class B')), null, 2)}
+            </pre>
+          </Box>
+        )}
       </Paper>
       
       {/* Interest Rates Chart */}

@@ -88,7 +88,7 @@ const OptimizationResults = ({ results }) => {
     setError,
     createCalculationRequest,
     setCalculationResults,
-    saveResult, // Add this
+    saveResult,
     setMultipleComparisonResults,
     setShouldAutoCalculate
   } = useData();
@@ -204,6 +204,7 @@ const OptimizationResults = ({ results }) => {
   const strategyResultsData = Object.entries(results.results_by_strategy).map(([strategy, data]) => ({
     name: getStrategyDisplayName(strategy),
     totalPrincipal: data.total_principal,
+    directClassBCouponRate: data.direct_coupon_rate || 0,
     classBCouponRate: data.class_b_coupon_rate,
     minBufferActual: data.min_buffer_actual,
     isBest: strategy === results.best_strategy
@@ -216,6 +217,9 @@ const OptimizationResults = ({ results }) => {
       if (calculationResults) {
         setPreviousCalculationResults(calculationResults);
       }
+      
+      // Log all values for debugging
+      console.log("Optimization results:", results);
       
       const a_tranches = results.class_a_maturities.map((maturity, index) => ({
         maturity_days: maturity,
@@ -230,33 +234,99 @@ const OptimizationResults = ({ results }) => {
         base_rate: results.class_b_rate,
         spread: 0.0, // Default value
         reinvest_rate: results.class_b_reinvest,
-        nominal: results.class_b_nominal  // Bu satırı ekledik - Class B nominal değerini de transfer ediyoruz
+        nominal: results.class_b_nominal  // Ensure Class B nominal value is transferred
       };
+      
+      // Enhanced logging with coupon rates and more debugging details
+      console.log("Applying configuration with parameters:", {
+        tranchesA: a_tranches,
+        trancheB: b_tranche,
+        class_b_nominal: results.class_b_nominal,
+        class_b_coupon_rate: results.class_b_coupon_rate,
+        direct_class_b_coupon_rate: results.direct_class_b_coupon_rate || 0,
+        class_b_maturity: results.class_b_maturity
+      });
+      
+      // Verify that the nominal values match the expected totals
+      const totalClassANominal = a_tranches.reduce((sum, tranche) => sum + tranche.nominal, 0);
+      const totalNominal = totalClassANominal + b_tranche.nominal;
+      
+      console.log("Nominal value verification:", {
+        totalClassANominal,
+        classBNominal: b_tranche.nominal,
+        totalNominal,
+        expectedTotal: results.total_principal
+      });
       
       // Update form state
       setTranchesA(a_tranches);
       setTrancheB(b_tranche);
-      
-      // Mark the results as from optimization, including optimization method
-      const optimizationData = {
-        is_optimized: true,
-        optimization_method: results.best_strategy,
-        optimization_label: getStrategyDisplayName(results.best_strategy)
-      };
-      
-      // Store optimization data to be used when calculating
-      sessionStorage.setItem('optimizationData', JSON.stringify(optimizationData));
       
       // Show processing message
       setSnackbarMessage('Applying configuration and calculating results...');
       setSnackbarSeverity('info');
       setSnackbarOpen(true);
       
-      // Set flag to trigger auto-calculation when calculation page loads
-      setShouldAutoCalculate(true);
+      // Create the calculation request directly
+      const request = createCalculationRequest();
       
-      // Navigate to calculation page
-      navigate('/calculation');
+      // Add optimization metadata
+      request.is_optimized = true;
+      request.optimization_method = results.best_strategy;
+      
+      // Perform calculation directly instead of navigating
+      setIsLoading(true);
+      try {
+        const calculationResult = await calculateResults(request);
+        
+        // Add metadata for tracking and display
+        calculationResult.label = `${getStrategyDisplayName(results.best_strategy)} Optimization`;
+        calculationResult.method_type = results.best_strategy === 'genetic' ? 'genetic' : 'standard';
+        calculationResult.timestamp = new Date().toISOString();
+        
+        // Update results state
+        setCalculationResults(calculationResult);
+        
+        // Show success message
+        setSnackbarMessage('Configuration applied and results calculated successfully!');
+        setSnackbarSeverity('success');
+        setSnackbarOpen(true);
+        
+        // Add to comparison history
+        setMultipleComparisonResults(prev => {
+          const updatedResults = prev ? [...prev] : [];
+          
+          // Check if we already have a result of the same type
+          const existingIndex = updatedResults.findIndex(r => 
+            r.method_type === calculationResult.method_type
+          );
+          
+          // If we have a result of this type, replace it
+          if (existingIndex >= 0) {
+            updatedResults[existingIndex] = { ...calculationResult };
+          } else {
+            // Otherwise add it to the array
+            if (updatedResults.length >= 5) {
+              updatedResults.shift(); // Remove the oldest result
+            }
+            updatedResults.push({ ...calculationResult });
+          }
+          
+          return updatedResults;
+        });
+        
+        // Navigate to results page to show the new calculation
+        navigate('/calculation');
+        
+      } catch (err) {
+        console.error('Error calculating results:', err);
+        setSnackbarMessage('Error calculating results. Please try again.');
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+      } finally {
+        setIsLoading(false);
+      }
+      
     } catch (error) {
       console.error('Error applying configuration:', error);
       
@@ -368,7 +438,16 @@ const OptimizationResults = ({ results }) => {
           
           <Box>
             <Typography variant="body2" color="text.secondary">
-              Class B Coupon Rate
+              Direct Coupon Rate
+            </Typography>
+            <Typography variant="h6" color="secondary">
+              {formatPercent(results.direct_class_b_coupon_rate || 0)}
+            </Typography>
+          </Box>
+          
+          <Box>
+            <Typography variant="body2" color="text.secondary">
+              Effective Coupon Rate
             </Typography>
             <Typography variant="h6" color="secondary">
               {formatPercent(results.class_b_coupon_rate)}
@@ -486,7 +565,8 @@ const OptimizationResults = ({ results }) => {
               <TableRow>
                 <TableCell>Strategy</TableCell>
                 <TableCell align="right">Total Principal</TableCell>
-                <TableCell align="right">Class B Coupon Rate</TableCell>
+                <TableCell align="right">Direct Coupon Rate</TableCell>
+                <TableCell align="right">Effective Coupon Rate</TableCell>
                 <TableCell align="right">Min Buffer</TableCell>
                 <TableCell align="right">Class A Tranches</TableCell>
               </TableRow>
@@ -507,6 +587,7 @@ const OptimizationResults = ({ results }) => {
                     </Box>
                   </TableCell>
                   <TableCell align="right">{formatCurrency(row.totalPrincipal)}</TableCell>
+                  <TableCell align="right">{formatPercent(row.directClassBCouponRate)}</TableCell>
                   <TableCell align="right">{formatPercent(row.classBCouponRate)}</TableCell>
                   <TableCell align="right">{formatPercent(row.minBufferActual)}</TableCell>
                   <TableCell align="right">
@@ -551,8 +632,13 @@ const OptimizationResults = ({ results }) => {
               <Tooltip formatter={(value) => `${value.toFixed(2)}%`} />
               <Legend />
               <Bar 
+                dataKey="directClassBCouponRate" 
+                name="Direct Coupon Rate" 
+                fill={theme.palette.secondary.dark} 
+              />
+              <Bar 
                 dataKey="classBCouponRate" 
-                name="Class B Coupon Rate" 
+                name="Effective Coupon Rate" 
                 fill={theme.palette.secondary.main} 
               />
               <Bar 
@@ -622,7 +708,8 @@ const OptimizationResults = ({ results }) => {
                 <TableCell align="right">Base Rate (%)</TableCell>
                 <TableCell align="right">Reinvest Rate (%)</TableCell>
                 <TableCell align="right">Nominal</TableCell>
-                <TableCell align="right">Coupon Rate (%)</TableCell>
+                <TableCell align="right">Direct Coupon Rate (%)</TableCell>
+                <TableCell align="right">Effective Coupon Rate (%)</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -632,6 +719,9 @@ const OptimizationResults = ({ results }) => {
                 <TableCell align="right">{results.class_b_rate.toFixed(2)}</TableCell>
                 <TableCell align="right">{results.class_b_reinvest.toFixed(2)}</TableCell>
                 <TableCell align="right">{formatCurrency(results.class_b_nominal)}</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: theme.palette.secondary.main }}>
+                  {formatPercent(results.direct_class_b_coupon_rate || 0)}
+                </TableCell>
                 <TableCell align="right" sx={{ fontWeight: 'bold', color: theme.palette.secondary.main }}>
                   {formatPercent(results.class_b_coupon_rate)}
                 </TableCell>

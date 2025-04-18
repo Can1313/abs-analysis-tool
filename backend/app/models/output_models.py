@@ -34,7 +34,9 @@ class OptimizationResult(BaseModel):
     class_b_reinvest: float
     class_b_nominal: float
     class_b_coupon_rate: float
+    direct_class_b_coupon_rate: float = 0.0  # Add this new field with default value
     min_buffer_actual: float
     last_cash_flow_day: int
     additional_days: int
     results_by_strategy: Dict[str, Dict[str, Any]]
+    class_b_percent: Optional[float] = None  # Optional field for Class B percentage
