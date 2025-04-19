@@ -49,10 +49,12 @@ BACKEND KLASÖR YAPISI:
     ┣ 📂routers
       ┣ 📜calculation.py
       ┣ 📜optimization.py
+      ┣ 📜stress_testing.py
       ┣ 📂__pycache__
     ┣ 📂services
       ┣ 📜calculation_service.py
       ┣ 📜optimization_service.py
+      ┣ 📜stress_testing_service.py
       ┣ 📂__pycache__
     ┣ 📂utils
       ┣ 📜cash_flow_utils.py
@@ -8869,7 +8871,7 @@ export default OptimizationPage;
 DOSYA: src\pages\StressTestingPage.js
 ==================================================
 // src/pages/StressTestingPage.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Container, 
   Typography, 
@@ -8897,7 +8899,11 @@ import {
   CssBaseline,
   IconButton,
   Tooltip,
-  CircularProgress
+  CircularProgress,
+  Snackbar,
+  Alert,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -8911,7 +8917,11 @@ import ShowChartIcon from '@mui/icons-material/ShowChart';
 import SaveAltIcon from '@mui/icons-material/SaveAlt';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import TuneIcon from '@mui/icons-material/Tune';
+import ScienceIcon from '@mui/icons-material/Science';
+import SettingsIcon from '@mui/icons-material/Settings';
+import CompareIcon from '@mui/icons-material/Compare';
 import { useData } from '../contexts/DataContext';
+import { useNavigate } from 'react-router-dom';
 
 // Import Recharts components
 import {
@@ -9161,7 +9171,8 @@ const ScatterTooltip = ({ active, payload }) => {
 
 const StressTestingPage = () => {
   const theme = darkTheme;
-  const { calculationResults } = useData();
+  const { calculationResults, savedResults } = useData();
+  const navigate = useNavigate();
   const [tabValue, setTabValue] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -9171,10 +9182,25 @@ const StressTestingPage = () => {
   const [reinvestmentRange, setReinvestmentRange] = useState([-10, 10]);
   const [defaultReinvestRate, setDefaultReinvestRate] = useState(30);
   const [scenarios, setScenarios] = useState(10);
-  const [selectedScenario, setSelectedScenario] = useState('base');
+  const [selectedScenarioType, setSelectedScenarioType] = useState('base');
   
-  // Mock data for the stress test results
-  const mockResults = {
+  // New state variable for dropdown selection
+  const [selectedStructureId, setSelectedStructureId] = useState('');
+  const [availableStructures, setAvailableStructures] = useState([]);
+  
+  // State variables from Step 4
+  const [predefinedScenario, setPredefinedScenario] = useState('base');
+  
+  // State variables from Step 5
+  const [applyReinvestmentShift, setApplyReinvestmentShift] = useState(false);
+  
+  // State variables from Step 8
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+  
+  // Initialize with safe default values
+  const [mockResults, setMockResults] = useState({
     classBCouponRate: {
       modeled: 42.5,
       realized: 38.7,
@@ -9223,47 +9249,207 @@ const StressTestingPage = () => {
       { npl: 15, prepayment: 20, reinvest: -7, modeled: 38.6, realized: 31.8 },
       { npl: 15, prepayment: 25, reinvest: -10, modeled: 37.8, realized: 30.4 },
     ]
-  };
+  });
   
-
+  // From Step 2: Fetch Available Structures
+  useEffect(() => {
+    if (savedResults && savedResults.length > 0) {
+      // Group results by structure type
+      const structures = savedResults.map(result => {
+        // Calculate coupon rate from Class B Coupon and Class B Principal if not available
+        let directCouponRate = result.direct_class_b_coupon_rate;
+        
+        // If value is not present but coupon and principal are, calculate the rate
+        if ((!directCouponRate || directCouponRate === 0) && result.class_b_coupon && result.class_b_principal) {
+          directCouponRate = (result.class_b_coupon / result.class_b_principal) * 100;
+        }
+        
+        return {
+          id: result.id,
+          name: result.savedName || `${result.methodType} Structure`,
+          type: result.methodType,
+          // Use calculated coupon rate
+          classBCouponRate: directCouponRate || 0,
+          directCouponRate: directCouponRate || 0,
+          effectiveCouponRate: result.class_b_coupon_rate || 0
+        };
+      });
+      
+      setAvailableStructures(structures);
+      
+      // Set first structure as default if none selected
+      if (structures.length > 0 && !selectedStructureId) {
+        setSelectedStructureId(structures[0].id);
+      }
+    }
+  }, [savedResults, selectedStructureId]);
   
   // Handle tab change
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
   };
   
-  // Handle running the stress test
-  const handleRunStressTest = () => {
+  // Handle structure selection change
+  const handleStructureChange = (event) => {
+    setSelectedStructureId(event.target.value);
+  };
+  
+  // Get selected structure details
+  const getSelectedStructure = () => {
+    return availableStructures.find(structure => structure.id === selectedStructureId) || null;
+  };
+
+  // Updated handleRunStressTest
+  const handleRunStressTest = async () => {
+    const selectedStructure = getSelectedStructure();
+    
+    if (!selectedStructure) {
+      setSnackbarMessage("Please select a structure to test");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+      return;
+    }
+    
     setIsLoading(true);
     
-    // Simulate API call delay
-    setTimeout(() => {
+    try {
+      // Get the original structure details from savedResults
+      const structureDetails = savedResults.find(r => r.id === selectedStructure.id);
+      
+      if (!structureDetails) {
+        throw new Error("Structure details not found");
+      }
+      
+      // Extract parameters for the test
+      const nplRate = nplRange[0]; // Use the first value if it's a range
+      const prepaymentRate = prepaymentRange[0]; // Use the first value if it's a range
+      const reinvestmentShift = applyReinvestmentShift ? reinvestmentRange[0] : 0;
+      
+      // Here you would typically call your API to run the stress test
+      // For now, we'll simulate it with setTimeout
+      
+      setTimeout(() => {
+        // Use the calculated coupon rate as baseline
+        const baselineCouponRate = selectedStructure.directCouponRate || 0;
+        
+        // Calculate impact (this would normally come from backend):
+        // Higher NPL rates reduce coupon rate
+        // Higher prepayment can reduce or increase depending on structure
+        // Reinvestment shifts directly impact
+        const nplImpact = -1.5 * (nplRate / 2); // -1.5% per 2% NPL
+        const prepaymentImpact = -0.8 * ((prepaymentRate - 20) / 10); // -0.8% per 10% above 20%
+        const reinvestmentImpact = reinvestmentShift * 0.3; // 0.3% impact per 1% shift
+        
+        const modifiedCouponRate = baselineCouponRate + nplImpact + prepaymentImpact + reinvestmentImpact;
+        
+        // Update the mock results
+        const updatedResults = {
+          ...mockResults,
+          classBCouponRate: {
+            modeled: baselineCouponRate,
+            realized: Math.max(0, modifiedCouponRate),
+            difference: modifiedCouponRate - baselineCouponRate,
+            status: modifiedCouponRate < baselineCouponRate - 5 ? 'error' : 
+                  modifiedCouponRate < baselineCouponRate - 1 ? 'warning' : 'success'
+          },
+          scenarioResults: [
+            {
+              name: "Original",
+              npl: 0,
+              prepayment: 0,
+              reinvestment: 0,
+              modeled: baselineCouponRate,
+              realized: baselineCouponRate,
+              difference: 0
+            },
+            {
+              name: predefinedScenario.charAt(0).toUpperCase() + predefinedScenario.slice(1),
+              npl: nplRate,
+              prepayment: prepaymentRate,
+              reinvestment: reinvestmentShift,
+              modeled: baselineCouponRate,
+              realized: modifiedCouponRate,
+              difference: modifiedCouponRate - baselineCouponRate
+            }
+          ]
+        };
+        
+        // Update state with the new results
+        setMockResults(updatedResults);
+        setIsLoading(false);
+        
+        // Automatically switch to summary tab
+        setTabValue(0);
+        
+        // Show success message
+        setSnackbarMessage("Stress test completed successfully");
+        setSnackbarSeverity("success");
+        setSnackbarOpen(true);
+      }, 1500);
+      
+      // In a real implementation, use the API instead of setTimeout:
+      /*
+      const response = await runStressTest({
+        structure: {
+          id: structureDetails.id,
+          direct_coupon_rate: selectedStructure.directCouponRate || 0,
+          effective_coupon_rate: selectedStructure.effectiveCouponRate || 0
+        },
+        scenario: {
+          name: predefinedScenario,
+          npl_rate: nplRate,
+          prepayment_rate: prepaymentRate,
+          reinvestment_shift: reinvestmentShift
+        }
+      });
+      
+      setMockResults(response);
       setIsLoading(false);
-    }, 1500);
+      setTabValue(0);
+      setSnackbarMessage("Stress test completed successfully");
+      setSnackbarSeverity("success");
+      setSnackbarOpen(true);
+      */
+      
+    } catch (error) {
+      console.error("Error running stress test:", error);
+      setIsLoading(false);
+      setSnackbarMessage("Error running stress test: " + error.message);
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+    }
   };
   
   // Format data for the sensitivity charts
   const formatSensitivityData = (dataKey) => {
+    if (!mockResults?.sensitivityAnalysis?.[dataKey]) {
+      return [];
+    }
+    
     return mockResults.sensitivityAnalysis[dataKey].map(item => ({
-      value: item.value,
-      modeled: item.modeled,
-      realized: item.realized,
-      difference: item.realized - item.modeled
+      value: item.value || 0,
+      modeled: item.modeled || 0,
+      realized: item.realized || 0,
+      difference: (item.realized || 0) - (item.modeled || 0)
     }));
   };
   
   // Format combined scenarios data for scatter plot
   const formatScatterData = () => {
+    if (!mockResults?.combinedScenarios) {
+      return [];
+    }
+    
     return mockResults.combinedScenarios.map(item => ({
-      x: item.npl, // NPL rate for X axis
-      y: item.prepayment, // Prepayment rate for Y axis
-      z: Math.abs(item.realized - item.modeled) * 10, // Difference size for bubble size (scaled)
-      npl: item.npl,
-      prepayment: item.prepayment,
-      reinvest: item.reinvest,
-      modeled: item.modeled,
-      realized: item.realized,
-      difference: (item.realized - item.modeled).toFixed(2)
+      x: item.npl || 0, // NPL rate for X axis
+      y: item.prepayment || 0, // Prepayment rate for Y axis
+      z: Math.abs((item.realized || 0) - (item.modeled || 0)) * 10, // Difference size for bubble size (scaled)
+      npl: item.npl || 0,
+      prepayment: item.prepayment || 0,
+      reinvest: item.reinvest || 0,
+      modeled: item.modeled || 0,
+      realized: item.realized || 0,
+      difference: ((item.realized || 0) - (item.modeled || 0)).toFixed(2)
     }));
   };
 
@@ -9314,6 +9500,88 @@ const StressTestingPage = () => {
           </Button>
         </Box>
         
+        {/* Structure Dropdown Selection */}
+        <Paper
+          elevation={3}
+          sx={{
+            p: 3,
+            mb: 4,
+            borderRadius: 2,
+            backgroundColor: alpha(theme.palette.background.paper, 0.8),
+            border: `1px solid ${alpha(theme.palette.warning.main, 0.2)}`,
+          }}
+        >
+          <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+            <CompareIcon sx={{ mr: 1, color: theme.palette.warning.light }} />
+            Select Structure to Stress Test
+          </Typography>
+          
+          {availableStructures.length > 0 ? (
+            <FormControl fullWidth variant="outlined">
+              <InputLabel id="structure-select-label">Select Structure</InputLabel>
+              <Select
+                labelId="structure-select-label"
+                id="structure-select"
+                value={selectedStructureId}
+                onChange={handleStructureChange}
+                label="Select Structure"
+                sx={{ mb: 2 }}
+              >
+                {availableStructures.map((structure) => (
+                  <MenuItem key={structure.id} value={structure.id}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        {structure.type === 'manual' && <TuneIcon sx={{ color: theme.palette.error.main, mr: 1 }} />}
+                        {structure.type === 'genetic' && <ScienceIcon sx={{ color: theme.palette.success.main, mr: 1 }} />}
+                        {structure.type === 'standard' && <SettingsIcon sx={{ color: theme.palette.primary.main, mr: 1 }} />}
+                        <Typography>{structure.name}</Typography>
+                      </Box>
+                      <Chip 
+                        label={`Coupon Rate: ${structure.directCouponRate.toFixed(2)}%`}
+                        color="warning"
+                        size="small"
+                        sx={{ ml: 2 }}
+                      />
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          ) : (
+            <Alert severity="info">
+              No saved structures found. Please calculate and save at least one structure before running stress tests.
+            </Alert>
+          )}
+          
+          {getSelectedStructure() && (
+            <Box sx={{ mt: 2, p: 2, borderRadius: 1, bgcolor: alpha(theme.palette.warning.main, 0.05) }}>
+              <Typography variant="subtitle2" gutterBottom>Selected Structure Details:</Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <Typography variant="body2" color="text.secondary">Type:</Typography>
+                  <Typography variant="body1">
+                    {getSelectedStructure().type === 'manual' ? 'Manual Calculation' : 
+                     getSelectedStructure().type === 'genetic' ? 'Genetic Algorithm' : 
+                     'Grid Algorithm'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Typography variant="body2" color="text.secondary">Class B Direct Coupon Rate:</Typography>
+                  <Typography variant="body1" color="warning.main" fontWeight="medium">
+                    {getSelectedStructure().directCouponRate.toFixed(2)}%
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Typography variant="body2" color="text.secondary">Class B Effective Coupon Rate:</Typography>
+                  <Typography variant="body1">
+                    {getSelectedStructure().effectiveCouponRate.toFixed(2)}%
+                  </Typography>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+        </Paper>
+        
         <Grid container spacing={4}>
           {/* Parameters Panel */}
           <Grid item xs={12} md={4}>
@@ -9331,6 +9599,92 @@ const StressTestingPage = () => {
                 <TuneIcon sx={{ mr: 1, color: theme.palette.primary.light }} />
                 Stress Test Parameters
               </Typography>
+              
+              {/* Predefined Scenario Selection from Step 4 */}
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center">
+                  <CompareArrowsIcon sx={{ fontSize: 20, mr: 1, color: theme.palette.info.light }} />
+                  Predefined Scenarios
+                  <Tooltip title="Select a predefined scenario or customize parameters manually" sx={{ ml: 1 }}>
+                    <IconButton size="small">
+                      <InfoOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Typography>
+                
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1 }}>
+                  <Button
+                    variant={predefinedScenario === 'optimistic' ? 'contained' : 'outlined'}
+                    color="success"
+                    onClick={() => {
+                      setPredefinedScenario('optimistic');
+                      setNplRange([1, 1]);
+                      setPrepaymentRange([20, 20]);
+                      setReinvestmentRange([0, 0]);
+                    }}
+                    size="small"
+                    sx={{ borderRadius: 2 }}
+                  >
+                    Optimistic
+                  </Button>
+                  
+                  <Button
+                    variant={predefinedScenario === 'base' ? 'contained' : 'outlined'}
+                    color="primary"
+                    onClick={() => {
+                      setPredefinedScenario('base');
+                      setNplRange([1.5, 1.5]);
+                      setPrepaymentRange([30, 30]);
+                      setReinvestmentRange([0, 0]);
+                    }}
+                    size="small"
+                    sx={{ borderRadius: 2 }}
+                  >
+                    Base Case
+                  </Button>
+                  
+                  <Button
+                    variant={predefinedScenario === 'pessimistic' ? 'contained' : 'outlined'}
+                    color="error"
+                    onClick={() => {
+                      setPredefinedScenario('pessimistic');
+                      setNplRange([5, 5]);
+                      setPrepaymentRange([15, 15]);
+                      setReinvestmentRange([-5, -5]);
+                    }}
+                    size="small"
+                    sx={{ borderRadius: 2 }}
+                  >
+                    Pessimistic
+                  </Button>
+                  
+                  <Button
+                    variant={predefinedScenario === 'extreme' ? 'contained' : 'outlined'}
+                    color="warning"
+                    onClick={() => {
+                      setPredefinedScenario('extreme');
+                      setNplRange([10, 10]);
+                      setPrepaymentRange([10, 10]);
+                      setReinvestmentRange([-10, -10]);
+                    }}
+                    size="small"
+                    sx={{ borderRadius: 2 }}
+                  >
+                    Extreme Stress
+                  </Button>
+                  
+                  <Button
+                    variant={predefinedScenario === 'custom' ? 'contained' : 'outlined'}
+                    onClick={() => {
+                      setPredefinedScenario('custom');
+                    }}
+                    size="small"
+                    sx={{ borderRadius: 2 }}
+                  >
+                    Custom
+                  </Button>
+                </Box>
+              </Box>
               
               <Box sx={{ mt: 3 }}>
                 <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center">
@@ -9386,31 +9740,47 @@ const StressTestingPage = () => {
                 </Box>
               </Box>
               
+              {/* Reinvestment Rate Shift Toggle from Step 5 */}
               <Box sx={{ mt: 3 }}>
-                <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center">
-                  <AttachMoneyIcon sx={{ fontSize: 20, mr: 1, color: theme.palette.secondary.light }} />
-                  Reinvestment Rate Shift (±%)
-                  <Tooltip title="Deviation from the base reinvestment rate in percentage points" sx={{ ml: 1 }}>
-                    <IconButton size="small">
-                      <InfoOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Typography>
-                <Box sx={{ px: 1, pt: 1, pb: 2 }}>
-                  <StyledSlider
-                    value={reinvestmentRange}
-                    onChange={(e, value) => setReinvestmentRange(value)}
-                    valueLabelDisplay="auto"
-                    min={-20}
-                    max={20}
-                    step={1}
-                    marks={[
-                      { value: -20, label: '-20%' },
-                      { value: 0, label: '0%' },
-                      { value: 20, label: '+20%' }
-                    ]}
+                <FormControl component="fieldset">
+                  <FormControlLabel
+                    control={
+                      <Switch 
+                        checked={applyReinvestmentShift}
+                        onChange={(e) => setApplyReinvestmentShift(e.target.checked)}
+                        color="primary"
+                      />
+                    }
+                    label="Apply Reinvestment Rate Shift"
                   />
-                </Box>
+                  <Typography variant="body2" color="text.secondary">
+                    When enabled, all reinvestment rates will shift by the specified amount
+                  </Typography>
+                </FormControl>
+                
+                {applyReinvestmentShift && (
+                  <Box sx={{ px: 1, pt: 1, pb: 2 }}>
+                    <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center">
+                      <AttachMoneyIcon sx={{ fontSize: 20, mr: 1, color: theme.palette.secondary.light }} />
+                      Reinvestment Rate Shift (±%)
+                    </Typography>
+                    <StyledSlider
+                      value={reinvestmentRange}
+                      onChange={(e, value) => setReinvestmentRange(value)}
+                      valueLabelDisplay="auto"
+                      min={-10}
+                      max={10}
+                      step={1}
+                      marks={[
+                        { value: -10, label: '-10%' },
+                        { value: -5, label: '-5%' },
+                        { value: 0, label: '0%' },
+                        { value: 5, label: '+5%' },
+                        { value: 10, label: '+10%' }
+                      ]}
+                    />
+                  </Box>
+                )}
               </Box>
               
               <Box sx={{ mt: 4 }}>
@@ -9442,8 +9812,8 @@ const StressTestingPage = () => {
                 <FormControl fullWidth variant="outlined" size="small" sx={{ mb: 4 }}>
                   <InputLabel>Pre-defined Scenario</InputLabel>
                   <Select
-                    value={selectedScenario}
-                    onChange={(e) => setSelectedScenario(e.target.value)}
+                    value={selectedScenarioType}
+                    onChange={(e) => setSelectedScenarioType(e.target.value)}
                     label="Pre-defined Scenario"
                   >
                     <MenuItem value="base">Base Case</MenuItem>
@@ -9462,7 +9832,7 @@ const StressTestingPage = () => {
                   size="large"
                   startIcon={isLoading ? <CircularProgress size={20} color="inherit" /> : <AssessmentIcon />}
                   onClick={handleRunStressTest}
-                  disabled={isLoading}
+                  disabled={isLoading || !selectedStructureId}
                   sx={{
                     py: 1.2,
                     borderRadius: 2,
@@ -9545,22 +9915,22 @@ const StressTestingPage = () => {
                         gap: 4
                       }}>
                         <Box>
-                          <Typography variant="body2" color="text.secondary">Modeled Coupon Rate</Typography>
+                          <Typography variant="body2" color="text.secondary">Direct Coupon Rate</Typography>
                           <Typography variant="h3" color="primary.main" sx={{ mt: 0.5 }}>
-                            {mockResults.classBCouponRate.modeled.toFixed(1)}%
+                            {(mockResults.classBCouponRate?.modeled || 0).toFixed(1)}%
                           </Typography>
                         </Box>
                         
                         <Box>
-                          <Typography variant="body2" color="text.secondary">Realized Coupon Rate</Typography>
+                          <Typography variant="body2" color="text.secondary">Realized Direct Coupon Rate</Typography>
                           <Typography 
                             variant="h3" 
                             sx={{ 
                               mt: 0.5, 
-                              color: getDifferenceColor(mockResults.classBCouponRate.difference, theme)
+                              color: getDifferenceColor(mockResults.classBCouponRate?.difference || 0, theme)
                             }}
                           >
-                            {mockResults.classBCouponRate.realized.toFixed(1)}%
+                            {(mockResults.classBCouponRate?.realized || 0).toFixed(1)}%
                           </Typography>
                         </Box>
                         
@@ -9568,10 +9938,10 @@ const StressTestingPage = () => {
                           <Typography variant="body2" color="text.secondary">Difference</Typography>
                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mt: 1 }}>
                             <Chip 
-                              label={`${mockResults.classBCouponRate.difference > 0 ? '+' : ''}${mockResults.classBCouponRate.difference.toFixed(1)}%`}
+                              label={`${(mockResults.classBCouponRate?.difference || 0) > 0 ? '+' : ''}${(mockResults.classBCouponRate?.difference || 0).toFixed(1)}%`}
                               color={
-                                mockResults.classBCouponRate.difference >= -1 ? "success" :
-                                mockResults.classBCouponRate.difference >= -5 ? "warning" : "error"
+                                (mockResults.classBCouponRate?.difference || 0) >= -1 ? "success" :
+                                (mockResults.classBCouponRate?.difference || 0) >= -5 ? "warning" : "error"
                               }
                               sx={{ fontWeight: 'bold', fontSize: '1.1rem', height: 32, px: 1 }}
                             />
@@ -9844,6 +10214,22 @@ const StressTestingPage = () => {
             </Paper>
           </Grid>
         </Grid>
+        
+        {/* Snackbar for Notifications from Step 8 */}
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={6000}
+          onClose={() => setSnackbarOpen(false)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        >
+          <Alert 
+            onClose={() => setSnackbarOpen(false)} 
+            severity={snackbarSeverity}
+            sx={{ width: '100%' }}
+          >
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
       </Container>
     </ThemeProvider>
   );
@@ -9867,7 +10253,7 @@ const API_URL =
 const apiClient = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
-  // 5 dakika (300 000 ms) – optimizasyon işlemleri uzun sürebilir
+  // 5 dakika (300 000 ms) – optimizasyon işlemleri uzun sürebilir
   timeout: 300_000,
 });
 
@@ -9913,8 +10299,8 @@ const uploadFile = async (file) => {
 
 /**
  * Hesaplama servisi.
- * 2. parametre olarak optimizasyon çıktısı gönderilirse
- * Class B nominali otomatik eklenir.
+ * 2. parametre olarak optimizasyon çıktısı gönderilirse
+ * Class B nominali otomatik eklenir.
  *
  * @param {Object} params   – CalculationRequest gövdesi
  * @param {Object|null} optResult – OptimizationResult (opsiyonel)
@@ -9922,7 +10308,7 @@ const uploadFile = async (file) => {
  */
 const calculateResults = async (params, optResult = null) => {
   try {
-    // İsteğe bağlı Class B nominal entegrasyonu
+    // İsteğe bağlı Class B nominal entegrasyonu
     const finalParams = { ...params };
 
     if (
@@ -9975,7 +10361,7 @@ const optimizeStructure = async (params, method = 'classic') => {
     const CancelToken = axios.CancelToken;
     const source = CancelToken.source();
 
-    // 5 dakikada zaman aşımı
+    // 5 dakikada zaman aşımı
     const timeout = setTimeout(() => {
       source.cancel(
         'Operation timeout: The optimization process took too long'
@@ -10038,7 +10424,7 @@ const optimizeStructure = async (params, method = 'classic') => {
 };
 
 /* --------------------------------------------------------------------- */
-/*                           PROGRESS POLLING                            */
+/*                           PROGRESS POLLING                            */
 /* --------------------------------------------------------------------- */
 
 /**
@@ -10061,6 +10447,33 @@ const pollOptimizationProgress = async () => {
 };
 
 /* --------------------------------------------------------------------- */
+/*                            STRESS TESTING                             */
+/* --------------------------------------------------------------------- */
+
+/**
+ * Run stress test on a structure with given parameters
+ * @param {Object} params - StressTestRequest body
+ * @returns {Promise<Object>}
+ */
+const runStressTest = async (params) => {
+  try {
+    console.log('Running stress test with params:', params);
+    
+    const response = await apiClient.post('/stress-test/', params);
+    
+    console.log('Stress test successful');
+    return response.data;
+  } catch (error) {
+    console.error('Error running stress test:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+    }
+    throw error;
+  }
+};
+
+/* --------------------------------------------------------------------- */
 /*                                EXPORT                                 */
 /* --------------------------------------------------------------------- */
 
@@ -10069,8 +10482,8 @@ export {
   calculateResults,
   optimizeStructure,
   pollOptimizationProgress,
+  runStressTest,
 };
-
 
 ======================================================================
 
@@ -10116,7 +10529,7 @@ import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from app.routers import calculation, optimization
+from app.routers import calculation, optimization, stress_testing
 import uvicorn
 
 app = FastAPI(
@@ -10149,6 +10562,7 @@ async def add_process_time_header(request, call_next):
 # Include routers
 app.include_router(calculation.router, prefix="/api", tags=["Calculation"])
 app.include_router(optimization.router, prefix="/api", tags=["Optimization"])
+app.include_router(stress_testing.router, prefix="/api", tags=["Stress Testing"])
 
 @app.get("/")
 async def root():
@@ -10178,10 +10592,12 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import date
 
+
 class GeneralSettings(BaseModel):
     start_date: date
     operational_expenses: float
     min_buffer: float
+
 
 class TrancheA(BaseModel):
     maturity_days: int
@@ -10190,6 +10606,7 @@ class TrancheA(BaseModel):
     reinvest_rate: float
     nominal: float
 
+
 class TrancheB(BaseModel):
     maturity_days: int
     base_rate: float
@@ -10197,9 +10614,11 @@ class TrancheB(BaseModel):
     reinvest_rate: float
     nominal: Optional[float] = None  # Added Optional nominal field
 
+
 class NPVSettings(BaseModel):
     method: str  # "weighted_avg_rate" or "custom_rate"
     custom_rate: Optional[float] = None
+
 
 class OptimizationSettings(BaseModel):
     optimization_method: str = Field(default="classic")
@@ -10216,6 +10635,7 @@ class OptimizationSettings(BaseModel):
     population_size: Optional[int] = Field(default=50)
     num_generations: Optional[int] = Field(default=40)
 
+
 class CalculationRequest(BaseModel):
     general_settings: GeneralSettings
     tranches_a: List[TrancheA]
@@ -10223,6 +10643,34 @@ class CalculationRequest(BaseModel):
     npv_settings: NPVSettings
     is_optimized: Optional[bool] = False
     optimization_method: Optional[str] = None
+
+
+# Stress Testing Models
+class StructureParameters(BaseModel):
+    start_date: date
+    a_maturities: List[int]
+    a_base_rates: List[float]
+    a_spreads: List[float]
+    a_reinvest_rates: List[float]
+    a_nominals: List[float]
+    b_maturity: int
+    b_base_rate: float
+    b_spread: float
+    b_reinvest_rate: float
+    b_nominal: float
+    ops_expenses: float = 0.0
+
+
+class ScenarioParameters(BaseModel):
+    name: str
+    npl_rate: float
+    prepayment_rate: float
+    reinvestment_shift: float
+
+
+class StressTestRequest(BaseModel):
+    structure: StructureParameters
+    scenario: ScenarioParameters
 
 ======================================================================
 
@@ -10501,6 +10949,34 @@ async def get_optimization_progress():
     progress_data = optimization_progress.get_info()
     logger.debug(f"Progress data: {progress_data}")  # Debugging için loglama ekleyin
     return progress_data
+
+======================================================================
+
+DOSYA: backend\app\routers\stress_testing.py
+==================================================
+from fastapi import APIRouter, HTTPException
+from app.models.input_models import StressTestRequest  # You'll need to create this
+from app.services.stress_testing_service import perform_stress_test
+from app.routers.calculation import df_store
+import logging
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+@router.post("/stress-test/", response_model=dict)
+async def stress_test(request: StressTestRequest):
+    try:
+        # Get the stored dataframe
+        df = df_store.get("df")
+        if df is None:
+            raise HTTPException(status_code=400, detail="No data found. Please upload Excel file first.")
+        
+        # Perform the stress test
+        result = perform_stress_test(df, request)
+        return result
+    except Exception as e:
+        logger.error(f"Stress testing error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Stress testing error: {str(e)}")
 
 ======================================================================
 
@@ -11928,6 +12404,136 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
             message=f"Error in genetic optimization: {str(e)}. Falling back to classic optimization method..."
         )
         return perform_optimization(df, general_settings, optimization_settings)
+
+======================================================================
+
+DOSYA: backend\app\services\stress_testing_service.py
+==================================================
+import pandas as pd
+import numpy as np
+from app.utils.tranche_utils import calculate_tranche_results
+from typing import Dict, Any, List
+from app.models.input_models import StressTestRequest
+
+def adjust_cash_flow_for_npl(df: pd.DataFrame, npl_rate: float) -> pd.DataFrame:
+    """
+    Adjust cash flows by reducing principal payments based on NPL rate
+    """
+    df_adjusted = df.copy()
+    
+    # Reduce principal by NPL rate
+    df_adjusted['principal_amount'] = df_adjusted['principal_amount'] * (1 - (npl_rate / 100))
+    
+    # Recalculate total cash flow
+    df_adjusted['cash_flow'] = df_adjusted['principal_amount'] + df_adjusted['interest_amount']
+    df_adjusted['original_cash_flow'] = df_adjusted['cash_flow'].copy()
+    
+    return df_adjusted
+
+def adjust_cash_flow_for_prepayment(df: pd.DataFrame, prepayment_rate: float) -> pd.DataFrame:
+    """
+    Adjust cash flows by shifting some payments earlier based on prepayment rate
+    """
+    if prepayment_rate <= 0:
+        return df
+    
+    df_adjusted = df.copy()
+    
+    # Sort by date
+    df_adjusted = df_adjusted.sort_values('installment_date')
+    
+    # Calculate running sum of principal
+    total_principal = df_adjusted['principal_amount'].sum()
+    
+    # Calculate prepayment amount
+    prepayment_amount = total_principal * (prepayment_rate / 100)
+    
+    # Distribution function (more prepayments in early periods)
+    prepayment_weights = np.linspace(3, 1, len(df_adjusted))
+    prepayment_weights = prepayment_weights / prepayment_weights.sum()
+    
+    # Allocate prepayments by weight
+    prepayment_allocations = prepayment_amount * prepayment_weights
+    
+    # Apply prepayments (reduce later periods, increase earlier periods)
+    n = len(df_adjusted)
+    reduction_indices = range(n//2, n)  # Reduce second half
+    addition_indices = range(0, n//2)   # Add to first half
+    
+    # Reduce later payments
+    for i in reduction_indices:
+        if i < len(prepayment_allocations):
+            reduction = min(prepayment_allocations[i], df_adjusted.iloc[i]['principal_amount'] * 0.8)
+            df_adjusted.iloc[i, df_adjusted.columns.get_loc('principal_amount')] -= reduction
+    
+    # Increase earlier payments
+    for i in addition_indices:
+        if i < len(prepayment_allocations):
+            df_adjusted.iloc[i, df_adjusted.columns.get_loc('principal_amount')] += prepayment_allocations[i]
+    
+    # Recalculate total cash flow
+    df_adjusted['cash_flow'] = df_adjusted['principal_amount'] + df_adjusted['interest_amount']
+    df_adjusted['original_cash_flow'] = df_adjusted['cash_flow'].copy()
+    
+    return df_adjusted
+
+def perform_stress_test(df: pd.DataFrame, request: StressTestRequest) -> Dict[str, Any]:
+    """
+    Perform stress testing by adjusting cash flows and recalculating with the same structure
+    """
+    # Extract parameters
+    structure = request.structure
+    scenario = request.scenario
+    npl_rate = scenario.npl_rate
+    prepayment_rate = scenario.prepayment_rate
+    reinvestment_shift = scenario.reinvestment_shift
+    
+    # Adjust cash flows for NPL
+    df_adjusted = adjust_cash_flow_for_npl(df, npl_rate)
+    
+    # Adjust cash flows for prepayment
+    df_adjusted = adjust_cash_flow_for_prepayment(df_adjusted, prepayment_rate)
+    
+    # Adjust reinvestment rates if needed
+    a_reinvest_rates = [rate + reinvestment_shift for rate in structure.a_reinvest_rates]
+    b_reinvest_rate = structure.b_reinvest_rate + reinvestment_shift
+    
+    # Calculate new results
+    result = calculate_tranche_results(
+        df_adjusted, structure.start_date,
+        structure.a_maturities, structure.a_base_rates, structure.a_spreads, a_reinvest_rates,
+        structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
+        b_reinvest_rate, structure.b_nominal, structure.ops_expenses
+    )
+    
+    # Extract baseline results
+    baseline_result = calculate_tranche_results(
+        df, structure.start_date,
+        structure.a_maturities, structure.a_base_rates, structure.a_spreads, structure.a_reinvest_rates,
+        structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
+        structure.b_reinvest_rate, structure.b_nominal, structure.ops_expenses
+    )
+    
+    # Create response
+    response = {
+        'baseline': {
+            'class_b_coupon_rate': baseline_result['effective_coupon_rate'],
+            'min_buffer_actual': baseline_result['min_buffer_actual']
+        },
+        'stress_test': {
+            'class_b_coupon_rate': result['effective_coupon_rate'],
+            'min_buffer_actual': result['min_buffer_actual'],
+            'npl_rate': npl_rate,
+            'prepayment_rate': prepayment_rate,
+            'reinvestment_shift': reinvestment_shift
+        },
+        'difference': {
+            'class_b_coupon_rate': result['effective_coupon_rate'] - baseline_result['effective_coupon_rate'],
+            'min_buffer_actual': result['min_buffer_actual'] - baseline_result['min_buffer_actual']
+        }
+    }
+    
+    return response
 
 ======================================================================
 

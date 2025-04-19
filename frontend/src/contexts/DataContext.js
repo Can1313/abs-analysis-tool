@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------
- *  Global state & helpers (React Context)
+ *  Global state & helpers (React Context)
  * --------------------------------------------------------- */
 
 import React, {
@@ -12,7 +12,7 @@ import React, {
 const DataContext = createContext();
 export const useData = () => useContext(DataContext);
 
-/* localStorage parse – "undefined" vb. hataları engeller */
+/* localStorage parse – "undefined" vb. hataları engeller */
 const safeParse = (key, fallback) => {
   try {
     const raw = localStorage.getItem(key);
@@ -24,42 +24,84 @@ const safeParse = (key, fallback) => {
 };
 
 /* -----------------------------------------------------------
+ *              DEFAULT SETTINGS
+ * --------------------------------------------------------- */
+const DEFAULT_SETTINGS = {
+  previous: {
+    generalSettings: {
+      start_date: new Date(2025, 1, 13),
+      operational_expenses: 7_928_640,
+      min_buffer: 5,
+    },
+    tranchesA: [
+      { maturity_days: 61, base_rate: 45.6, spread: 0, reinvest_rate: 40, nominal: 480_000_000 },
+      { maturity_days: 120, base_rate: 44.5, spread: 0, reinvest_rate: 37.25, nominal: 460_000_000 },
+      { maturity_days: 182, base_rate: 43.3, spread: 0, reinvest_rate: 32.5, nominal: 425_000_000 },
+      { maturity_days: 274, base_rate: 42.5, spread: 0, reinvest_rate: 30, nominal: 400_000_000 },
+    ],
+    trancheB: {
+      maturity_days: 300,
+      base_rate: 0,
+      spread: 0,
+      reinvest_rate: 25.5,
+      /* nominal boş – optimizasyon gelince dolacak */
+    }
+  },
+  new: {
+    generalSettings: {
+      start_date: new Date(2025, 3, 16), // April 16, 2025
+      operational_expenses: 10_000_000,
+      min_buffer: 5,
+    },
+    tranchesA: [
+      { maturity_days: 59, base_rate: 45.5, spread: 0, reinvest_rate: 41.0, nominal: 980_000_000 },
+      { maturity_days: 94, base_rate: 45.5, spread: 0, reinvest_rate: 38.5, nominal: 600_000_000 },
+      { maturity_days: 150, base_rate: 45.5, spread: 0, reinvest_rate: 35.0, nominal: 590_000_000 },
+      { maturity_days: 189, base_rate: 45.5, spread: 0, reinvest_rate: 33.5, nominal: 420_000_000 },
+      { maturity_days: 275, base_rate: 45.5, spread: 0, reinvest_rate: 31.5, nominal: 579_600_000 },
+    ],
+    trancheB: {
+      maturity_days: 346,
+      base_rate: 0,
+      spread: 0,
+      reinvest_rate: 30.0,
+      // For new default settings, Class B percentage should be 10%
+      class_b_percent: 10 // Will be used to calculate nominal dynamically
+    }
+  }
+};
+
+/* -----------------------------------------------------------
  *              <DataProvider>
  * --------------------------------------------------------- */
 export const DataProvider = ({ children }) => {
-  /* ------------------- Core flags ------------------ */
+  /* ------------------- Core flags ------------------ */
   const [cashFlowData, setCashFlowData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedDefaults, setSelectedDefaults] = useState(() => 
+    localStorage.getItem('selectedDefaults') || 'previous'
+  );
 
-  /* ---------------- Form defaults ------------------ */
-  const [generalSettings, setGeneralSettings] = useState({
-    start_date: new Date(2025, 1, 13),
-    operational_expenses: 7_928_640,
-    min_buffer: 5,
-  });
-
-  const [tranchesA, setTranchesA] = useState([
-    { maturity_days: 61, base_rate: 45.6, spread: 0, reinvest_rate: 40, nominal: 480_000_000 },
-    { maturity_days: 120, base_rate: 44.5, spread: 0, reinvest_rate: 37.25, nominal: 460_000_000 },
-    { maturity_days: 182, base_rate: 43.3, spread: 0, reinvest_rate: 32.5, nominal: 425_000_000 },
-    { maturity_days: 274, base_rate: 42.5, spread: 0, reinvest_rate: 30, nominal: 400_000_000 },
-  ]);
-
-  const [trancheB, setTrancheB] = useState({
-    maturity_days: 300,
-    base_rate: 0,
-    spread: 0,
-    reinvest_rate: 25.5,
-    /* nominal boş – optimizasyon gelince dolacak */
-  });
+  /* ---------------- Form defaults ------------------ */
+  const [generalSettings, setGeneralSettings] = useState(() => 
+    safeParse('generalSettings', DEFAULT_SETTINGS[selectedDefaults].generalSettings)
+  );
+  
+  const [tranchesA, setTranchesA] = useState(() => 
+    safeParse('tranchesA', DEFAULT_SETTINGS[selectedDefaults].tranchesA)
+  );
+  
+  const [trancheB, setTrancheB] = useState(() => 
+    safeParse('trancheB', DEFAULT_SETTINGS[selectedDefaults].trancheB)
+  );
 
   const [npvSettings, setNpvSettings] = useState({
     method: 'weighted_avg_rate',
     custom_rate: 40,
   });
 
-  /* --------------- Optimization defaults ------------ */
+  /* ---------------- Optimization defaults ------------------ */
   const [optimizationSettings, setOptimizationSettings] = useState({
     optimization_method: 'classic',
     a_tranches_range: [2, 6],
@@ -80,7 +122,7 @@ export const DataProvider = ({ children }) => {
     if (!origB) setOrigB(JSON.parse(JSON.stringify(trancheB)));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ------------------ Stored results ---------------- */
+  /* ------------------ Stored results ---------------- */
   const [calculationResults, setCalculationResults] = useState(() =>
     safeParse('calculationResults', null),
   );
@@ -97,7 +139,46 @@ export const DataProvider = ({ children }) => {
     safeParse('multipleComparisonResults', []),
   );
 
-  /* -------------- localStorage wrappers -------------- */
+  /* -------------- Default settings selection -------------- */
+  // Update everything when default settings change
+  useEffect(() => {
+    localStorage.setItem('selectedDefaults', selectedDefaults);
+    setGeneralSettings(DEFAULT_SETTINGS[selectedDefaults].generalSettings);
+    setTranchesA(DEFAULT_SETTINGS[selectedDefaults].tranchesA);
+    
+    // Make a deep copy of the tranche B
+    const newTrancheB = JSON.parse(JSON.stringify(DEFAULT_SETTINGS[selectedDefaults].trancheB));
+    
+    // If it's the new model, calculate and set Class B nominal based on percentage
+    if (selectedDefaults === 'new' && newTrancheB.class_b_percent) {
+      // Calculate total Class A nominal
+      const totalClassANominal = DEFAULT_SETTINGS[selectedDefaults].tranchesA.reduce(
+        (sum, tranche) => sum + tranche.nominal, 0
+      );
+      
+      // Calculate Class B nominal using the formula:
+      // class_b_nominal = totalClassANominal * (classBPercent / (100 - classBPercent))
+      const classBPercent = newTrancheB.class_b_percent;
+      const b_percent = classBPercent / 100;
+      let b_nominal = (totalClassANominal * b_percent) / (1 - b_percent);
+      
+      // Round to nearest 1000
+      b_nominal = Math.round(b_nominal / 1000) * 1000;
+      
+      // Set the calculated nominal
+      newTrancheB.nominal = b_nominal;
+      
+      console.log(`Using new model with 10% Class B. Total Class A: ${totalClassANominal}, Class B nominal: ${b_nominal}`);
+    }
+    
+    setTrancheB(newTrancheB);
+    
+    // Update originals for reset functionality
+    setOrigA(JSON.parse(JSON.stringify(DEFAULT_SETTINGS[selectedDefaults].tranchesA)));
+    setOrigB(JSON.parse(JSON.stringify(newTrancheB)));
+  }, [selectedDefaults]);
+
+  /* -------------- localStorage wrappers -------------- */
   const wrapLocal = (setter, key) => (val) => {
     setter(val);
     if (val && (Array.isArray(val) ? val.length : true))
@@ -145,16 +226,41 @@ export const DataProvider = ({ children }) => {
   };
 
   /* ---------- request constructors ---------- */
-  const createCalculationRequest = () => ({
-    general_settings: {
-      start_date: generalSettings.start_date.toISOString().split('T')[0],
-      operational_expenses: generalSettings.operational_expenses,
-      min_buffer: generalSettings.min_buffer,
-    },
-    tranches_a: tranchesA,
-    tranche_b: trancheB,
-    npv_settings: npvSettings,
-  });
+  const createCalculationRequest = () => {
+    // Check if we're using the new default settings with Class B percentage
+    const isNewDefault = selectedDefaults === 'new';
+    const classBPercent = isNewDefault && trancheB.class_b_percent ? trancheB.class_b_percent : null;
+    
+    // Calculate Class B nominal if percentage is provided
+    let modifiedTrancheB = { ...trancheB };
+    
+    if (classBPercent) {
+      // Calculate total Class A nominal
+      const totalClassANominal = tranchesA.reduce((sum, tranche) => sum + tranche.nominal, 0);
+      
+      // Calculate Class B nominal using the formula:
+      // class_b_nominal = totalClassANominal * (classBPercent / (100 - classBPercent))
+      const b_percent = classBPercent / 100;
+      let b_nominal = (totalClassANominal * b_percent) / (1 - b_percent);
+      
+      // Round to nearest 1000
+      b_nominal = Math.round(b_nominal / 1000) * 1000;
+      
+      // Set the calculated nominal
+      modifiedTrancheB.nominal = b_nominal;
+    }
+    
+    return {
+      general_settings: {
+        start_date: generalSettings.start_date.toISOString().split('T')[0],
+        operational_expenses: generalSettings.operational_expenses,
+        min_buffer: generalSettings.min_buffer,
+      },
+      tranches_a: tranchesA,
+      tranche_b: modifiedTrancheB,
+      npv_settings: npvSettings,
+    };
+  };
 
   const createOptimizationRequest = () => ({
     optimization_settings: optimizationSettings,
@@ -165,7 +271,7 @@ export const DataProvider = ({ children }) => {
     },
   });
 
-  /* ---------------- context value ------------------- */
+  /* ---------------- context value ------------------- */
   const value = {
     /* raw data */
     cashFlowData,
@@ -184,6 +290,11 @@ export const DataProvider = ({ children }) => {
     setTrancheB,
     npvSettings,
     setNpvSettings,
+
+    /* default settings selection */
+    selectedDefaults,
+    setSelectedDefaults,
+    defaultOptions: Object.keys(DEFAULT_SETTINGS),
 
     /* optimization settings */
     optimizationSettings,

@@ -25,6 +25,7 @@ import GeneralSettingsForm from '../components/calculation/GeneralSettingsForm';
 import TrancheAForm from '../components/calculation/TrancheAForm';
 import TrancheBForm from '../components/calculation/TrancheBForm';
 import ClassBCouponAdjuster from '../components/calculation/ClassBCouponAdjuster';
+import DefaultSettingsSelector from '../components/calculation/DefaultSettingsSelector';
 import CalculationResults from './CalculationResults';
 import InterestRatesTable from '../components/calculation/InterestRatesTable';
 
@@ -133,7 +134,9 @@ const CalculationPage = () => {
         severity: 'success',
       });
     } catch (e) {
-      setError('Calculation failed. Please check parameters and try again.');
+      setError(
+        'Calculation failed. Please check parameters and try again.'
+      );
       console.error(e);
       setSnackbar({
         open: true,
@@ -162,7 +165,7 @@ const CalculationPage = () => {
     setSnackbar((s) => ({ ...s, open: false }));
   };
 
-  /* -------------------- RENDER -------------------- */
+  /* ----------------------- RENDER ----------------------- */
   if (!cashFlowData) {
     return (
       <Container>
@@ -235,11 +238,14 @@ const CalculationPage = () => {
         <Box sx={{ p: 3 }}>
           {tabValue === 0 && (
             <>
+              {/* Add the Default Settings Selector */}
+              <DefaultSettingsSelector />
+              
               <GeneralSettingsForm />
               <TrancheAForm />
               <TrancheBForm />
               
-              {/* Add the new ClassBCouponAdjuster component */}
+              {/* Add the ClassBCouponAdjuster component */}
               {calculationResults && <ClassBCouponAdjuster />}
 
               <Divider sx={{ my: 3 }} />
