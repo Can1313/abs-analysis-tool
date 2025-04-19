@@ -25,7 +25,8 @@ import {
   FormLabel,
   RadioGroup,
   FormControlLabel,
-  Radio
+  Radio,
+  alpha
 } from '@mui/material';
 import { 
   BarChart, Bar, 
@@ -102,6 +103,51 @@ const OptimizationResults = ({ results }) => {
   const [resultName, setResultName] = useState('');
   const [selectedMethodType, setSelectedMethodType] = useState('');
   
+  // Define color palette for dark blue theme
+  const darkBlueColors = {
+    // Ana renkler
+    primary: '#64B5F6', // Açık mavi 
+    primaryLight: '#90CAF9',
+    primaryDark: '#42A5F5',
+    secondary: '#FF9800', // Turuncu - mavi ile kontrast
+    secondaryLight: '#FFB74D',
+    secondaryDark: '#F57C00',
+    
+    // İşlevsel renkler
+    success: '#4CAF50',
+    error: '#FF5252',
+    info: '#29B6F6',
+    warning: '#FFC107',
+    
+    // Arka plan ve metin
+    paper: '#1A2035', // Koyu mavi-gri kağıt arka planı
+    background: '#111827', // Çok koyu mavi arka plan
+    textPrimary: '#FFFFFF', // Beyaz metin
+    textSecondary: '#B0BEC5', // Soluk mavi-gri ikincil metin
+    
+    // Panel ve kart arka planları
+    cardBackground: '#1E293B', // Koyu mavi-gri kart arka planı
+    inputBackground: '#283147', // Biraz daha açık giriş alanı arka planı
+    
+    // Sınır ve ayırıcı
+    divider: '#2A3958', // Koyu mavi-gri ayırıcı
+    border: '#3A486B',  // Daha açık sınır rengi
+    
+    // Grafik renk paleti
+    chartColors: [
+      '#64B5F6', // Açık mavi
+      '#FF9800', // Turuncu
+      '#4CAF50', // Yeşil
+      '#E91E63', // Pembe
+      '#9C27B0', // Mor
+      '#00BCD4', // Camgöbeği
+      '#FFEB3B', // Sarı
+      '#FF5722', // Derin turuncu
+      '#8BC34A', // Açık yeşil
+      '#3F51B5'  // Indigo
+    ]
+  };
+  
   // Update useEffect to set initial method type based on results
   useEffect(() => {
     if (results && results.best_strategy) {
@@ -169,12 +215,12 @@ const OptimizationResults = ({ results }) => {
     ...results.class_a_nominals.map((nominal, index) => ({
       name: `Class A${toRoman(index + 1)}`,
       value: nominal,
-      color: theme.palette.primary.main
+      color: darkBlueColors.chartColors[index % darkBlueColors.chartColors.length]
     })),
     { 
       name: `Class B${toRoman(1)}`, 
       value: results.class_b_nominal,
-      color: theme.palette.secondary.main
+      color: darkBlueColors.secondary
     }
   ];
   
@@ -408,66 +454,81 @@ const OptimizationResults = ({ results }) => {
       
       {/* Summary Banner */}
       <Paper 
+        elevation={3}
         sx={{ 
           p: 3, 
           mb: 3, 
-          borderLeft: `4px solid ${theme.palette.secondary.main}`,
-          backgroundColor: 'rgba(46, 204, 113, 0.1)'
+          borderLeft: `4px solid ${darkBlueColors.secondary}`,
+          backgroundColor: alpha(darkBlueColors.success, 0.1),
+          border: `1px solid ${alpha(darkBlueColors.success, 0.2)}`,
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-          <Typography variant="h5" color="secondary">
+          <Typography 
+            variant="h5" 
+            sx={{ 
+              color: darkBlueColors.secondary,
+              textShadow: '0 1px 2px rgba(0,0,0,0.2)'
+            }}
+          >
             Optimal Structure Found
           </Typography>
           <Chip 
             icon={<CheckCircleIcon />} 
             label={getStrategyDisplayName(results.best_strategy)} 
             color="secondary" 
+            sx={{
+              backgroundColor: alpha(darkBlueColors.secondary, 0.9),
+              color: '#fff',
+              '& .MuiChip-icon': {
+                color: '#fff'
+              }
+            }}
           />
         </Box>
         
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 4, mb: 3 }}>
           <Box>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: darkBlueColors.textSecondary }}>
               Class A Tranches
             </Typography>
-            <Typography variant="h6">
+            <Typography variant="h6" sx={{ color: darkBlueColors.textPrimary }}>
               {results.class_a_maturities.length}
             </Typography>
           </Box>
           
           <Box>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: darkBlueColors.textSecondary }}>
               Direct Coupon Rate
             </Typography>
-            <Typography variant="h6" color="secondary">
+            <Typography variant="h6" sx={{ color: darkBlueColors.secondary }}>
               {formatPercent(results.direct_class_b_coupon_rate || 0)}
             </Typography>
           </Box>
           
           <Box>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: darkBlueColors.textSecondary }}>
               Effective Coupon Rate
             </Typography>
-            <Typography variant="h6" color="secondary">
+            <Typography variant="h6" sx={{ color: darkBlueColors.secondary }}>
               {formatPercent(results.class_b_coupon_rate)}
             </Typography>
           </Box>
           
           <Box>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: darkBlueColors.textSecondary }}>
               Minimum Buffer
             </Typography>
-            <Typography variant="h6" color={results.min_buffer_actual >= 5.0 ? 'success.main' : 'error.main'}>
+            <Typography variant="h6" sx={{ color: results.min_buffer_actual >= 5.0 ? darkBlueColors.success : darkBlueColors.error }}>
               {formatPercent(results.min_buffer_actual)}
             </Typography>
           </Box>
           
           <Box>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: darkBlueColors.textSecondary }}>
               Class B Maturity
             </Typography>
-            <Typography variant="h6">
+            <Typography variant="h6" sx={{ color: darkBlueColors.textPrimary }}>
               {results.class_b_maturity} days
             </Typography>
           </Box>
@@ -476,7 +537,12 @@ const OptimizationResults = ({ results }) => {
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button 
             variant="contained" 
-            color="secondary"
+            sx={{ 
+              bgcolor: darkBlueColors.secondary,
+              '&:hover': {
+                bgcolor: alpha(darkBlueColors.secondary, 0.8)
+              }
+            }}
             size="large"
             onClick={applyConfiguration}
           >
@@ -485,7 +551,14 @@ const OptimizationResults = ({ results }) => {
           
           <Button 
             variant="outlined" 
-            color="primary"
+            sx={{ 
+              color: darkBlueColors.primary,
+              borderColor: darkBlueColors.primary,
+              '&:hover': {
+                borderColor: darkBlueColors.primaryLight,
+                bgcolor: alpha(darkBlueColors.primary, 0.1)
+              }
+            }}
             size="large"
             startIcon={<ReplayIcon />}
             onClick={resetToOriginal}
@@ -496,8 +569,23 @@ const OptimizationResults = ({ results }) => {
       </Paper>
       
       {/* Class B Maturity Calculation */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
+      <Paper 
+        elevation={3} 
+        sx={{ 
+          p: 3, 
+          mb: 3, 
+          bgcolor: darkBlueColors.cardBackground,
+          border: `1px solid ${alpha(darkBlueColors.border, 0.5)}`
+        }}
+      >
+        <Typography 
+          variant="h6" 
+          gutterBottom 
+          sx={{ 
+            color: darkBlueColors.textPrimary,
+            textShadow: '0 1px 2px rgba(0,0,0,0.2)'
+          }}
+        >
           Class B Maturity Calculation
         </Typography>
         
@@ -509,60 +597,97 @@ const OptimizationResults = ({ results }) => {
           gap: 2, 
           my: 3 
         }}>
-          <Paper sx={{ p: 2, bgcolor: 'grey.100', textAlign: 'center', minWidth: 180 }}>
-            <Typography variant="body2" color="text.secondary">
+          <Paper sx={{ 
+            p: 2, 
+            bgcolor: darkBlueColors.inputBackground, 
+            textAlign: 'center', 
+            minWidth: 180,
+            borderRadius: 1,
+            border: `1px solid ${alpha(darkBlueColors.border, 0.3)}`
+          }}>
+            <Typography variant="body2" sx={{ color: darkBlueColors.textSecondary }}>
               Last Cash Flow
             </Typography>
-            <Typography variant="h5">
+            <Typography variant="h5" sx={{ color: darkBlueColors.textPrimary }}>
               {results.last_cash_flow_day} days
             </Typography>
           </Paper>
           
-          <Typography variant="h4" color="text.secondary">+</Typography>
+          <Typography variant="h4" sx={{ color: darkBlueColors.textSecondary }}>+</Typography>
           
-          <Paper sx={{ p: 2, bgcolor: 'grey.100', textAlign: 'center', minWidth: 180 }}>
-            <Typography variant="body2" color="text.secondary">
+          <Paper sx={{ 
+            p: 2, 
+            bgcolor: darkBlueColors.inputBackground, 
+            textAlign: 'center', 
+            minWidth: 180,
+            borderRadius: 1,
+            border: `1px solid ${alpha(darkBlueColors.border, 0.3)}`
+          }}>
+            <Typography variant="body2" sx={{ color: darkBlueColors.textSecondary }}>
               Additional Days
             </Typography>
-            <Typography variant="h5">
+            <Typography variant="h5" sx={{ color: darkBlueColors.textPrimary }}>
               {results.additional_days} days
             </Typography>
           </Paper>
           
-          <Typography variant="h4" color="text.secondary">=</Typography>
+          <Typography variant="h4" sx={{ color: darkBlueColors.textSecondary }}>=</Typography>
           
           <Paper sx={{ 
             p: 2, 
-            bgcolor: theme.palette.secondary.main, 
-            color: 'white',
+            bgcolor: darkBlueColors.secondary,
+            color: '#fff',
             textAlign: 'center', 
-            minWidth: 180 
+            minWidth: 180,
+            borderRadius: 1,
+            boxShadow: `0 2px 10px ${alpha(darkBlueColors.secondary, 0.3)}`
           }}>
-            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)' }}>
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.9)' }}>
               Class B Maturity
             </Typography>
-            <Typography variant="h5">
+            <Typography variant="h5" sx={{ color: '#fff' }}>
               {results.class_b_maturity} days
             </Typography>
           </Paper>
         </Box>
         
-        <Typography variant="body2" color="text.secondary" fontStyle="italic">
+        <Typography variant="body2" sx={{ color: darkBlueColors.textSecondary, fontStyle: "italic" }}>
           Note: Class B maturity is calculated as Last Cash Flow Day + Additional Days.
           Maximum maturity is capped at 365 days.
         </Typography>
       </Paper>
       
       {/* Strategy Comparison */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
+      <Paper 
+        elevation={3} 
+        sx={{ 
+          p: 3, 
+          mb: 3, 
+          bgcolor: darkBlueColors.cardBackground,
+          border: `1px solid ${alpha(darkBlueColors.border, 0.5)}`
+        }}
+      >
+        <Typography 
+          variant="h6" 
+          gutterBottom 
+          sx={{ 
+            color: darkBlueColors.textPrimary,
+            textShadow: '0 1px 2px rgba(0,0,0,0.2)'
+          }}
+        >
           Strategy Comparison
         </Typography>
         
         <TableContainer sx={{ mb: 3 }}>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ 
+                '& th': { 
+                  color: darkBlueColors.textPrimary,
+                  borderBottom: `1px solid ${alpha(darkBlueColors.border, 0.7)}`,
+                  fontWeight: 'bold'
+                } 
+              }}>
                 <TableCell>Strategy</TableCell>
                 <TableCell align="right">Total Principal</TableCell>
                 <TableCell align="right">Direct Coupon Rate</TableCell>
@@ -576,13 +701,18 @@ const OptimizationResults = ({ results }) => {
                 <TableRow 
                   key={index}
                   sx={{ 
-                    bgcolor: row.isBest ? 'rgba(46, 204, 113, 0.1)' : 'transparent',
+                    bgcolor: row.isBest ? alpha(darkBlueColors.success, 0.1) : 'transparent',
+                    '&:hover': { bgcolor: alpha(darkBlueColors.primary, 0.05) },
+                    '& td': { 
+                      color: darkBlueColors.textPrimary,
+                      borderBottom: `1px solid ${alpha(darkBlueColors.border, 0.3)}`
+                    },
                     fontWeight: row.isBest ? 'bold' : 'normal'
                   }}
                 >
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {row.isBest && <CheckCircleIcon color="secondary" fontSize="small" />}
+                      {row.isBest && <CheckCircleIcon sx={{ color: darkBlueColors.secondary }} fontSize="small" />}
                       {row.name}
                     </Box>
                   </TableCell>
@@ -606,15 +736,32 @@ const OptimizationResults = ({ results }) => {
               data={strategyResultsData}
               margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
             >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip formatter={(value) => formatCurrency(value)} />
-              <Legend />
+              <CartesianGrid strokeDasharray="3 3" stroke={alpha(darkBlueColors.divider, 0.4)} />
+              <XAxis 
+                dataKey="name" 
+                stroke={darkBlueColors.textSecondary}
+                tick={{ fill: darkBlueColors.textSecondary }}
+              />
+              <YAxis 
+                stroke={darkBlueColors.textSecondary}
+                tick={{ fill: darkBlueColors.textSecondary }}
+              />
+              <Tooltip 
+                formatter={(value) => formatCurrency(value)}
+                contentStyle={{
+                  backgroundColor: darkBlueColors.paper,
+                  borderColor: darkBlueColors.border,
+                  color: darkBlueColors.textPrimary
+                }}
+                labelStyle={{ color: darkBlueColors.textPrimary }}
+              />
+              <Legend 
+                wrapperStyle={{ color: darkBlueColors.textPrimary }}
+              />
               <Bar 
                 dataKey="totalPrincipal" 
                 name="Total Principal" 
-                fill={theme.palette.primary.main} 
+                fill={darkBlueColors.chartColors[0]} 
               />
             </BarChart>
           </ResponsiveContainer>
@@ -626,25 +773,43 @@ const OptimizationResults = ({ results }) => {
               data={strategyResultsData}
               margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
             >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis unit="%" />
-              <Tooltip formatter={(value) => `${value.toFixed(2)}%`} />
-              <Legend />
+              <CartesianGrid strokeDasharray="3 3" stroke={alpha(darkBlueColors.divider, 0.4)} />
+              <XAxis 
+                dataKey="name" 
+                stroke={darkBlueColors.textSecondary}
+                tick={{ fill: darkBlueColors.textSecondary }}
+              />
+              <YAxis 
+                unit="%" 
+                stroke={darkBlueColors.textSecondary}
+                tick={{ fill: darkBlueColors.textSecondary }}
+              />
+              <Tooltip 
+                formatter={(value) => `${value.toFixed(2)}%`}
+                contentStyle={{
+                  backgroundColor: darkBlueColors.paper,
+                  borderColor: darkBlueColors.border,
+                  color: darkBlueColors.textPrimary
+                }}
+                labelStyle={{ color: darkBlueColors.textPrimary }}
+              />
+              <Legend 
+                wrapperStyle={{ color: darkBlueColors.textPrimary }}
+              />
               <Bar 
                 dataKey="directClassBCouponRate" 
                 name="Direct Coupon Rate" 
-                fill={theme.palette.secondary.dark} 
+                fill={darkBlueColors.chartColors[1]} 
               />
               <Bar 
                 dataKey="classBCouponRate" 
                 name="Effective Coupon Rate" 
-                fill={theme.palette.secondary.main} 
+                fill={darkBlueColors.chartColors[2]} 
               />
               <Bar 
                 dataKey="minBufferActual" 
                 name="Min Buffer" 
-                fill={theme.palette.info.main} 
+                fill={darkBlueColors.chartColors[3]} 
               />
             </BarChart>
           </ResponsiveContainer>
@@ -652,19 +817,48 @@ const OptimizationResults = ({ results }) => {
       </Paper>
       
       {/* Tranche Details */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
+      <Paper 
+        elevation={3}
+        sx={{ 
+          p: 3, 
+          mb: 3, 
+          bgcolor: darkBlueColors.cardBackground,
+          border: `1px solid ${alpha(darkBlueColors.border, 0.5)}`
+        }}
+      >
+        <Typography 
+          variant="h6" 
+          gutterBottom 
+          sx={{ 
+            color: darkBlueColors.textPrimary,
+            textShadow: '0 1px 2px rgba(0,0,0,0.2)'
+          }}
+        >
           Tranche Details
         </Typography>
         
-        <Typography variant="subtitle1" gutterBottom sx={{ color: theme.palette.primary.main, mt: 3 }}>
+        <Typography 
+          variant="subtitle1" 
+          gutterBottom 
+          sx={{ 
+            color: darkBlueColors.primary, 
+            mt: 3,
+            fontWeight: 500
+          }}
+        >
           Class A Tranches
         </Typography>
         
         <TableContainer sx={{ mb: 3 }}>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ 
+                '& th': { 
+                  color: darkBlueColors.textPrimary,
+                  borderBottom: `1px solid ${alpha(darkBlueColors.border, 0.7)}`,
+                  fontWeight: 'bold'
+                } 
+              }}>
                 <TableCell>Tranche</TableCell>
                 <TableCell align="right">Maturity (days)</TableCell>
                 <TableCell align="right">Base Rate (%)</TableCell>
@@ -674,7 +868,15 @@ const OptimizationResults = ({ results }) => {
             </TableHead>
             <TableBody>
               {results.class_a_maturities.map((maturity, index) => (
-                <TableRow key={index}>
+                <TableRow key={index} sx={{ 
+                  '& td': { 
+                    color: darkBlueColors.textPrimary,
+                    borderBottom: `1px solid ${alpha(darkBlueColors.border, 0.3)}`
+                  },
+                  '&:hover': { 
+                    bgcolor: alpha(darkBlueColors.primary, 0.05) 
+                  }
+                }}>
                   <TableCell>Class A{toRoman(index + 1)}</TableCell>
                   <TableCell align="right">{maturity}</TableCell>
                   <TableCell align="right">{results.class_a_rates[index].toFixed(2)}</TableCell>
@@ -682,7 +884,13 @@ const OptimizationResults = ({ results }) => {
                   <TableCell align="right">{formatCurrency(results.class_a_nominals[index])}</TableCell>
                 </TableRow>
               ))}
-              <TableRow sx={{ bgcolor: 'grey.100' }}>
+              <TableRow sx={{ 
+                bgcolor: alpha(darkBlueColors.primary, 0.1),
+                '& td': { 
+                  color: darkBlueColors.textPrimary,
+                  borderBottom: `1px solid ${alpha(darkBlueColors.border, 0.3)}`
+                }
+              }}>
                 <TableCell sx={{ fontWeight: 'bold' }}>Total</TableCell>
                 <TableCell></TableCell>
                 <TableCell></TableCell>
@@ -695,14 +903,28 @@ const OptimizationResults = ({ results }) => {
           </Table>
         </TableContainer>
         
-        <Typography variant="subtitle1" gutterBottom sx={{ color: theme.palette.secondary.main, mt: 3 }}>
+        <Typography 
+          variant="subtitle1" 
+          gutterBottom 
+          sx={{ 
+            color: darkBlueColors.secondary, 
+            mt: 3,
+            fontWeight: 500 
+          }}
+        >
           Class B Tranche
         </Typography>
         
         <TableContainer>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ 
+                '& th': { 
+                  color: darkBlueColors.textPrimary,
+                  borderBottom: `1px solid ${alpha(darkBlueColors.border, 0.7)}`,
+                  fontWeight: 'bold'
+                } 
+              }}>
                 <TableCell>Tranche</TableCell>
                 <TableCell align="right">Maturity (days)</TableCell>
                 <TableCell align="right">Base Rate (%)</TableCell>
@@ -713,16 +935,24 @@ const OptimizationResults = ({ results }) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              <TableRow>
+              <TableRow sx={{ 
+                '& td': { 
+                  color: darkBlueColors.textPrimary,
+                  borderBottom: `1px solid ${alpha(darkBlueColors.border, 0.3)}`
+                },
+                '&:hover': { 
+                  bgcolor: alpha(darkBlueColors.secondary, 0.05) 
+                }
+              }}>
                 <TableCell>Class B{toRoman(1)}</TableCell>
                 <TableCell align="right">{results.class_b_maturity}</TableCell>
                 <TableCell align="right">{results.class_b_rate.toFixed(2)}</TableCell>
                 <TableCell align="right">{results.class_b_reinvest.toFixed(2)}</TableCell>
                 <TableCell align="right">{formatCurrency(results.class_b_nominal)}</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 'bold', color: theme.palette.secondary.main }}>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: darkBlueColors.secondary }}>
                   {formatPercent(results.direct_class_b_coupon_rate || 0)}
                 </TableCell>
-                <TableCell align="right" sx={{ fontWeight: 'bold', color: theme.palette.secondary.main }}>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: darkBlueColors.secondary }}>
                   {formatPercent(results.class_b_coupon_rate)}
                 </TableCell>
               </TableRow>
@@ -732,12 +962,27 @@ const OptimizationResults = ({ results }) => {
       </Paper>
       
       {/* Visualizations */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
+      <Paper 
+        elevation={3}
+        sx={{ 
+          p: 3, 
+          mb: 3, 
+          bgcolor: darkBlueColors.cardBackground,
+          border: `1px solid ${alpha(darkBlueColors.border, 0.5)}`
+        }}
+      >
+        <Typography 
+          variant="h6" 
+          gutterBottom 
+          sx={{ 
+            color: darkBlueColors.textPrimary,
+            textShadow: '0 1px 2px rgba(0,0,0,0.2)'
+          }}
+        >
           Visualizations
         </Typography>
         
-        <Typography variant="subtitle1" gutterBottom sx={{ mt: 3 }}>
+        <Typography variant="subtitle1" gutterBottom sx={{ mt: 3, color: darkBlueColors.textPrimary }}>
           Nominal Amount Distribution
         </Typography>
         
@@ -758,19 +1003,29 @@ const OptimizationResults = ({ results }) => {
                   <Cell 
                     key={`cell-${index}`} 
                     fill={entry.name.includes('Class A') 
-                      ? theme.palette.primary[index % 5 === 0 ? 'main' : `${Math.min(900, 300 + index * 100)}`]
-                      : theme.palette.secondary.main
+                      ? darkBlueColors.chartColors[index % darkBlueColors.chartColors.length]
+                      : darkBlueColors.secondary
                     } 
                   />
                 ))}
               </Pie>
-              <Tooltip formatter={(value) => formatCurrency(value)} />
-              <Legend />
+              <Tooltip 
+                formatter={(value) => formatCurrency(value)}
+                contentStyle={{
+                  backgroundColor: darkBlueColors.paper,
+                  borderColor: darkBlueColors.border,
+                  color: darkBlueColors.textPrimary
+                }}
+                labelStyle={{ color: darkBlueColors.textPrimary }}
+              />
+              <Legend 
+                wrapperStyle={{ color: darkBlueColors.textPrimary }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </Box>
         
-        <Typography variant="subtitle1" gutterBottom sx={{ mt: 3 }}>
+        <Typography variant="subtitle1" gutterBottom sx={{ mt: 3, color: darkBlueColors.textPrimary }}>
           Maturity Distribution
         </Typography>
         
@@ -779,19 +1034,23 @@ const OptimizationResults = ({ results }) => {
             <ScatterChart
               margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
             >
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" stroke={alpha(darkBlueColors.divider, 0.4)} />
               <XAxis 
                 type="number" 
                 dataKey="maturity" 
                 name="Maturity" 
                 unit=" days" 
                 domain={[0, 'dataMax + 30']}
+                stroke={darkBlueColors.textSecondary}
+                tick={{ fill: darkBlueColors.textSecondary }}
               />
               <YAxis 
                 type="number" 
                 dataKey="nominal" 
                 name="Nominal" 
                 tickFormatter={(value) => `${(value / 1000000).toFixed(0)}M`}
+                stroke={darkBlueColors.textSecondary}
+                tick={{ fill: darkBlueColors.textSecondary }}
               />
               <ZAxis range={[100, 600]} />
               <Tooltip 
@@ -799,19 +1058,30 @@ const OptimizationResults = ({ results }) => {
                   if (name === 'Nominal') return formatCurrency(value);
                   return `${value} days`;
                 }}
+                contentStyle={{
+                  backgroundColor: darkBlueColors.paper,
+                  borderColor: darkBlueColors.border,
+                  color: darkBlueColors.textPrimary
+                }}
                 content={({ active, payload }) => {
                   if (active && payload && payload.length) {
                     const data = payload[0].payload;
                     return (
-                      <Box sx={{ bgcolor: 'background.paper', p: 1, border: '1px solid #ccc' }}>
-                        <Typography variant="body2" fontWeight="bold">
+                      <Box sx={{ 
+                        bgcolor: darkBlueColors.paper, 
+                        p: 1, 
+                        border: `1px solid ${alpha(darkBlueColors.border, 0.7)}`,
+                        borderRadius: 1,
+                        boxShadow: `0 2px 8px ${alpha('#000', 0.2)}`
+                      }}>
+                        <Typography variant="body2" fontWeight="bold" sx={{ color: darkBlueColors.textPrimary }}>
                           {data.name}
                         </Typography>
-                        <Typography variant="body2">
+                        <Typography variant="body2" sx={{ color: darkBlueColors.textPrimary }}>
                           Maturity: {data.maturity} days
                         </Typography>
                         {data.type !== 'Marker' && (
-                          <Typography variant="body2">
+                          <Typography variant="body2" sx={{ color: darkBlueColors.textPrimary }}>
                             Nominal: {formatCurrency(data.nominal)}
                           </Typography>
                         )}
@@ -821,21 +1091,23 @@ const OptimizationResults = ({ results }) => {
                   return null;
                 }}
               />
-              <Legend />
+              <Legend 
+                wrapperStyle={{ color: darkBlueColors.textPrimary }}
+              />
               <Scatter 
                 name="Class A" 
                 data={maturityData.filter(d => d.type === 'Class A')}
-                fill={theme.palette.primary.main}
+                fill={darkBlueColors.primary}
               />
               <Scatter 
                 name="Class B" 
                 data={maturityData.filter(d => d.type === 'Class B')}
-                fill={theme.palette.secondary.main}
+                fill={darkBlueColors.secondary}
               />
               <Scatter 
                 name="Last Cash Flow" 
                 data={maturityData.filter(d => d.type === 'Marker')}
-                fill={theme.palette.error.main}
+                fill={darkBlueColors.error}
                 shape="star"
               />
             </ScatterChart>
@@ -844,10 +1116,22 @@ const OptimizationResults = ({ results }) => {
       </Paper>
       
       {/* Save Dialog with Method Type Selection */}
-      <Dialog open={saveDialogOpen} onClose={handleSaveDialogClose}>
-        <DialogTitle>Save Optimization Result</DialogTitle>
+      <Dialog 
+        open={saveDialogOpen} 
+        onClose={handleSaveDialogClose}
+        PaperProps={{
+          style: {
+            backgroundColor: darkBlueColors.paper,
+            border: `1px solid ${alpha(darkBlueColors.border, 0.5)}`,
+            boxShadow: `0 4px 20px ${alpha('#000', 0.5)}`
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: darkBlueColors.textPrimary, borderBottom: `1px solid ${alpha(darkBlueColors.divider, 0.7)}` }}>
+          Save Optimization Result
+        </DialogTitle>
         <DialogContent>
-          <DialogContentText>
+          <DialogContentText sx={{ color: darkBlueColors.textSecondary, my: 2 }}>
             Enter a name for this result and confirm its type for comparison.
           </DialogContentText>
           <TextField
@@ -860,22 +1144,99 @@ const OptimizationResults = ({ results }) => {
             variant="outlined"
             value={resultName}
             onChange={(e) => setResultName(e.target.value)}
+            sx={{
+              mb: 2,
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: darkBlueColors.inputBackground,
+                color: darkBlueColors.textPrimary,
+                '& fieldset': {
+                  borderColor: alpha(darkBlueColors.border, 0.5),
+                },
+                '&:hover fieldset': {
+                  borderColor: darkBlueColors.primary,
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: darkBlueColors.primary,
+                },
+              },
+              '& .MuiInputBase-input': {
+                color: darkBlueColors.textPrimary,
+              },
+              '& .MuiInputLabel-root': {
+                color: darkBlueColors.textSecondary,
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: darkBlueColors.primary,
+              },
+            }}
           />
           <FormControl fullWidth sx={{ mt: 2 }}>
-            <FormLabel id="method-type-label">Result Type</FormLabel>
+            <FormLabel id="method-type-label" sx={{ color: darkBlueColors.textPrimary }}>
+              Result Type
+            </FormLabel>
             <RadioGroup
               row
               value={selectedMethodType}
               onChange={(e) => setSelectedMethodType(e.target.value)}
             >
-              <FormControlLabel value="standard" control={<Radio />} label="Standard Optimization" />
-              <FormControlLabel value="genetic" control={<Radio />} label="Genetic Optimization" />
+              <FormControlLabel 
+                value="standard" 
+                control={
+                  <Radio 
+                    sx={{
+                      color: alpha(darkBlueColors.textSecondary, 0.7),
+                      '&.Mui-checked': {
+                        color: darkBlueColors.primary,
+                      },
+                    }}
+                  />
+                } 
+                label="Standard Optimization" 
+                sx={{ color: darkBlueColors.textPrimary }}
+              />
+              <FormControlLabel 
+                value="genetic" 
+                control={
+                  <Radio 
+                    sx={{
+                      color: alpha(darkBlueColors.textSecondary, 0.7),
+                      '&.Mui-checked': {
+                        color: darkBlueColors.secondary,
+                      },
+                    }}
+                  />
+                } 
+                label="Genetic Optimization"
+                sx={{ color: darkBlueColors.textPrimary }}
+              />
             </RadioGroup>
           </FormControl>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleSaveDialogClose}>Cancel</Button>
-          <Button onClick={handleSaveConfirm} color="primary" disabled={!resultName.trim()}>
+        <DialogActions sx={{ borderTop: `1px solid ${alpha(darkBlueColors.divider, 0.7)}`, p: 2 }}>
+          <Button 
+            onClick={handleSaveDialogClose}
+            sx={{ 
+              color: darkBlueColors.textSecondary,
+              '&:hover': {
+                backgroundColor: alpha(darkBlueColors.divider, 0.2),
+              }
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSaveConfirm} 
+            disabled={!resultName.trim()}
+            sx={{ 
+              color: darkBlueColors.primary,
+              '&:hover': {
+                backgroundColor: alpha(darkBlueColors.primary, 0.1),
+              },
+              '&.Mui-disabled': {
+                color: alpha(darkBlueColors.textSecondary, 0.5),
+              }
+            }}
+          >
             Save
           </Button>
         </DialogActions>
