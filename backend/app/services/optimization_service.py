@@ -429,7 +429,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
         
         # Track consecutive failures to optimize performance
         consecutive_failures = 0
-        max_consecutive_failures = 5  # Fast-fail threshold
+        max_consecutive_failures = 10  # Fast-fail threshold
         
         # Process maturity combinations
         for combo_idx, maturities in enumerate(maturity_combinations):

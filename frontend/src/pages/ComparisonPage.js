@@ -30,7 +30,6 @@ import {
   DialogContentText,
   DialogTitle,
   Checkbox,
-  FormControlLabel,
   List,
   ListItem,
   ListItemText,
@@ -53,9 +52,9 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { 
-  BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, 
+  BarChart, Bar, PieChart, Pie, Cell, 
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, 
-  Area, AreaChart, ScatterChart, Scatter, ZAxis, ReferenceLine
+  ReferenceLine
 } from "recharts";
 
 // Create a dark theme
@@ -157,6 +156,7 @@ const ComparisonPage = () => {
     deleteSavedResult
   } = useData();
   
+  // State variables
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedResults, setSelectedResults] = useState([]);
@@ -222,14 +222,16 @@ const ComparisonPage = () => {
     );
   };
 
-  // Open select dialog
-  const handleOpenSelectDialog = () => {
-    setSelectDialogOpen(true);
+  // Dialog handlers
+  const handleOpenSelectDialog = () => setSelectDialogOpen(true);
+  const handleCloseSelectDialog = () => setSelectDialogOpen(false);
+  const handleDeleteDialogOpen = (resultId) => {
+    setResultToDelete(resultId);
+    setDeleteDialogOpen(true);
   };
-
-  // Close select dialog
-  const handleCloseSelectDialog = () => {
-    setSelectDialogOpen(false);
+  const handleDeleteDialogClose = () => {
+    setDeleteDialogOpen(false);
+    setResultToDelete(null);
   };
 
   // Handle result selection
@@ -250,8 +252,6 @@ const ComparisonPage = () => {
   // Confirm result selection
   const handleConfirmSelection = () => {
     setSelectDialogOpen(false);
-    
-    // Process the selected results based on selection
     processSelectedResults();
   };
 
@@ -289,18 +289,6 @@ const ComparisonPage = () => {
     setLoading(false);
   };
 
-  // Handle delete dialog open
-  const handleDeleteDialogOpen = (resultId) => {
-    setResultToDelete(resultId);
-    setDeleteDialogOpen(true);
-  };
-
-  // Handle delete dialog close
-  const handleDeleteDialogClose = () => {
-    setDeleteDialogOpen(false);
-    setResultToDelete(null);
-  };
-
   // Handle delete confirmation
   const handleDeleteConfirm = () => {
     if (resultToDelete) {
@@ -332,7 +320,7 @@ const ComparisonPage = () => {
     setLoading(true);
     
     if (savedResults && savedResults.length > 0) {
-      // Auto-select one of each type (manual, genetic, standard) initially
+      // Auto-select one of each type (manual, genetic, grid) initially
       const initialSelectedIds = [];
       
       // Try to find one of each type
@@ -411,7 +399,7 @@ const ComparisonPage = () => {
     if (comparisonData.standardResults) {
       results.push({
         id: comparisonData.standardResults.id,
-        label: 'Standard Optimization',
+        label: 'Grid Algorithm',
         result: comparisonData.standardResults,
         isOptimized: true,
         method: 'standard',
@@ -497,7 +485,51 @@ const ComparisonPage = () => {
     return null;
   };
 
-  // No comparison data available or loading, show guidance or loading state
+  // Identify which results we have
+  const hasManual = comparisonData.manualResults !== null;
+  const hasGenetic = comparisonData.geneticResults !== null;
+  const hasStandard = comparisonData.standardResults !== null;
+  
+  // Get active comparison results
+  const comparisonResults = getComparisonResults();
+  
+  // Prepare chart data
+  const barChartData = comparisonResults.map(item => ({
+    name: item.label,
+    classA: item.result.class_a_total || 0,
+    classB: item.result.class_b_total || 0,
+    total: (item.result.class_a_total || 0) + (item.result.class_b_total || 0),
+    color: item.color
+  }));
+  
+  // Prepare principal interest breakdown data
+  const breakdownData = comparisonResults.map(item => ({
+    name: item.label,
+    classAPrincipal: item.result.class_a_principal || 0,
+    classAInterest: item.result.class_a_interest || 0,
+    classBPrincipal: item.result.class_b_principal || 0,
+    classBCoupon: item.result.class_b_coupon || 0,
+    color: item.color
+  }));
+  
+  // Prepare buffer data
+  const bufferData = comparisonResults.map(item => ({
+    name: item.label,
+    minBuffer: item.result.min_buffer_actual || 0,
+    color: item.color
+  }));
+  
+  // Prepare financing data
+  const financingData = comparisonResults.map(item => ({
+    name: item.label,
+    financingCost: Math.abs(item.result.financing_cost || 0),
+    isProfit: (item.result.financing_cost || 0) > 0,
+    principalPaid: item.result.total_principal_paid || 0,
+    loanPrincipal: item.result.total_loan_principal || 0,
+    color: item.color
+  }));
+
+  // Loading state
   if (loading) {
     return (
       <ThemeProvider theme={theme}>
@@ -512,6 +544,7 @@ const ComparisonPage = () => {
     );
   }
 
+  // No saved results state
   if (!savedResults || savedResults.length === 0) {
     return (
       <ThemeProvider theme={theme}>
@@ -549,8 +582,8 @@ const ComparisonPage = () => {
                         <li>Calculate your manual configuration results and save them</li>
                         <li>Go to the Optimization page and run genetic algorithm optimization</li>
                         <li>Save the optimization results</li>
-                        <li>Go to the Optimization page and run standard optimization</li>
-                        <li>Save the optimization results</li>
+                        <li>Go to the Optimization page and run grid algorithm</li>
+                        <li>Save the grid algorithm results</li>
                         <li>Return to this page to compare all saved results</li>
                       </ol>
                     </CardContent>
@@ -564,6 +597,7 @@ const ComparisonPage = () => {
     );
   }
 
+  // Not enough data to compare
   if (!hasEnoughData()) {
     return (
       <ThemeProvider theme={theme}>
@@ -615,7 +649,7 @@ const ComparisonPage = () => {
                         <TableCell>
                           <Chip 
                             label={result.methodType === 'manual' ? 'Manual' : 
-                                   result.methodType === 'genetic' ? 'Genetic' : 'Standard'} 
+                                   result.methodType === 'genetic' ? 'Genetic' : 'Grid Algorithm'} 
                             color={result.methodType === 'manual' ? 'error' :
                                    result.methodType === 'genetic' ? 'success' : 'primary'}
                             size="small"
@@ -645,53 +679,8 @@ const ComparisonPage = () => {
       </ThemeProvider>
     );
   }
-  
-  // Get active comparison results
-  const comparisonResults = getComparisonResults();
 
-  // Identify which results we have
-  const hasManual = comparisonData.manualResults !== null;
-  const hasGenetic = comparisonData.geneticResults !== null;
-  const hasStandard = comparisonData.standardResults !== null;
-  
-  // Prepare chart data
-  const barChartData = comparisonResults.map(item => {
-    return {
-      name: item.label,
-      classA: item.result.class_a_total || 0,
-      classB: item.result.class_b_total || 0,
-      total: (item.result.class_a_total || 0) + (item.result.class_b_total || 0),
-      color: item.color
-    };
-  });
-  
-  // Prepare principal interest breakdown data
-  const breakdownData = comparisonResults.map(item => ({
-    name: item.label,
-    classAPrincipal: item.result.class_a_principal || 0,
-    classAInterest: item.result.class_a_interest || 0,
-    classBPrincipal: item.result.class_b_principal || 0,
-    classBCoupon: item.result.class_b_coupon || 0,
-    color: item.color
-  }));
-  
-  // Prepare buffer data
-  const bufferData = comparisonResults.map(item => ({
-    name: item.label,
-    minBuffer: item.result.min_buffer_actual || 0,
-    color: item.color
-  }));
-  
-  // Prepare financing data
-  const financingData = comparisonResults.map(item => ({
-    name: item.label,
-    financingCost: Math.abs(item.result.financing_cost || 0),
-    isProfit: (item.result.financing_cost || 0) > 0,
-    principalPaid: item.result.total_principal_paid || 0,
-    loanPrincipal: item.result.total_loan_principal || 0,
-    color: item.color
-  }));
-
+  // Main comparison view with enough data
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -795,14 +784,14 @@ const ComparisonPage = () => {
               }
             }}
           >
-            <Tab icon={<PieChartIcon />} label="Structure Comparison" iconPosition="start" />
-            <Tab icon={<BarChartIcon />} label="Tranches Detail" iconPosition="start" />
+            <Tab icon={<PieChartIcon />} label="Portfolio Overview" iconPosition="start" />
+            <Tab icon={<BarChartIcon />} label="Cashflow Distribution" iconPosition="start" />
             <Tab icon={<AccountBalanceWalletIcon />} label="Financing Comparison" iconPosition="start" />
-            <Tab icon={<TimelineIcon />} label="Tranche Details" iconPosition="start" />
+            <Tab icon={<TimelineIcon />} label="Tranche Breakdown" iconPosition="start" />
           </Tabs>
         </Box>
         
-        {/* Tab 1: Structure Comparison */}
+        {/* Tab 1: Portfolio Overview */}
         <TabPanel value={tabValue} index={0}>
           <Grid container spacing={4}>
             <Grid item xs={12}>
@@ -918,7 +907,7 @@ const ComparisonPage = () => {
           </Grid>
         </TabPanel>
         
-        {/* Tab 2: Tranches Breakdown */}
+        {/* Tab 2: Cashflow Distribution */}
         <TabPanel value={tabValue} index={1}>
           <Grid container spacing={4}>
             <Grid item xs={12}>
@@ -1012,12 +1001,12 @@ const ComparisonPage = () => {
                         )}
                         {hasManual && hasStandard && (
                           <TableCell align="right">
-                            Manual vs. Standard
+                            Manual vs. Grid Algorithm
                           </TableCell>
                         )}
                         {hasGenetic && hasStandard && (
                           <TableCell align="right">
-                            Genetic vs. Standard
+                            Genetic vs. Grid Algorithm
                           </TableCell>
                         )}
                       </TableRow>
@@ -1326,7 +1315,7 @@ const ComparisonPage = () => {
                         )}
                         {hasManual && hasStandard && (
                           <TableCell align="right">
-                            Standard Gain
+                            Grid Algorithm Gain
                           </TableCell>
                         )}
                       </TableRow>
@@ -1426,7 +1415,7 @@ const ComparisonPage = () => {
           </Grid>
         </TabPanel>
         
-        {/* Tab 4: Tranche Details */}
+        {/* Tab 4: Tranche Breakdown */}
         <TabPanel value={tabValue} index={3}>
           <Grid container spacing={4}>
             <Grid item xs={12}>
@@ -1587,7 +1576,7 @@ const ComparisonPage = () => {
           <DialogTitle>Select Results to Compare</DialogTitle>
           <DialogContent>
             <DialogContentText>
-              Select up to 3 results to compare. Choose results of different types (Manual, Genetic, and Standard) for the best comparison.
+              Select up to 3 results to compare. Choose results of different types (Manual, Genetic, and Grid Algorithm) for the best comparison.
             </DialogContentText>
             <List sx={{ mt: 2 }}>
               {savedResults.map((result) => (
@@ -1603,103 +1592,103 @@ const ComparisonPage = () => {
                       backgroundColor: alpha(theme.palette.primary.main, 0.05)
                     },
                     backgroundColor: selectedResults.includes(result.id) 
-                      ? alpha(theme.palette.primary.main, 0.1) 
-                      : 'transparent',
-                    borderRadius: 1
-                  }}
-                >
-                  <Checkbox
-                    edge="start"
-                    checked={selectedResults.includes(result.id)}
-                    tabIndex={-1}
-                    disableRipple
-                    color={
-                      result.methodType === 'manual' ? 'error' :
-                      result.methodType === 'genetic' ? 'success' : 'primary'
-                    }
-                  />
-                  <ListItemText 
-                    primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Typography variant="body1">{result.savedName}</Typography>
-                        <Chip 
-                          label={
-                            result.methodType === 'manual' ? 'Manual' : 
-                            result.methodType === 'genetic' ? 'Genetic' : 'Standard'
-                          }
-                          size="small"
-                          color={
-                            result.methodType === 'manual' ? 'error' :
-                            result.methodType === 'genetic' ? 'success' : 'primary'
-                          }
-                          sx={{ ml: 2, fontWeight: 500 }}
-                        />
-                      </Box>
-                    }
-                    secondary={new Date(result.timestamp).toLocaleString()}
-                  />
-                  <ListItemSecondaryAction>
-                    <IconButton 
-                      edge="end" 
-                      aria-label="delete"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteDialogOpen(result.id);
-                      }}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItem>
-              ))}
-            </List>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3 }}>
-            <Button onClick={handleCloseSelectDialog} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
-            <Button 
-              onClick={handleConfirmSelection} 
-              color="primary"
-              variant="contained"
-              disabled={selectedResults.length === 0}
-              sx={{ borderRadius: 2 }}
-            >
-              Compare Selected ({selectedResults.length})
-            </Button>
-          </DialogActions>
-        </Dialog>
-        
-        {/* Delete Confirmation Dialog */}
-        <Dialog
-          open={deleteDialogOpen}
-          onClose={handleDeleteDialogClose}
-          PaperProps={{
-            sx: {
-              bgcolor: 'background.paper',
-              borderRadius: 2
-            }
-          }}
-        >
-          <DialogTitle>Delete Saved Result</DialogTitle>
-          <DialogContent>
-            <DialogContentText>
-              Are you sure you want to delete this saved result? This action cannot be undone.
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3 }}>
-            <Button onClick={handleDeleteDialogClose} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
-            <Button 
-              onClick={handleDeleteConfirm} 
-              color="error" 
-              variant="contained"
-              sx={{ borderRadius: 2 }}
-            >
-              Delete
-            </Button>
-          </DialogActions>
-        </Dialog>
-      </Container>
-    </ThemeProvider>
-  );
+                    ? alpha(theme.palette.primary.main, 0.1) 
+                    : 'transparent',
+                  borderRadius: 1
+                }}
+              >
+                <Checkbox
+                  edge="start"
+                  checked={selectedResults.includes(result.id)}
+                  tabIndex={-1}
+                  disableRipple
+                  color={
+                    result.methodType === 'manual' ? 'error' :
+                    result.methodType === 'genetic' ? 'success' : 'primary'
+                  }
+                />
+                <ListItemText 
+                  primary={
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Typography variant="body1">{result.savedName}</Typography>
+                      <Chip 
+                        label={
+                          result.methodType === 'manual' ? 'Manual' : 
+                          result.methodType === 'genetic' ? 'Genetic' : 'Grid Algorithm'
+                        }
+                        size="small"
+                        color={
+                          result.methodType === 'manual' ? 'error' :
+                          result.methodType === 'genetic' ? 'success' : 'primary'
+                        }
+                        sx={{ ml: 2, fontWeight: 500 }}
+                      />
+                    </Box>
+                  }
+                  secondary={new Date(result.timestamp).toLocaleString()}
+                />
+                <ListItemSecondaryAction>
+                  <IconButton 
+                    edge="end" 
+                    aria-label="delete"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteDialogOpen(result.id);
+                    }}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </ListItemSecondaryAction>
+              </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button onClick={handleCloseSelectDialog} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+          <Button 
+            onClick={handleConfirmSelection} 
+            color="primary"
+            variant="contained"
+            disabled={selectedResults.length === 0}
+            sx={{ borderRadius: 2 }}
+          >
+            Compare Selected ({selectedResults.length})
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteDialogClose}
+        PaperProps={{
+          sx: {
+            bgcolor: 'background.paper',
+            borderRadius: 2
+          }
+        }}
+      >
+        <DialogTitle>Delete Saved Result</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this saved result? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button onClick={handleDeleteDialogClose} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            sx={{ borderRadius: 2 }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Container>
+  </ThemeProvider>
+);
 };
 
 export default ComparisonPage;

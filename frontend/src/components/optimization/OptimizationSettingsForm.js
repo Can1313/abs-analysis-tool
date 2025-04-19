@@ -34,6 +34,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import EqualizerIcon from '@mui/icons-material/Equalizer';
 import SpeedIcon from '@mui/icons-material/Speed';
+import GridOnIcon from '@mui/icons-material/GridOn';
 
 const OptimizationSettingsForm = ({ values, onChange }) => {
   const theme = useTheme();
@@ -112,9 +113,9 @@ const OptimizationSettingsForm = ({ values, onChange }) => {
   // Method info details
   const methodInfo = {
     classic: {
-      title: "Standard Optimization Strategies",
-      icon: <TuneIcon sx={{ fontSize: 36, color: darkBlueColors.primary }} />,
-      description: "Apply one or more traditional distribution strategies to optimize your tranche structure",
+      title: "Grid Algorithm",
+      icon: <GridOnIcon sx={{ fontSize: 36, color: darkBlueColors.primary }} />,
+      description: "Systematically evaluates various parameter combinations using a grid search approach",
       color: darkBlueColors.primary
     },
     genetic: {
@@ -264,8 +265,8 @@ const OptimizationSettingsForm = ({ values, onChange }) => {
               textShadow: '0 1px 2px rgba(0,0,0,0.2)'
             }}
           >
-            <TuneIcon sx={{ mr: 1 }} /> Select Optimization Strategies
-            <Tooltip title="Select one or more strategies to include in the optimization process. The system will determine which strategy produces the best results." sx={{ ml: 1 }}>
+            <GridOnIcon sx={{ mr: 1 }} /> Select Distribution Strategies
+            <Tooltip title="Select one or more strategies to include in the grid search process. The system will determine which strategy produces the best results." sx={{ ml: 1 }}>
               <IconButton size="small" sx={{ color: alpha(darkBlueColors.textPrimary, 0.7) }}>
                 <InfoIcon fontSize="small" />
               </IconButton>
@@ -273,7 +274,7 @@ const OptimizationSettingsForm = ({ values, onChange }) => {
           </Typography>
           
           <Typography variant="body2" sx={{ mb: 2, color: darkBlueColors.textSecondary }}>
-            Select the strategies you want to include in the optimization process. The system will evaluate all selected strategies and identify the one that produces the best results.
+            Select the strategies you want to include in the grid search. The system will evaluate all selected strategies across the parameter space and identify the combination that produces the best results.
           </Typography>
           
           <Grid container spacing={2}>
@@ -391,7 +392,7 @@ const OptimizationSettingsForm = ({ values, onChange }) => {
               fontWeight="medium" 
               sx={{ color: darkBlueColors.textPrimary }}
             >
-              Standard Optimization Settings
+              Grid Search Parameters
             </Typography>
             
             <FormControl fullWidth sx={{ mb: 4 }}>
@@ -426,7 +427,7 @@ const OptimizationSettingsForm = ({ values, onChange }) => {
                 <Typography sx={{ color: darkBlueColors.textPrimary }}>{values.a_tranches_range[1]}</Typography>
               </Box>
               <Typography variant="body2" sx={{ color: darkBlueColors.textSecondary }}>
-                Number of Class A tranches to consider in optimization
+                Number of Class A tranches to consider in the grid search
               </Typography>
             </FormControl>
             
@@ -462,7 +463,7 @@ const OptimizationSettingsForm = ({ values, onChange }) => {
                 <Typography sx={{ color: darkBlueColors.textPrimary }}>{values.maturity_range[1]}</Typography>
               </Box>
               <Typography variant="body2" sx={{ color: darkBlueColors.textSecondary }}>
-                Range of maturity periods to consider in days
+                Range of maturity periods to evaluate in the grid (in days)
               </Typography>
             </FormControl>
             
@@ -504,7 +505,7 @@ const OptimizationSettingsForm = ({ values, onChange }) => {
                 }}
               />
               <Typography variant="body2" sx={{ color: darkBlueColors.textSecondary }}>
-                Step size between maturity values
+                Grid resolution for maturity values (smaller steps = more thorough search)
               </Typography>
             </FormControl>
           </Box>
