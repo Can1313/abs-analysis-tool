@@ -10,7 +10,7 @@ const API_URL =
 const apiClient = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
-  // 5 dakika (300 000 ms) – optimizasyon işlemleri uzun sürebilir
+  // 5 dakika (300 000 ms) – optimizasyon işlemleri uzun sürebilir
   timeout: 300_000,
 });
 
@@ -56,8 +56,8 @@ const uploadFile = async (file) => {
 
 /**
  * Hesaplama servisi.
- * 2. parametre olarak optimizasyon çıktısı gönderilirse
- * Class B nominali otomatik eklenir.
+ * 2. parametre olarak optimizasyon çıktısı gönderilirse
+ * Class B nominali otomatik eklenir.
  *
  * @param {Object} params   – CalculationRequest gövdesi
  * @param {Object|null} optResult – OptimizationResult (opsiyonel)
@@ -65,7 +65,7 @@ const uploadFile = async (file) => {
  */
 const calculateResults = async (params, optResult = null) => {
   try {
-    // İsteğe bağlı Class B nominal entegrasyonu
+    // İsteğe bağlı Class B nominal entegrasyonu
     const finalParams = { ...params };
 
     if (
@@ -118,7 +118,7 @@ const optimizeStructure = async (params, method = 'classic') => {
     const CancelToken = axios.CancelToken;
     const source = CancelToken.source();
 
-    // 5 dakikada zaman aşımı
+    // 5 dakikada zaman aşımı
     const timeout = setTimeout(() => {
       source.cancel(
         'Operation timeout: The optimization process took too long'
@@ -181,7 +181,7 @@ const optimizeStructure = async (params, method = 'classic') => {
 };
 
 /* --------------------------------------------------------------------- */
-/*                           PROGRESS POLLING                            */
+/*                           PROGRESS POLLING                            */
 /* --------------------------------------------------------------------- */
 
 /**
@@ -204,6 +204,33 @@ const pollOptimizationProgress = async () => {
 };
 
 /* --------------------------------------------------------------------- */
+/*                            STRESS TESTING                             */
+/* --------------------------------------------------------------------- */
+
+/**
+ * Run stress test on a structure with given parameters
+ * @param {Object} params - StressTestRequest body
+ * @returns {Promise<Object>}
+ */
+const runStressTest = async (params) => {
+  try {
+    console.log('Running stress test with params:', params);
+    
+    const response = await apiClient.post('/stress-test/', params);
+    
+    console.log('Stress test successful');
+    return response.data;
+  } catch (error) {
+    console.error('Error running stress test:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+    }
+    throw error;
+  }
+};
+
+/* --------------------------------------------------------------------- */
 /*                                EXPORT                                 */
 /* --------------------------------------------------------------------- */
 
@@ -212,4 +239,5 @@ export {
   calculateResults,
   optimizeStructure,
   pollOptimizationProgress,
+  runStressTest,
 };

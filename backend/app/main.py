@@ -2,7 +2,7 @@ import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from app.routers import calculation, optimization
+from app.routers import calculation, optimization, stress_testing
 import uvicorn
 
 app = FastAPI(
@@ -35,6 +35,7 @@ async def add_process_time_header(request, call_next):
 # Include routers
 app.include_router(calculation.router, prefix="/api", tags=["Calculation"])
 app.include_router(optimization.router, prefix="/api", tags=["Optimization"])
+app.include_router(stress_testing.router, prefix="/api", tags=["Stress Testing"])
 
 @app.get("/")
 async def root():

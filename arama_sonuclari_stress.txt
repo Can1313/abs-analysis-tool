@@ -1,3 +1,336 @@
+'stress' ANAHTAR KELİMESİ İÇİN ARAMA SONUÇLARI
+======================================================================
+
+FRONTEND SONUÇLARI:
+==================
+
+DOSYA: src\App.js
+==================================================
+// src/App.js
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+import CssBaseline from "@mui/material/CssBaseline";
+
+import TopBar from "./components/TopBar";
+import Footer from "./components/Footer";
+import HomePage from "./pages/HomePage";
+import CalculationPage from "./pages/CalculationPage";
+import OptimizationPage from "./pages/OptimizationPage";
+import StressTestingPage from "./pages/StressTestingPage";
+import { DataProvider } from "./contexts/DataContext";
+import ComparisonPage from "./pages/ComparisonPage";
+
+// Create a dark navy theme
+const theme = createTheme({
+  palette: {
+    mode: 'dark',
+    primary: {
+      main: '#4e7bea', // Modern blue
+      light: '#6d92fd',
+      dark: '#3461c7',
+      contrastText: '#ffffff',
+    },
+    secondary: {
+      main: '#9c27b0', // Purple
+      light: '#bb4fd3',
+      dark: '#7b1fa2',
+      contrastText: '#ffffff',
+    },
+    error: {
+      main: '#f44336',
+      light: '#ff7961',
+      dark: '#d32f2f',
+    },
+    warning: {
+      main: '#ff9800',
+      light: '#ffb74d',
+      dark: '#f57c00',
+    },
+    info: {
+      main: '#29b6f6',
+      light: '#4fc3f7',
+      dark: '#0288d1',
+    },
+    success: {
+      main: '#4caf50',
+      light: '#80e27e',
+      dark: '#087f23',
+    },
+    background: {
+      default: '#0f172a', // Dark navy
+      paper: '#1e293b', // Lighter navy
+    },
+    text: {
+      primary: '#e2e8f0',
+      secondary: '#94a3b8',
+    },
+    divider: 'rgba(148, 163, 184, 0.12)',
+  },
+  typography: {
+    fontFamily: '"Roboto", "Segoe UI", "Helvetica Neue", sans-serif',
+    h4: {
+      fontWeight: 500,
+    },
+    h5: {
+      fontWeight: 500,
+    },
+    h6: {
+      fontWeight: 500,
+    },
+    subtitle1: {
+      fontWeight: 500,
+    },
+  },
+  shape: {
+    borderRadius: 8,
+  },
+  components: {
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          backgroundImage: 'none',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.7)',
+          borderRadius: 8,
+        },
+        elevation1: {
+          boxShadow: '0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.7)',
+        },
+        elevation2: {
+          boxShadow: '0 3px 6px rgba(0,0,0,0.7), 0 2px 4px rgba(0,0,0,0.8)',
+        },
+      },
+    },
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+          fontWeight: 500,
+          borderRadius: 6,
+        },
+        contained: {
+          boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+        },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        head: {
+          fontWeight: 600,
+          backgroundColor: 'rgba(78, 123, 234, 0.15)',
+        },
+      },
+    },
+    MuiTableRow: {
+      styleOverrides: {
+        root: {
+          '&:last-child td': {
+            borderBottom: 0,
+          },
+        },
+      },
+    },
+    MuiAppBar: {
+      styleOverrides: {
+        root: {
+          boxShadow: '0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.7)',
+          backgroundColor: '#0f172a', // Match background.default
+        },
+      },
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: {
+          borderRadius: 6,
+        },
+      },
+    },
+    MuiCssBaseline: {
+      styleOverrides: {
+        body: {
+          scrollbarColor: "#6b6b6b #2b2b2b",
+          "&::-webkit-scrollbar, & *::-webkit-scrollbar": {
+            backgroundColor: "#2b2b2b",
+            width: 8,
+          },
+          "&::-webkit-scrollbar-thumb, & *::-webkit-scrollbar-thumb": {
+            borderRadius: 8,
+            backgroundColor: "#6b6b6b",
+            minHeight: 24,
+          },
+          "&::-webkit-scrollbar-thumb:focus, & *::-webkit-scrollbar-thumb:focus": {
+            backgroundColor: "#959595",
+          },
+          "&::-webkit-scrollbar-thumb:active, & *::-webkit-scrollbar-thumb:active": {
+            backgroundColor: "#959595",
+          },
+          "&::-webkit-scrollbar-thumb:hover, & *::-webkit-scrollbar-thumb:hover": {
+            backgroundColor: "#959595",
+          },
+        },
+      },
+    },
+  },
+});
+
+function App() {
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <DataProvider>
+        <Router>
+          <TopBar />
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/calculation" element={<CalculationPage />} />
+            <Route path="/optimization" element={<OptimizationPage />} />
+            <Route path="/comparison" element={<ComparisonPage />} />
+            <Route path="/stress-testing" element={<StressTestingPage />} />
+          </Routes>
+          <Footer />
+        </Router>
+      </DataProvider>
+    </ThemeProvider>
+  );
+}
+
+export default App;
+
+======================================================================
+
+DOSYA: src\components\TopBar.js
+==================================================
+// frontend/src/components/TopBar.js
+import React from 'react';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
+import { 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  Button, 
+  Box, 
+  Container, 
+  useTheme 
+} from '@mui/material';
+import CalculateIcon from '@mui/icons-material/Calculate';
+import OptimizeIcon from '@mui/icons-material/Speed';
+import HomeIcon from '@mui/icons-material/Home';
+import CompareIcon from '@mui/icons-material/Compare';
+import BusinessIcon from '@mui/icons-material/Business';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import { alpha } from '@mui/material/styles';
+
+const TopBar = () => {
+  const location = useLocation();
+  const theme = useTheme();
+  
+  // Menu items with updated professional names
+  const menuItems = [
+    {
+      path: '/',
+      label: 'Dashboard',
+      icon: <HomeIcon />
+    },
+    {
+      path: '/calculation',
+      label: 'Structure Analysis',
+      icon: <CalculateIcon />
+    },
+    {
+      path: '/optimization',
+      label: 'Portfolio Optimizer',
+      icon: <OptimizeIcon />
+    },
+    {
+      path: '/comparison',
+      label: 'Performance Metrics',
+      icon: <CompareIcon />
+    },
+    {
+      path: '/stress-testing',
+      label: 'Stress Testing',
+      icon: <AssessmentIcon />
+    }
+  ];
+  
+  return (
+    <AppBar 
+      position="static" 
+      elevation={0}
+      sx={{
+        background: 'linear-gradient(90deg, #0f172a 0%, #1e293b 100%)',
+        borderBottom: '1px solid rgba(78, 123, 234, 0.15)'
+      }}
+    >
+      <Container maxWidth="lg">
+        <Toolbar disableGutters>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              flexGrow: 1,
+            }}
+          >
+            <BusinessIcon 
+              sx={{ 
+                fontSize: 28, 
+                color: theme.palette.primary.main,
+                mr: 1.5 
+              }} 
+            />
+            <Typography
+              variant="h6"
+              component={RouterLink}
+              to="/"
+              sx={{
+                textDecoration: 'none',
+                color: 'inherit',
+                fontWeight: 600,
+                letterSpacing: 0.5,
+              }}
+            >
+              Advanced ABS Design
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {menuItems.map((item) => (
+              <Button 
+                key={item.path}
+                color="inherit" 
+                component={RouterLink} 
+                to={item.path}
+                startIcon={item.icon}
+                sx={{
+                  px: 2,
+                  py: 1,
+                  borderRadius: 1,
+                  backgroundColor: location.pathname === item.path 
+                    ? alpha(theme.palette.primary.main, 0.15) 
+                    : 'transparent',
+                  '&:hover': {
+                    backgroundColor: location.pathname === item.path 
+                      ? alpha(theme.palette.primary.main, 0.25) 
+                      : alpha(theme.palette.primary.main, 0.1),
+                  }
+                }}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </Box>
+        </Toolbar>
+      </Container>
+    </AppBar>
+  );
+};
+
+export default TopBar;
+
+======================================================================
+
+DOSYA: src\pages\StressTestingPage.js
+==================================================
 // src/pages/StressTestingPage.js
 import React, { useState, useEffect } from 'react';
 import { 
@@ -1364,3 +1697,562 @@ const StressTestingPage = () => {
 };
 
 export default StressTestingPage;
+
+======================================================================
+
+DOSYA: src\services\apiService.js
+==================================================
+// frontend/src/services/apiService.js
+import axios from 'axios';
+
+const API_URL =
+  process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+
+/**
+ * Ortak axios istemcisi
+ */
+const apiClient = axios.create({
+  baseURL: API_URL,
+  headers: { 'Content-Type': 'application/json' },
+  // 5 dakika (300 000 ms) – optimizasyon işlemleri uzun sürebilir
+  timeout: 300_000,
+});
+
+/* --------------------------------------------------------------------- */
+/*                               UPLOAD                                  */
+/* --------------------------------------------------------------------- */
+
+/**
+ * Excel dosyası yükle
+ * @param {File} file
+ * @returns {Promise<Object>}
+ */
+const uploadFile = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    console.log('Uploading file:', file.name);
+
+    const response = await axios.post(
+      `${API_URL}/upload-excel/`,
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }
+    );
+
+    console.log('File upload successful');
+    return response.data;
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+    }
+    throw error;
+  }
+};
+
+/* --------------------------------------------------------------------- */
+/*                             CALCULATION                               */
+/* --------------------------------------------------------------------- */
+
+/**
+ * Hesaplama servisi.
+ * 2. parametre olarak optimizasyon çıktısı gönderilirse
+ * Class B nominali otomatik eklenir.
+ *
+ * @param {Object} params   – CalculationRequest gövdesi
+ * @param {Object|null} optResult – OptimizationResult (opsiyonel)
+ * @returns {Promise<Object>}
+ */
+const calculateResults = async (params, optResult = null) => {
+  try {
+    // İsteğe bağlı Class B nominal entegrasyonu
+    const finalParams = { ...params };
+
+    if (
+      optResult &&
+      optResult.class_b_nominal &&
+      Number(optResult.class_b_nominal) > 0
+    ) {
+      finalParams.tranche_b = {
+        ...(finalParams.tranche_b || {}),
+        nominal: optResult.class_b_nominal,
+      };
+    }
+
+    console.log('Calculating results with params:', finalParams);
+
+    const response = await apiClient.post('/calculate/', finalParams);
+
+    console.log('Calculation successful');
+    return response.data;
+  } catch (error) {
+    console.error('Error calculating results:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+    }
+    throw error;
+  }
+};
+
+/* --------------------------------------------------------------------- */
+/*                             OPTIMIZATION                              */
+/* --------------------------------------------------------------------- */
+
+/**
+ * Yapı optimizasyonu (classic | genetic)
+ *
+ * @param {Object} params – OptimizationRequest gövdesi
+ * @param {'classic'|'genetic'} [method='classic']
+ * @returns {Promise<Object>}
+ */
+const optimizeStructure = async (params, method = 'classic') => {
+  try {
+    console.log(`Starting optimization with method: ${method}`);
+    console.log(
+      'Optimization params:',
+      JSON.stringify(params, null, 2)
+    );
+
+    // İptal edilebilir istek oluştur
+    const CancelToken = axios.CancelToken;
+    const source = CancelToken.source();
+
+    // 5 dakikada zaman aşımı
+    const timeout = setTimeout(() => {
+      source.cancel(
+        'Operation timeout: The optimization process took too long'
+      );
+    }, 300_000);
+
+    const response = await apiClient.post(
+      `/optimize/${method}/`,
+      params,
+      { cancelToken: source.token }
+    );
+
+    clearTimeout(timeout);
+
+    console.log(`${method} optimization completed successfully`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error in ${method} optimization:`, error);
+
+    if (axios.isCancel(error)) {
+      console.log('Request canceled:', error.message);
+      throw new Error(
+        'Optimization process was canceled: ' + error.message
+      );
+    }
+
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+
+      const status = error.response.status;
+      let message = 'Optimization failed';
+
+      switch (status) {
+        case 400:
+          message =
+            'Invalid optimization parameters: ' +
+            (error.response.data.detail ||
+              'Please check your parameters');
+          break;
+        case 500:
+          message =
+            'Server error during optimization. The calculation may be too complex.';
+          break;
+        case 504:
+          message =
+            'Optimization timed out. Try again with simpler parameters.';
+          break;
+        default:
+          message =
+            `Optimization error (${status}): ` +
+            (error.response.data.detail || error.message);
+      }
+
+      throw new Error(message);
+    }
+
+    throw error;
+  }
+};
+
+/* --------------------------------------------------------------------- */
+/*                           PROGRESS POLLING                            */
+/* --------------------------------------------------------------------- */
+
+/**
+ * Sunucudan optimizasyon ilerlemesini sorgula
+ * @returns {Promise<Object>}
+ */
+const pollOptimizationProgress = async () => {
+  try {
+    const response = await apiClient.get('/optimize/progress/');
+    return response.data;
+  } catch (error) {
+    console.error('Error polling optimization progress:', error);
+    return {
+      progress: 0,
+      phase: 'Error',
+      message: 'Failed to get progress information',
+      error: true,
+    };
+  }
+};
+
+/* --------------------------------------------------------------------- */
+/*                            STRESS TESTING                             */
+/* --------------------------------------------------------------------- */
+
+/**
+ * Run stress test on a structure with given parameters
+ * @param {Object} params - StressTestRequest body
+ * @returns {Promise<Object>}
+ */
+const runStressTest = async (params) => {
+  try {
+    console.log('Running stress test with params:', params);
+    
+    const response = await apiClient.post('/stress-test/', params);
+    
+    console.log('Stress test successful');
+    return response.data;
+  } catch (error) {
+    console.error('Error running stress test:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+    }
+    throw error;
+  }
+};
+
+/* --------------------------------------------------------------------- */
+/*                                EXPORT                                 */
+/* --------------------------------------------------------------------- */
+
+export {
+  uploadFile,
+  calculateResults,
+  optimizeStructure,
+  pollOptimizationProgress,
+  runStressTest,
+};
+
+======================================================================
+
+
+
+BACKEND SONUÇLARI:
+================
+
+DOSYA: backend\app\main.py
+==================================================
+import time
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from app.routers import calculation, optimization, stress_testing
+import uvicorn
+
+app = FastAPI(
+    title="ABS Analysis Tool",
+    description="Cash flow analysis for securitization",
+    version="1.0.0"
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify the actual frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Add GZip compression for faster responses
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Add custom middleware for timeout and performance tracking
+@app.middleware("http")
+async def add_process_time_header(request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    return response
+
+# Include routers
+app.include_router(calculation.router, prefix="/api", tags=["Calculation"])
+app.include_router(optimization.router, prefix="/api", tags=["Optimization"])
+app.include_router(stress_testing.router, prefix="/api", tags=["Stress Testing"])
+
+@app.get("/")
+async def root():
+    return {"message": "ABS Analysis Tool API is running"}
+
+# Configure server settings if run directly
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        timeout_keep_alive=600,  # 10 dakika keep-alive timeout
+        workers=1,  # Optimization işlemi için tek bir işçi daha iyi olabilir
+    )
+
+======================================================================
+
+DOSYA: backend\app\models\input_models.py
+==================================================
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from datetime import date
+
+
+class GeneralSettings(BaseModel):
+    start_date: date
+    operational_expenses: float
+    min_buffer: float
+
+
+class TrancheA(BaseModel):
+    maturity_days: int
+    base_rate: float
+    spread: float
+    reinvest_rate: float
+    nominal: float
+
+
+class TrancheB(BaseModel):
+    maturity_days: int
+    base_rate: float
+    spread: float
+    reinvest_rate: float
+    nominal: Optional[float] = None  # Added Optional nominal field
+
+
+class NPVSettings(BaseModel):
+    method: str  # "weighted_avg_rate" or "custom_rate"
+    custom_rate: Optional[float] = None
+
+
+class OptimizationSettings(BaseModel):
+    optimization_method: str = Field(default="classic")
+    selected_strategies: List[str] = Field(default=["equal", "increasing", "decreasing", "middle_weighted"])
+    a_tranches_range: List[int] = Field(default=[2, 6])
+    maturity_range: List[int] = Field(default=[32, 365])
+    maturity_step: int = Field(default=10)
+    min_class_b_percent: float = Field(default=10.0)
+    target_class_b_coupon_rate: float = Field(default=30.0)
+    additional_days_for_class_b: int = Field(default=10)
+    class_b_percent_deviation: float = Field(default=1.0)  # New field with tighter default value
+    
+    # Evolutionary algorithm parameters
+    population_size: Optional[int] = Field(default=50)
+    num_generations: Optional[int] = Field(default=40)
+
+
+class CalculationRequest(BaseModel):
+    general_settings: GeneralSettings
+    tranches_a: List[TrancheA]
+    tranche_b: TrancheB
+    npv_settings: NPVSettings
+    is_optimized: Optional[bool] = False
+    optimization_method: Optional[str] = None
+
+
+# Stress Testing Models
+class StructureParameters(BaseModel):
+    start_date: date
+    a_maturities: List[int]
+    a_base_rates: List[float]
+    a_spreads: List[float]
+    a_reinvest_rates: List[float]
+    a_nominals: List[float]
+    b_maturity: int
+    b_base_rate: float
+    b_spread: float
+    b_reinvest_rate: float
+    b_nominal: float
+    ops_expenses: float = 0.0
+
+
+class ScenarioParameters(BaseModel):
+    name: str
+    npl_rate: float
+    prepayment_rate: float
+    reinvestment_shift: float
+
+
+class StressTestRequest(BaseModel):
+    structure: StructureParameters
+    scenario: ScenarioParameters
+
+======================================================================
+
+DOSYA: backend\app\routers\stress_testing.py
+==================================================
+from fastapi import APIRouter, HTTPException
+from app.models.input_models import StressTestRequest  # You'll need to create this
+from app.services.stress_testing_service import perform_stress_test
+from app.routers.calculation import df_store
+import logging
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+@router.post("/stress-test/", response_model=dict)
+async def stress_test(request: StressTestRequest):
+    try:
+        # Get the stored dataframe
+        df = df_store.get("df")
+        if df is None:
+            raise HTTPException(status_code=400, detail="No data found. Please upload Excel file first.")
+        
+        # Perform the stress test
+        result = perform_stress_test(df, request)
+        return result
+    except Exception as e:
+        logger.error(f"Stress testing error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Stress testing error: {str(e)}")
+
+======================================================================
+
+DOSYA: backend\app\services\stress_testing_service.py
+==================================================
+import pandas as pd
+import numpy as np
+from app.utils.tranche_utils import calculate_tranche_results
+from typing import Dict, Any, List
+from app.models.input_models import StressTestRequest
+
+def adjust_cash_flow_for_npl(df: pd.DataFrame, npl_rate: float) -> pd.DataFrame:
+    """
+    Adjust cash flows by reducing principal payments based on NPL rate
+    """
+    df_adjusted = df.copy()
+    
+    # Reduce principal by NPL rate
+    df_adjusted['principal_amount'] = df_adjusted['principal_amount'] * (1 - (npl_rate / 100))
+    
+    # Recalculate total cash flow
+    df_adjusted['cash_flow'] = df_adjusted['principal_amount'] + df_adjusted['interest_amount']
+    df_adjusted['original_cash_flow'] = df_adjusted['cash_flow'].copy()
+    
+    return df_adjusted
+
+def adjust_cash_flow_for_prepayment(df: pd.DataFrame, prepayment_rate: float) -> pd.DataFrame:
+    """
+    Adjust cash flows by shifting some payments earlier based on prepayment rate
+    """
+    if prepayment_rate <= 0:
+        return df
+    
+    df_adjusted = df.copy()
+    
+    # Sort by date
+    df_adjusted = df_adjusted.sort_values('installment_date')
+    
+    # Calculate running sum of principal
+    total_principal = df_adjusted['principal_amount'].sum()
+    
+    # Calculate prepayment amount
+    prepayment_amount = total_principal * (prepayment_rate / 100)
+    
+    # Distribution function (more prepayments in early periods)
+    prepayment_weights = np.linspace(3, 1, len(df_adjusted))
+    prepayment_weights = prepayment_weights / prepayment_weights.sum()
+    
+    # Allocate prepayments by weight
+    prepayment_allocations = prepayment_amount * prepayment_weights
+    
+    # Apply prepayments (reduce later periods, increase earlier periods)
+    n = len(df_adjusted)
+    reduction_indices = range(n//2, n)  # Reduce second half
+    addition_indices = range(0, n//2)   # Add to first half
+    
+    # Reduce later payments
+    for i in reduction_indices:
+        if i < len(prepayment_allocations):
+            reduction = min(prepayment_allocations[i], df_adjusted.iloc[i]['principal_amount'] * 0.8)
+            df_adjusted.iloc[i, df_adjusted.columns.get_loc('principal_amount')] -= reduction
+    
+    # Increase earlier payments
+    for i in addition_indices:
+        if i < len(prepayment_allocations):
+            df_adjusted.iloc[i, df_adjusted.columns.get_loc('principal_amount')] += prepayment_allocations[i]
+    
+    # Recalculate total cash flow
+    df_adjusted['cash_flow'] = df_adjusted['principal_amount'] + df_adjusted['interest_amount']
+    df_adjusted['original_cash_flow'] = df_adjusted['cash_flow'].copy()
+    
+    return df_adjusted
+
+def perform_stress_test(df: pd.DataFrame, request: StressTestRequest) -> Dict[str, Any]:
+    """
+    Perform stress testing by adjusting cash flows and recalculating with the same structure
+    """
+    # Extract parameters
+    structure = request.structure
+    scenario = request.scenario
+    npl_rate = scenario.npl_rate
+    prepayment_rate = scenario.prepayment_rate
+    reinvestment_shift = scenario.reinvestment_shift
+    
+    # Adjust cash flows for NPL
+    df_adjusted = adjust_cash_flow_for_npl(df, npl_rate)
+    
+    # Adjust cash flows for prepayment
+    df_adjusted = adjust_cash_flow_for_prepayment(df_adjusted, prepayment_rate)
+    
+    # Adjust reinvestment rates if needed
+    a_reinvest_rates = [rate + reinvestment_shift for rate in structure.a_reinvest_rates]
+    b_reinvest_rate = structure.b_reinvest_rate + reinvestment_shift
+    
+    # Calculate new results
+    result = calculate_tranche_results(
+        df_adjusted, structure.start_date,
+        structure.a_maturities, structure.a_base_rates, structure.a_spreads, a_reinvest_rates,
+        structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
+        b_reinvest_rate, structure.b_nominal, structure.ops_expenses
+    )
+    
+    # Extract baseline results
+    baseline_result = calculate_tranche_results(
+        df, structure.start_date,
+        structure.a_maturities, structure.a_base_rates, structure.a_spreads, structure.a_reinvest_rates,
+        structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
+        structure.b_reinvest_rate, structure.b_nominal, structure.ops_expenses
+    )
+    
+    # Create response
+    response = {
+        'baseline': {
+            'class_b_coupon_rate': baseline_result['effective_coupon_rate'],
+            'min_buffer_actual': baseline_result['min_buffer_actual']
+        },
+        'stress_test': {
+            'class_b_coupon_rate': result['effective_coupon_rate'],
+            'min_buffer_actual': result['min_buffer_actual'],
+            'npl_rate': npl_rate,
+            'prepayment_rate': prepayment_rate,
+            'reinvestment_shift': reinvestment_shift
+        },
+        'difference': {
+            'class_b_coupon_rate': result['effective_coupon_rate'] - baseline_result['effective_coupon_rate'],
+            'min_buffer_actual': result['min_buffer_actual'] - baseline_result['min_buffer_actual']
+        }
+    }
+    
+    return response
+
+======================================================================
+
