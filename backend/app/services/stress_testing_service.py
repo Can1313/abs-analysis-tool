@@ -1,105 +1,155 @@
 import pandas as pd
 import numpy as np
+from datetime import date, datetime
 from app.utils.tranche_utils import calculate_tranche_results
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Union
 from app.models.input_models import StressTestRequest
 import logging
+import traceback
 
 logger = logging.getLogger(__name__)
 
+def ensure_timestamp(date_input: Union[str, date, datetime, pd.Timestamp]) -> pd.Timestamp:
+    """
+    Herhangi bir tarih formatını pandas Timestamp'e çevirir
+    
+    Args:
+        date_input: str, date, datetime, pd.Timestamp olabilir
+        
+    Returns:
+        pd.Timestamp: Çevrilmiş tarih
+    """
+    if isinstance(date_input, pd.Timestamp):
+        return date_input
+    
+    if isinstance(date_input, (date, datetime)):
+        return pd.Timestamp(date_input)
+    
+    if isinstance(date_input, str):
+        try:
+            return pd.Timestamp(date_input)
+        except Exception as e:
+            logger.error(f"Tarih formatı çevrilemedi: {date_input}, hata: {str(e)}")
+            # Varsayılan olarak bugünün tarihini dön
+            return pd.Timestamp('today')
+    
+    # Diğer tip değerler için 
+    logger.warning(f"Beklenmeyen tarih formatı: {type(date_input)}, değer: {date_input}")
+    return pd.Timestamp('today')
+
 def adjust_cash_flow_for_npl(df: pd.DataFrame, npl_rate: float) -> pd.DataFrame:
     """
-    Adjust cash flows by reducing principal payments based on NPL rate
+    Nakit akışlarını NPL oranına göre azaltır
+    
+    Args:
+        df: Nakit akışı DataFrame'i
+        npl_rate: NPL oranı (% olarak)
+        
+    Returns:
+        pd.DataFrame: Düzeltilmiş nakit akışları
     """
     try:
+        # Sütunların var olduğunu kontrol et
+        required_columns = ['principal_amount', 'interest_amount', 'cash_flow']
+        for col in required_columns:
+            if col not in df.columns:
+                logger.error(f"Eksik sütun: '{col}'")
+                raise ValueError(f"Veri içinde '{col}' sütunu bulunamadı")
+        
+        # Verinin kopyasını al
         df_adjusted = df.copy()
         
-        # Ensure all required columns exist
-        if 'principal_amount' not in df_adjusted.columns:
-            logger.error("Missing 'principal_amount' column in DataFrame")
-            raise ValueError("Missing 'principal_amount' column in data")
-            
-        if 'interest_amount' not in df_adjusted.columns:
-            logger.error("Missing 'interest_amount' column in DataFrame")
-            raise ValueError("Missing 'interest_amount' column in data")
-            
-        if 'cash_flow' not in df_adjusted.columns:
-            logger.error("Missing 'cash_flow' column in DataFrame")
-            raise ValueError("Missing 'cash_flow' column in data")
-        
-        # Convert npl_rate to a factor (e.g., 5% -> 0.05)
+        # NPL oranını faktöre çevir (örn. 5% -> 0.05)
         npl_factor = npl_rate / 100.0
         
-        # Reduce principal by NPL rate
+        # Anapara ödemelerini NPL oranına göre azalt
         df_adjusted['principal_amount'] = df_adjusted['principal_amount'] * (1 - npl_factor)
         
-        # Recalculate total cash flow
+        # Toplam nakit akışını yeniden hesapla
         df_adjusted['cash_flow'] = df_adjusted['principal_amount'] + df_adjusted['interest_amount']
         
-        # Keep original cash flow for reference
+        # Orijinal nakit akışını referans olarak sakla
         if 'original_cash_flow' not in df_adjusted.columns:
             df_adjusted['original_cash_flow'] = df['cash_flow'].copy()
         
-        logger.info(f"Applied NPL rate of {npl_rate}%, reducing principal payments")
+        logger.info(f"NPL oranı %{npl_rate} uygulandı, anapara ödemeleri azaltıldı")
         return df_adjusted
         
     except Exception as e:
-        logger.error(f"Error in adjust_cash_flow_for_npl: {str(e)}")
-        raise ValueError(f"Failed to adjust cash flows for NPL rate: {str(e)}")
+        logger.error(f"NPL için nakit akışı düzenleme hatası: {str(e)}")
+        logger.debug(traceback.format_exc())
+        raise ValueError(f"NPL oranı için nakit akışı düzenlenemedi: {str(e)}")
 
 def adjust_cash_flow_for_prepayment(df: pd.DataFrame, prepayment_rate: float) -> pd.DataFrame:
     """
-    Adjust cash flows by shifting some payments earlier based on prepayment rate
+    Nakit akışlarını erken ödeme oranına göre düzenler
+    
+    Args:
+        df: Nakit akışı DataFrame'i
+        prepayment_rate: Erken ödeme oranı (% olarak)
+        
+    Returns:
+        pd.DataFrame: Düzeltilmiş nakit akışları
     """
     try:
-        # If prepayment rate is zero or negative, no adjustment needed
+        # Erken ödeme oranı sıfır veya negatifse düzenleme yapma
         if prepayment_rate <= 0:
-            return df
+            return df.copy()
         
+        # Sütunların var olduğunu kontrol et
+        required_columns = ['principal_amount', 'installment_date']
+        for col in required_columns:
+            if col not in df.columns:
+                logger.error(f"Eksik sütun: '{col}'")
+                raise ValueError(f"Veri içinde '{col}' sütunu bulunamadı")
+        
+        # Verinin kopyasını al
         df_adjusted = df.copy()
         
-        # Ensure required columns exist
-        if 'principal_amount' not in df_adjusted.columns:
-            logger.error("Missing 'principal_amount' column in DataFrame")
-            raise ValueError("Missing 'principal_amount' column in data")
-            
-        if 'installment_date' not in df_adjusted.columns:
-            logger.error("Missing 'installment_date' column in DataFrame")
-            raise ValueError("Missing 'installment_date' column in data")
-        
-        # Convert prepayment_rate to a factor
+        # Erken ödeme oranını faktöre çevir (örn. 30% -> 0.3)
         prepayment_factor = prepayment_rate / 100.0
         
-        # Sort by date
+        # Tarihe göre sırala
         if not pd.api.types.is_datetime64_any_dtype(df_adjusted['installment_date']):
-            df_adjusted['installment_date'] = pd.to_datetime(df_adjusted['installment_date'])
-            
+            logger.info("installment_date sütunu datetime'a çevriliyor")
+            df_adjusted['installment_date'] = pd.to_datetime(df_adjusted['installment_date'], errors='coerce')
+        
+        # Hata kontrolü - geçersiz tarihler
+        if df_adjusted['installment_date'].isna().any():
+            logger.warning("Bazı installment_date değerleri geçersiz, bunlar analize dahil edilmeyecek")
+            df_adjusted = df_adjusted.dropna(subset=['installment_date'])
+        
+        # Tarihe göre sırala
         df_adjusted = df_adjusted.sort_values('installment_date')
         
-        # Calculate running sum of principal
+        # Toplam anaparayı hesapla
         total_principal = df_adjusted['principal_amount'].sum()
+        if total_principal <= 0:
+            logger.warning("Toplam anapara sıfır veya negatif, erken ödeme düzenlemesi yapılamıyor")
+            return df_adjusted
         
-        # Calculate prepayment amount
+        # Erken ödeme miktarını hesapla
         prepayment_amount = total_principal * prepayment_factor
         
-        # Distribution function (more prepayments in early periods)
+        # Satır sayısını kontrol et
         n_rows = len(df_adjusted)
         if n_rows <= 1:
-            logger.warning("Too few rows for prepayment adjustment")
+            logger.warning("Erken ödeme düzenlemesi için çok az satır var")
             return df_adjusted
-            
+        
+        # Erken ödeme dağıtım fonksiyonu (erken dönemlerde daha fazla)
         prepayment_weights = np.linspace(3, 1, n_rows)
         prepayment_weights = prepayment_weights / prepayment_weights.sum()
         
-        # Allocate prepayments by weight
+        # Erken ödemeleri ağırlıklara göre dağıt
         prepayment_allocations = prepayment_amount * prepayment_weights
         
-        # Apply prepayments (reduce later periods, increase earlier periods)
-        n = len(df_adjusted)
-        reduction_indices = range(n//2, n)  # Reduce second half
-        addition_indices = range(0, n//2)   # Add to first half
+        # İndeksleri belirle
+        mid_point = n_rows // 2
+        reduction_indices = range(mid_point, n_rows)  # İkinci yarıyı azalt
+        addition_indices = range(0, mid_point)        # İlk yarıyı arttır
         
-        # Reduce later payments (create a deep copy to avoid warnings)
+        # Geç dönem ödemelerini azalt
         df_temp = df_adjusted.copy()
         for i in reduction_indices:
             if i < len(prepayment_allocations):
@@ -107,110 +157,153 @@ def adjust_cash_flow_for_prepayment(df: pd.DataFrame, prepayment_rate: float) ->
                 reduction = min(prepayment_allocations[i], max_reduction)
                 df_temp.iloc[i, df_temp.columns.get_loc('principal_amount')] -= reduction
         
-        # Increase earlier payments
+        # Erken dönem ödemelerini arttır
         for i in addition_indices:
             if i < len(prepayment_allocations):
                 df_temp.iloc[i, df_temp.columns.get_loc('principal_amount')] += prepayment_allocations[i]
         
-        # Update the adjusted dataframe
+        # Düzenlenmiş DataFrame'i güncelle
         df_adjusted = df_temp
         
-        # Recalculate total cash flow
+        # Toplam nakit akışını yeniden hesapla
         if 'interest_amount' in df_adjusted.columns:
             df_adjusted['cash_flow'] = df_adjusted['principal_amount'] + df_adjusted['interest_amount']
-            
-        # Keep original cash flow for reference
+        
+        # Orijinal nakit akışını referans olarak sakla
         if 'original_cash_flow' not in df_adjusted.columns and 'cash_flow' in df.columns:
             df_adjusted['original_cash_flow'] = df['cash_flow'].copy()
         
-        logger.info(f"Applied prepayment rate of {prepayment_rate}%, shifting principal payments")
+        logger.info(f"Erken ödeme oranı %{prepayment_rate} uygulandı, anapara ödemeleri kaydırıldı")
         return df_adjusted
         
     except Exception as e:
-        logger.error(f"Error in adjust_cash_flow_for_prepayment: {str(e)}")
-        raise ValueError(f"Failed to adjust cash flows for prepayment rate: {str(e)}")
+        logger.error(f"Erken ödeme için nakit akışı düzenleme hatası: {str(e)}")
+        logger.debug(traceback.format_exc())
+        raise ValueError(f"Erken ödeme oranı için nakit akışı düzenlenemedi: {str(e)}")
 
 def perform_stress_test(df: pd.DataFrame, request: StressTestRequest) -> Dict[str, Any]:
     """
-    Perform stress testing by adjusting cash flows and recalculating with the same structure
+    Nakit akışlarını stres senaryosuna göre düzenleyerek yeniden hesaplar
+    
+    Args:
+        df: Nakit akışı DataFrame'i
+        request: Stres test parametreleri
+        
+    Returns:
+        Dict[str, Any]: Stres test sonuçları
     """
     try:
-        logger.info("Starting stress test calculation")
+        logger.info("Stres testi hesaplaması başlatılıyor")
         
-        # Extract parameters
+        # Temel parametreleri çıkar
         structure = request.structure
         scenario = request.scenario
         npl_rate = scenario.npl_rate
         prepayment_rate = scenario.prepayment_rate
         reinvestment_shift = scenario.reinvestment_shift
         
-        # Log parameters for debugging
-        logger.info(f"Scenario: {scenario.name}")
-        logger.info(f"NPL Rate: {npl_rate}%, Prepayment Rate: {prepayment_rate}%, Reinvestment Shift: {reinvestment_shift}%")
+        # Parametreleri logla
+        logger.info(f"Senaryo: {scenario.name}")
+        logger.info(f"NPL Oranı: %{npl_rate}, Erken Ödeme: %{prepayment_rate}, Yeniden Yatırım Değişimi: %{reinvestment_shift}")
         
-        # First calculate baseline results with original data
-        logger.info("Calculating baseline results")
-        baseline_result = calculate_tranche_results(
-            df, structure.start_date,
-            structure.a_maturities, structure.a_base_rates, structure.a_spreads, structure.a_reinvest_rates,
-            structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
-            structure.b_reinvest_rate, structure.b_nominal, structure.ops_expenses
-        )
+        # SORUN ÇÖZÜMÜ: start_date'i pandas Timestamp'e çevir
+        # Bu, "Cannot compare Timestamp with datetime.date" hatasını çözer
+        start_date = ensure_timestamp(structure.start_date)
+        logger.info(f"Başlangıç tarihi: {start_date}")
         
-        # Apply NPL rate
+        # Veri kontrolü
+        if df is None or df.empty:
+            raise ValueError("Analiz için geçerli nakit akışı verisi bulunamadı")
+        
+        # Sütunların var olduğunu kontrol et
+        required_columns = ['principal_amount', 'interest_amount', 'cash_flow', 'installment_date']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            raise ValueError(f"Nakit akışı verisinde eksik sütunlar: {', '.join(missing_columns)}")
+        
+        # Önce orijinal veriyle temel sonuçları hesapla
+        logger.info("Temel sonuçlar hesaplanıyor")
+        try:
+            baseline_result = calculate_tranche_results(
+                df, start_date,
+                structure.a_maturities, structure.a_base_rates, structure.a_spreads, structure.a_reinvest_rates,
+                structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
+                structure.b_reinvest_rate, structure.b_nominal, structure.ops_expenses
+            )
+        except Exception as e:
+            logger.error(f"Temel hesaplama hatası: {str(e)}")
+            logger.debug(traceback.format_exc())
+            raise ValueError(f"Temel senaryo hesaplanırken hata oluştu: {str(e)}")
+        
+        # NPL oranını uygula
         df_adjusted = df.copy()
         if npl_rate > 0:
-            logger.info(f"Adjusting cash flows for NPL rate: {npl_rate}%")
+            logger.info(f"NPL oranı %{npl_rate} uygulanıyor")
             df_adjusted = adjust_cash_flow_for_npl(df_adjusted, npl_rate)
         
-        # Apply prepayment
+        # Erken ödeme oranını uygula
         if prepayment_rate > 0:
-            logger.info(f"Adjusting cash flows for prepayment rate: {prepayment_rate}%")
+            logger.info(f"Erken ödeme oranı %{prepayment_rate} uygulanıyor")
             df_adjusted = adjust_cash_flow_for_prepayment(df_adjusted, prepayment_rate)
         
-        # Adjust reinvestment rates if shift is non-zero
-        a_reinvest_rates = structure.a_reinvest_rates
+        # Yeniden yatırım oranlarını değiştir (varsa)
+        a_reinvest_rates = list(structure.a_reinvest_rates)  # Listenin kopyasını al
         b_reinvest_rate = structure.b_reinvest_rate
         
         if reinvestment_shift != 0:
-            logger.info(f"Applying reinvestment rate shift: {reinvestment_shift}%")
+            logger.info(f"Yeniden yatırım oranlarına %{reinvestment_shift} değişim uygulanıyor")
             a_reinvest_rates = [rate + reinvestment_shift for rate in structure.a_reinvest_rates]
             b_reinvest_rate = structure.b_reinvest_rate + reinvestment_shift
         
-        # Calculate stress test results
-        logger.info("Calculating stress test results")
-        result = calculate_tranche_results(
-            df_adjusted, structure.start_date,
-            structure.a_maturities, structure.a_base_rates, structure.a_spreads, a_reinvest_rates,
-            structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
-            b_reinvest_rate, structure.b_nominal, structure.ops_expenses
-        )
+        # Stres test sonuçlarını hesapla
+        logger.info("Stres test sonuçları hesaplanıyor")
+        try:
+            result = calculate_tranche_results(
+                df_adjusted, start_date,
+                structure.a_maturities, structure.a_base_rates, structure.a_spreads, a_reinvest_rates,
+                structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
+                b_reinvest_rate, structure.b_nominal, structure.ops_expenses
+            )
+        except Exception as e:
+            logger.error(f"Stres testi hesaplama hatası: {str(e)}")
+            logger.debug(traceback.format_exc())
+            raise ValueError(f"Stres senaryosu hesaplanırken hata oluştu: {str(e)}")
         
-        # Create response
+        # Sonuç değerlerini al
+        baseline_coupon_rate = baseline_result.get('effective_coupon_rate', 0)
+        stress_coupon_rate = result.get('effective_coupon_rate', 0)
+        baseline_buffer = baseline_result.get('min_buffer_actual', 0)
+        stress_buffer = result.get('min_buffer_actual', 0)
+        
+        # Cevap objesi oluştur
         response = {
             'baseline': {
-                'class_b_coupon_rate': round(baseline_result['effective_coupon_rate'], 4),
-                'min_buffer_actual': round(baseline_result.get('min_buffer_actual', 0), 4)
+                'class_b_coupon_rate': round(baseline_coupon_rate, 4),
+                'min_buffer_actual': round(baseline_buffer, 4)
             },
             'stress_test': {
-                'class_b_coupon_rate': round(result['effective_coupon_rate'], 4),
-                'min_buffer_actual': round(result.get('min_buffer_actual', 0), 4),
+                'class_b_coupon_rate': round(stress_coupon_rate, 4),
+                'min_buffer_actual': round(stress_buffer, 4),
                 'npl_rate': npl_rate,
                 'prepayment_rate': prepayment_rate,
                 'reinvestment_shift': reinvestment_shift
             },
             'difference': {
-                'class_b_coupon_rate': round(result['effective_coupon_rate'] - baseline_result['effective_coupon_rate'], 4),
-                'min_buffer_actual': round(result.get('min_buffer_actual', 0) - baseline_result.get('min_buffer_actual', 0), 4)
+                'class_b_coupon_rate': round(stress_coupon_rate - baseline_coupon_rate, 4),
+                'min_buffer_actual': round(stress_buffer - baseline_buffer, 4)
             }
         }
         
-        logger.info("Stress test completed successfully")
-        logger.info(f"Baseline rate: {response['baseline']['class_b_coupon_rate']}%, Stress rate: {response['stress_test']['class_b_coupon_rate']}%")
-        logger.info(f"Difference: {response['difference']['class_b_coupon_rate']}%")
+        # Sonuçları logla
+        logger.info("Stres testi başarıyla tamamlandı")
+        logger.info(f"Temel senaryo oranı: %{response['baseline']['class_b_coupon_rate']}, " +
+                   f"Stres senaryosu oranı: %{response['stress_test']['class_b_coupon_rate']}")
+        logger.info(f"Fark: %{response['difference']['class_b_coupon_rate']}")
         
         return response
         
     except Exception as e:
-        logger.error(f"Error in perform_stress_test: {str(e)}")
-        raise ValueError(f"Stress test calculation failed: {str(e)}")
+        # Detaylı hata mesajını logla
+        logger.error(f"Stres testi sırasında beklenmeyen hata: {str(e)}")
+        logger.debug(traceback.format_exc())
+        raise ValueError(f"Stres testi hesaplaması başarısız oldu: {str(e)}")

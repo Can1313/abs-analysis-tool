@@ -296,7 +296,7 @@ const ScatterTooltip = ({ active, payload }) => {
 };
 
 /**
- * More robust formatter for ensuring data meets backend requirements
+ * Improved function to format structure data for stress testing
  * 
  * @param {Object} structureDetails - Structure data from savedResults
  * @returns {Object} - Properly formatted structure object for API
@@ -310,7 +310,6 @@ const formatStructureForStressTest = (structureDetails) => {
     
     for (const key of keys) {
       if (obj[key] !== undefined) {
-        console.log(`Found property "${key}" with value:`, obj[key]);
         return obj[key];
       }
     }
@@ -332,70 +331,37 @@ const formatStructureForStressTest = (structureDetails) => {
         }
         
         if (found) {
-          console.log(`Found nested property "${key}" with value:`, value);
           return value;
         }
       }
     }
     
-    console.log(`Property not found for keys: [${keys.join(', ')}], using default:`, defaultValue);
     return defaultValue;
   };
 
-  // Ensure start_date is in the correct format (YYYY-MM-DD)
-  const possibleDateFields = ['start_date', 'general_settings.start_date', 'date', 'startDate', 'issue_date'];
-  let rawDate = extractProperty(structureDetails, possibleDateFields, null);
-  let formattedDate;
-  
-  if (rawDate instanceof Date) {
-    formattedDate = rawDate.toISOString().split('T')[0];
-  } else if (typeof rawDate === 'string') {
-    // Try to parse the date and format it correctly
-    try {
-      const parsedDate = new Date(rawDate);
-      if (!isNaN(parsedDate.getTime())) {
-        formattedDate = parsedDate.toISOString().split('T')[0];
-      } else {
-        // If parsing fails, use the original string (assuming it's already in YYYY-MM-DD format)
-        formattedDate = rawDate;
-      }
-    } catch (e) {
-      // If any error occurs, use the original string
-      formattedDate = rawDate;
-    }
-  } else {
-    // Fallback to current date if no valid date is available
-    formattedDate = new Date().toISOString().split('T')[0];
-    console.warn('No valid start_date found, using current date');
-  }
-
   // Helper function to ensure array fields
-  const ensureNumericArray = (arr, minLength = 1) => {
+  const ensureNumericArray = (arr, minLength = 1, defaultValue = 0) => {
     if (!arr) {
-      console.log(`Creating default array of length ${minLength}`);
-      return Array(minLength).fill(0);
+      return Array(minLength).fill(defaultValue);
     }
     
     if (typeof arr === 'string') {
-      // Try to parse JSON string
       try {
         const parsed = JSON.parse(arr);
-        return Array.isArray(parsed) ? parsed.map(Number) : Array(minLength).fill(0);
+        return Array.isArray(parsed) ? parsed.map(Number) : Array(minLength).fill(defaultValue);
       } catch (e) {
-        return Array(minLength).fill(0);
+        return Array(minLength).fill(defaultValue);
       }
     }
     
     if (!Array.isArray(arr)) {
-      // If not an array but a single number, create an array with that number
       const num = Number(arr);
-      return isNaN(num) ? Array(minLength).fill(0) : [num];
+      return isNaN(num) ? Array(minLength).fill(defaultValue) : [num];
     }
     
-    // Convert array elements to numbers, replacing NaN with 0
     return arr.map(item => {
       const num = Number(item);
-      return isNaN(num) ? 0 : num;
+      return isNaN(num) ? defaultValue : num;
     });
   };
 
@@ -406,8 +372,47 @@ const formatStructureForStressTest = (structureDetails) => {
     return isNaN(num) ? defaultValue : num;
   };
 
-  // Expanded list of possible field names for Class A maturities
+  // Function to ensure date is in YYYY-MM-DD format
+  const formatDateToString = (dateValue) => {
+    // If it's already a string in ISO format, extract the date part
+    if (typeof dateValue === 'string') {
+      // Check if it looks like an ISO date
+      if (dateValue.match(/^\d{4}-\d{2}-\d{2}(T|$)/)) {
+        return dateValue.split('T')[0];
+      }
+      // Try to parse it as a date
+      const parsed = new Date(dateValue);
+      if (!isNaN(parsed.getTime())) {
+        return parsed.toISOString().split('T')[0];
+      }
+      return dateValue; // Return as is if we can't parse it
+    }
+    
+    // If it's a Date object
+    if (dateValue instanceof Date) {
+      return dateValue.toISOString().split('T')[0];
+    }
+    
+    // If it's a timestamp number
+    if (typeof dateValue === 'number') {
+      return new Date(dateValue).toISOString().split('T')[0];
+    }
+    
+    // Default to today's date as a fallback
+    console.warn('Could not parse date, using current date');
+    return new Date().toISOString().split('T')[0];
+  };
+
+  // Possible field mappings for finding data in the structure
   const possibleFieldMappings = {
+    start_date: [
+      'start_date', 
+      'general_settings.start_date', 
+      'date', 
+      'startDate', 
+      'issue_date',
+      'structure.start_date'
+    ],
     a_maturities: [
       'a_maturities', 
       'tranches_a.maturity_days', 
@@ -417,7 +422,8 @@ const formatStructureForStressTest = (structureDetails) => {
       'maturities',
       'tranche_maturities',
       'class_a.maturities',
-      'class_a.maturity_days'
+      'class_a.maturity_days',
+      'class_a_maturities'
     ],
     a_base_rates: [
       'a_base_rates', 
@@ -426,7 +432,8 @@ const formatStructureForStressTest = (structureDetails) => {
       'class_a_base_rates',
       'base_rates',
       'class_a.base_rates',
-      'class_a.base_rate'
+      'class_a.base_rate',
+      'class_a_rates'
     ],  
     a_spreads: [
       'a_spreads', 
@@ -444,7 +451,8 @@ const formatStructureForStressTest = (structureDetails) => {
       'class_a_reinvest_rates',
       'reinvest_rates',
       'class_a.reinvest_rates',
-      'class_a.reinvest_rate'
+      'class_a.reinvest_rate',
+      'class_a_reinvest'
     ],
     a_nominals: [
       'a_nominals', 
@@ -491,7 +499,8 @@ const formatStructureForStressTest = (structureDetails) => {
       'trancheB.nominal', 
       'class_b_principal',
       'class_b.nominal',
-      'class_b.principal'
+      'class_b.principal',
+      'class_b_nominal'
     ],
     ops_expenses: [
       'ops_expenses', 
@@ -502,10 +511,11 @@ const formatStructureForStressTest = (structureDetails) => {
     ]
   };
 
-  // Check if we have a tranche structure or data in one of several possible locations
-  console.log('Looking for Class A tranche data in various locations...');
-  
-  // Check for structured tranche data first
+  // Get start date and ensure it's formatted correctly
+  let rawDate = extractProperty(structureDetails, possibleFieldMappings.start_date, null);
+  let formattedDate = formatDateToString(rawDate);
+
+  // Check for structured tranche data 
   let a_maturities = [], a_base_rates = [], a_spreads = [], a_reinvest_rates = [], a_nominals = [];
   let trancheDataFound = false;
   
@@ -578,6 +588,113 @@ const formatStructureForStressTest = (structureDetails) => {
   return result;
 };
 
+/**
+ * Generates sensitivity data for charts based on a single test result
+ * 
+ * @param {number} baselineRate - The baseline Class B coupon rate
+ * @param {number} nplRate - The NPL rate from the stress test
+ * @param {number} prepaymentRate - The prepayment rate from the stress test
+ * @param {number} rateWithStress - The Class B coupon rate under stress
+ * @returns {Object} - Object with sensitivity data for charts
+ */
+const generateSensitivityData = (baselineRate, nplRate, prepaymentRate, reinvestmentShift, rateWithStress) => {
+  const nplImpact = baselineRate - rateWithStress;
+  const nplSensitivity = [];
+  const prepaymentSensitivity = [];
+  const combinedScenarios = [];
+  
+  // Generate NPL sensitivity data
+  [0, 1, 2, 3, 5, 7, 10, 15].forEach(testNplRate => {
+    let impactFactor = 0;
+    
+    if (nplRate > 0) {
+      // Estimate impact based on the single test result
+      impactFactor = (testNplRate / nplRate) * nplImpact;
+    } else {
+      // Fallback if no NPL impact data available
+      impactFactor = testNplRate * 0.3;
+    }
+    
+    nplSensitivity.push({
+      value: testNplRate,
+      modeled: baselineRate,
+      realized: Math.max(0, baselineRate - impactFactor),
+      difference: -impactFactor
+    });
+  });
+  
+  // Generate prepayment sensitivity data
+  [0, 5, 10, 15, 20, 30, 40, 50].forEach(testPrepaymentRate => {
+    let impactFactor = 0;
+    
+    if (prepaymentRate > 0 && prepaymentRate !== 30) {
+      // Prepayment impact is often U-shaped, with optimal around 30%
+      // More impact as we move away from 30% (standard prepayment)
+      const optimalPrepayment = 30;
+      const prepaymentDiff = Math.abs(testPrepaymentRate - optimalPrepayment);
+      const actualDiff = Math.abs(prepaymentRate - optimalPrepayment);
+      
+      if (actualDiff > 0) {
+        impactFactor = (prepaymentDiff / actualDiff) * nplImpact * 0.5;
+      }
+    } else {
+      // Fallback model if no specific prepayment data
+      const optimalPrepayment = 30; 
+      impactFactor = Math.abs(testPrepaymentRate - optimalPrepayment) * 0.1;
+    }
+    
+    prepaymentSensitivity.push({
+      value: testPrepaymentRate,
+      modeled: baselineRate,
+      realized: Math.max(0, baselineRate - impactFactor),
+      difference: -impactFactor
+    });
+  });
+  
+  // Generate combined scenarios data for scatter plot
+  const nplValues = [0, 1, 3, 5, 7, 10];
+  const prepaymentValues = [5, 10, 20, 30, 40];
+  
+  nplValues.forEach(nValue => {
+    prepaymentValues.forEach(pValue => {
+      // Combine impacts for both factors
+      const nplImpactFactor = (nValue / Math.max(1, nplRate)) * nplImpact;
+      
+      const optimalPrepayment = 30;
+      const prepaymentDiff = Math.abs(pValue - optimalPrepayment);
+      const actualPrepaymentDiff = Math.abs(prepaymentRate - optimalPrepayment);
+      
+      let prepaymentImpactFactor = 0;
+      if (actualPrepaymentDiff > 0) {
+        prepaymentImpactFactor = (prepaymentDiff / Math.max(1, actualPrepaymentDiff)) * nplImpact * 0.5;
+      } else {
+        prepaymentImpactFactor = prepaymentDiff * 0.1;
+      }
+      
+      // Total impact is not just additive - worse conditions compound
+      const combinedImpact = nplImpactFactor + prepaymentImpactFactor + (nplImpactFactor * prepaymentImpactFactor / 10);
+      
+      combinedScenarios.push({
+        x: nValue,
+        y: pValue,
+        z: Math.abs(combinedImpact) * 10,  // Scale for bubble size
+        npl: nValue,
+        prepayment: pValue,
+        reinvest: reinvestmentShift,
+        modeled: baselineRate,
+        realized: Math.max(0, baselineRate - combinedImpact),
+        difference: -combinedImpact.toFixed(2)
+      });
+    });
+  });
+  
+  return {
+    npl: nplSensitivity,
+    prepayment: prepaymentSensitivity,
+    combinedScenarios: combinedScenarios
+  };
+};
+
 const StressTestingPage = () => {
   const theme = darkTheme;
   const { calculationResults, savedResults } = useData();
@@ -608,6 +725,9 @@ const StressTestingPage = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+
+  // State for test results display panel
+  const [showResults, setShowResults] = useState(false);
   
   // State for API test results
   const [testResults, setTestResults] = useState({
@@ -669,6 +789,11 @@ const StressTestingPage = () => {
     return availableStructures.find(structure => structure.id === selectedStructureId) || null;
   };
 
+  // Navigate to the calculation page with a message
+  const handleNavigateToCalculation = () => {
+    navigate('/calculation');
+  };
+
   // Run stress test with enhanced error handling and debugging
   const handleRunStressTest = async () => {
     const selectedStructure = getSelectedStructure();
@@ -681,6 +806,7 @@ const StressTestingPage = () => {
     }
     
     setIsLoading(true);
+    setShowResults(false);
     
     try {
       // Get the original structure details from savedResults
@@ -719,14 +845,28 @@ const StressTestingPage = () => {
       
       console.log('Received stress test response:', response);
       
-      // Process API response
+      // Get the baseline and stress rates
+      const baselineRate = response.baseline.class_b_coupon_rate;
+      const stressRate = response.stress_test.class_b_coupon_rate;
+      const rateDifference = response.difference.class_b_coupon_rate;
+      
+      // Generate sensitivity analysis data based on the test result
+      const sensitivityData = generateSensitivityData(
+        baselineRate, 
+        nplRate, 
+        prepaymentRate,
+        reinvestmentShift,
+        stressRate
+      );
+      
+      // Process API response with generated sensitivity data
       const responseData = {
         classBCouponRate: {
-          modeled: response.baseline.class_b_coupon_rate,
-          realized: response.stress_test.class_b_coupon_rate,
-          difference: response.difference.class_b_coupon_rate,
-          status: response.difference.class_b_coupon_rate >= -1 ? 'success' : 
-                 response.difference.class_b_coupon_rate >= -5 ? 'warning' : 'error'
+          modeled: baselineRate,
+          realized: stressRate,
+          difference: rateDifference,
+          status: rateDifference >= -1 ? 'success' : 
+                 rateDifference >= -5 ? 'warning' : 'error'
         },
         scenarioResults: [
           {
@@ -734,8 +874,8 @@ const StressTestingPage = () => {
             npl: 0,
             prepayment: 0,
             reinvestment: 0,
-            modeled: response.baseline.class_b_coupon_rate,
-            realized: response.baseline.class_b_coupon_rate,
+            modeled: baselineRate,
+            realized: baselineRate,
             difference: 0
           },
           {
@@ -743,22 +883,23 @@ const StressTestingPage = () => {
             npl: nplRate,
             prepayment: prepaymentRate,
             reinvestment: reinvestmentShift,
-            modeled: response.baseline.class_b_coupon_rate,
-            realized: response.stress_test.class_b_coupon_rate,
-            difference: response.difference.class_b_coupon_rate
+            modeled: baselineRate,
+            realized: stressRate,
+            difference: rateDifference
           }
         ],
         sensitivityAnalysis: {
-          npl: [],
-          prepayment: [],
+          npl: sensitivityData.npl,
+          prepayment: sensitivityData.prepayment,
           reinvestment: []
         },
-        combinedScenarios: []
+        combinedScenarios: sensitivityData.combinedScenarios
       };
       
       // Update state with the API results
       setTestResults(responseData);
       setIsLoading(false);
+      setShowResults(true);
       setTabValue(0); // Switch to NPL tab to show results
       
       // Show success message
@@ -789,6 +930,12 @@ const StressTestingPage = () => {
           const detail = error.response.data.detail;
           if (detail.includes("No data found") || detail.includes("upload Excel file")) {
             errorMessage = "You need to upload an Excel file with loan data before running a stress test. Please go to the Structure Analysis page first.";
+            
+            // Show an alert with a button to navigate to Structure Analysis
+            setSnackbarMessage(errorMessage);
+            setSnackbarSeverity("warning");
+            setSnackbarOpen(true);
+            return;
           } else {
             errorMessage += ": " + detail;
           }
@@ -836,6 +983,14 @@ const StressTestingPage = () => {
     }));
   };
 
+  // Handle close for snackbar
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setSnackbarOpen(false);
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -868,22 +1023,38 @@ const StressTestingPage = () => {
             </Box>
           </Box>
           
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<SaveAltIcon />}
-            sx={{
-              px: 3,
-              py: 1,
-              borderRadius: 2,
-              boxShadow: '0 3px 8px rgba(0,0,0,0.3)',
-            }}
-          >
-            Export Results
-          </Button>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={handleNavigateToCalculation}
+              sx={{
+                px: 3,
+                py: 1,
+                borderRadius: 2,
+              }}
+            >
+              Go to Structure Analysis
+            </Button>
+            
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<SaveAltIcon />}
+              sx={{
+                px: 3,
+                py: 1,
+                borderRadius: 2,
+                boxShadow: '0 3px 8px rgba(0,0,0,0.3)',
+              }}
+              disabled={!showResults}
+            >
+              Export Results
+            </Button>
+          </Box>
         </Box>
         
-        {/* Structure Dropdown Selection - Removed coupon rate display */}
+        {/* Structure Dropdown Selection */}
         <Paper
           elevation={3}
           sx={{
@@ -923,7 +1094,14 @@ const StressTestingPage = () => {
               </Select>
             </FormControl>
           ) : (
-            <Alert severity="info">
+            <Alert 
+              severity="info"
+              action={
+                <Button color="inherit" size="small" onClick={handleNavigateToCalculation}>
+                  Go to Analysis
+                </Button>
+              }
+            >
               No saved structures found. Please calculate and save at least one structure before running stress tests.
             </Alert>
           )}
@@ -990,6 +1168,7 @@ const StressTestingPage = () => {
                       setNplRange([1, 1]);
                       setPrepaymentRange([20, 20]);
                       setReinvestmentRange([2, 2]);
+                      setApplyReinvestmentShift(true);
                     }}
                     size="small"
                     sx={{ borderRadius: 2 }}
@@ -1005,6 +1184,7 @@ const StressTestingPage = () => {
                       setNplRange([1.5, 1.5]);
                       setPrepaymentRange([30, 30]);
                       setReinvestmentRange([0, 0]);
+                      setApplyReinvestmentShift(false);
                     }}
                     size="small"
                     sx={{ borderRadius: 2 }}
@@ -1020,6 +1200,7 @@ const StressTestingPage = () => {
                       setNplRange([3, 3]);
                       setPrepaymentRange([15, 15]);
                       setReinvestmentRange([-3, -3]);
+                      setApplyReinvestmentShift(true);
                     }}
                     size="small"
                     sx={{ borderRadius: 2 }}
@@ -1035,6 +1216,7 @@ const StressTestingPage = () => {
                       setNplRange([5, 5]);
                       setPrepaymentRange([10, 10]);
                       setReinvestmentRange([-5, -5]);
+                      setApplyReinvestmentShift(true);
                     }}
                     size="small"
                     sx={{ borderRadius: 2 }}
@@ -1050,6 +1232,7 @@ const StressTestingPage = () => {
                       setNplRange([7, 7]);
                       setPrepaymentRange([5, 5]);
                       setReinvestmentRange([-10, -10]);
+                      setApplyReinvestmentShift(true);
                     }}
                     size="small"
                     sx={{ borderRadius: 2 }}
@@ -1239,6 +1422,74 @@ const StressTestingPage = () => {
           
           {/* Results Panel */}
           <Grid item xs={12} md={8}>
+            {/* Current Test Results Summary */}
+            {showResults && testResults.classBCouponRate && (
+              <Paper
+                elevation={3}
+                sx={{
+                  p: 3,
+                  mb: 4,
+                  borderRadius: 2,
+                  backgroundColor: alpha(theme.palette.background.paper, 0.8),
+                  border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+                }}
+              >
+                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <ShowChartIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
+                  Stress Test Results
+                </Typography>
+                
+                <Grid container spacing={3}>
+                  <Grid item xs={12} sm={4}>
+                    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.primary.main, 0.1) }}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Base Coupon Rate
+                      </Typography>
+                      <Typography variant="h4" color="primary" fontWeight="bold">
+                        {testResults.classBCouponRate.modeled.toFixed(2)}%
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={4}>
+                    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.secondary.main, 0.1) }}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Stress Coupon Rate
+                      </Typography>
+                      <Typography variant="h4" color="secondary" fontWeight="bold">
+                        {testResults.classBCouponRate.realized.toFixed(2)}%
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={4}>
+                    <Paper sx={{ 
+                      p: 2, 
+                      textAlign: 'center', 
+                      bgcolor: alpha(
+                        testResults.classBCouponRate.status === 'success' ? theme.palette.success.main :
+                        testResults.classBCouponRate.status === 'warning' ? theme.palette.warning.main :
+                        theme.palette.error.main, 
+                        0.1
+                      ) 
+                    }}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Impact
+                      </Typography>
+                      <Typography 
+                        variant="h4" 
+                        fontWeight="bold"
+                        color={getDifferenceColor(testResults.classBCouponRate.difference, theme)}
+                      >
+                        {testResults.classBCouponRate.difference > 0 ? '+' : ''}
+                        {testResults.classBCouponRate.difference.toFixed(2)}%
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              </Paper>
+            )}
+            
             <Paper 
               elevation={3}
               sx={{ 
@@ -1526,13 +1777,20 @@ const StressTestingPage = () => {
         <Snackbar
           open={snackbarOpen}
           autoHideDuration={6000}
-          onClose={() => setSnackbarOpen(false)}
+          onClose={handleCloseSnackbar}
           anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         >
           <Alert 
-            onClose={() => setSnackbarOpen(false)} 
+            onClose={handleCloseSnackbar} 
             severity={snackbarSeverity}
             sx={{ width: '100%' }}
+            action={
+              snackbarSeverity === "warning" ? (
+                <Button color="inherit" size="small" onClick={handleNavigateToCalculation}>
+                  Go to Structure Analysis
+                </Button>
+              ) : undefined
+            }
           >
             {snackbarMessage}
           </Alert>
