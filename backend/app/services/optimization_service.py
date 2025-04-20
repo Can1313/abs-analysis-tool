@@ -289,6 +289,9 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     maturity_range = optimization_settings.maturity_range
     maturity_step = optimization_settings.maturity_step
     
+    # Get selected default model
+    selected_default_model = getattr(optimization_settings, "selected_default_model", "previous")
+    
     # Use the new Class B percentage targeting parameters 
     target_class_b_percent = getattr(optimization_settings, "min_class_b_percent", 15.0)
     class_b_percent_deviation = getattr(optimization_settings, "class_b_percent_deviation", 1.0)
@@ -297,6 +300,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     
     # Log the actual values used for debugging
     logger.info(f"Target Class B percent: {target_class_b_percent}, deviation: {class_b_percent_deviation}")
+    logger.info(f"Selected default model: {selected_default_model}")
     
     # Get selected strategies - use all if not specified
     selected_strategies = getattr(optimization_settings, "selected_strategies", 
@@ -315,15 +319,33 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     ops_expenses = general_settings.operational_expenses
     min_buffer = general_settings.min_buffer
     
-    # Get original parameters for Class A from the example data
-    original_maturities_A = [61, 120, 182, 274]
-    original_base_rates_A = [45.6, 44.5, 43.3, 42.5]
-    original_reinvest_rates_A = [40.0, 37.25, 32.5, 30.0]
-    
-    # Class B values (fallback values)
-    class_b_maturity_orig = 300
-    class_b_base_rate_orig = 0.0
-    class_b_reinvest_rate_orig = 25.5
+    # Get original parameters for Class A based on selected default model
+    if selected_default_model == "new":
+        # New model parameters (April 16, 2025)
+        original_maturities_A = [59, 94, 150, 189, 275]
+        original_base_rates_A = [45.5, 45.5, 45.5, 45.5, 45.5]
+        original_reinvest_rates_A = [41.0, 38.5, 35.0, 33.5, 31.5]
+        
+        # Class B values for new model
+        class_b_maturity_orig = 346
+        class_b_base_rate_orig = 0.0
+        class_b_reinvest_rate_orig = 30.0
+        
+        # Calculate total nominal amount for new model
+        total_a_nominal = 3169600000  # Sum of all Class A tranches in new model
+    else:
+        # Previous model parameters (February 13, 2025)
+        original_maturities_A = [61, 120, 182, 274]
+        original_base_rates_A = [45.6, 44.5, 43.3, 42.5]
+        original_reinvest_rates_A = [40.0, 37.25, 32.5, 30.0]
+        
+        # Class B values for previous model
+        class_b_maturity_orig = 300
+        class_b_base_rate_orig = 0.0
+        class_b_reinvest_rate_orig = 25.5
+        
+        # Calculate total nominal amount for previous model
+        total_a_nominal = 1765000000  # Original sum from previous model
     
     optimization_progress.update(step=10, 
                                message="Creating rate lookup tables and preparing data...")
@@ -331,9 +353,6 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     # Create rate lookup tables for Class A
     maturity_to_base_rate_A = dict(zip(original_maturities_A, original_base_rates_A))
     maturity_to_reinvest_rate_A = dict(zip(original_maturities_A, original_reinvest_rates_A))
-    
-    # Calculate total nominal amount (from example)
-    total_a_nominal = 1765000000  # Example from original code
     
     # Define search space
     num_a_tranches_options = range(min_a_tranches, max_a_tranches + 1)
@@ -791,6 +810,9 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         ops_expenses = general_settings.operational_expenses
         min_buffer = general_settings.min_buffer
         
+        # Get selected default model
+        selected_default_model = getattr(optimization_settings, "selected_default_model", "previous")
+        
         # Use the new Class B percentage targeting parameters
         target_class_b_percent = getattr(optimization_settings, "min_class_b_percent", 15.0)
         
@@ -799,6 +821,7 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         
         # Log the actual values used for debugging
         logger.info(f"Genetic: Target Class B percent: {target_class_b_percent}, deviation: {class_b_percent_deviation}")
+        logger.info(f"Genetic: Selected default model: {selected_default_model}")
         
         target_class_b_coupon_rate = optimization_settings.target_class_b_coupon_rate
         additional_days = optimization_settings.additional_days_for_class_b
@@ -823,14 +846,37 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         # Class B maturity as Last Cash Flow Day + Additional Days, capped at 365
         class_b_maturity = max(1, min(365, last_cash_flow_day + additional_days))
         
-        # Get original parameters for Class A 
-        original_maturities_A = [61, 120, 182, 274]
-        original_base_rates_A = [45.6, 44.5, 43.3, 42.5]
-        original_reinvest_rates_A = [40.0, 37.25, 32.5, 30.0]
-        
-        # Class B values
-        class_b_base_rate_orig = 0.0
-        class_b_reinvest_rate_orig = 25.5
+        # Get original parameters for Class A based on selected default model
+        if selected_default_model == "new":
+            # New model parameters (April 16, 2025)
+            original_maturities_A = [59, 94, 150, 189, 275]
+            original_base_rates_A = [45.5, 45.5, 45.5, 45.5, 45.5]
+            original_reinvest_rates_A = [41.0, 38.5, 35.0, 33.5, 31.5]
+            
+            # Class B values for new model
+            class_b_base_rate_orig = 0.0
+            class_b_reinvest_rate_orig = 30.0
+            
+            # Calculate total nominal amount for new model
+            total_a_nominal = 3169600000  # Sum of all Class A tranches in new model
+            
+            # Fixed number of tranches for new model
+            default_num_a_tranches = 5  # New model has 5 tranches
+        else:
+            # Previous model parameters (February 13, 2025)
+            original_maturities_A = [61, 120, 182, 274]
+            original_base_rates_A = [45.6, 44.5, 43.3, 42.5]
+            original_reinvest_rates_A = [40.0, 37.25, 32.5, 30.0]
+            
+            # Class B values for previous model
+            class_b_base_rate_orig = 0.0
+            class_b_reinvest_rate_orig = 25.5
+            
+            # Calculate total nominal amount for previous model
+            total_a_nominal = 1765000000  # Original sum from previous model
+            
+            # Fixed number of tranches for previous model
+            default_num_a_tranches = 4  # Previous model has 4 tranches
         
         # Create rate lookup tables for Class A
         maturity_to_base_rate_A = dict(zip(original_maturities_A, original_base_rates_A))
@@ -854,11 +900,8 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
             new_cf = max(0, orig_cf - ops_expenses)
             df_temp.at[t_idx, 'cash_flow'] = new_cf
         
-        # Total A nominal
-        total_a_nominal = 1765000000
-        
-        # Fixed number of tranches
-        num_a_tranches = 4
+        # Fixed number of tranches - use the default for the selected model
+        num_a_tranches = default_num_a_tranches
         
         # Parameter boundaries
         min_maturity = optimization_settings.maturity_range[0]

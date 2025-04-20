@@ -127,19 +127,6 @@ const InterestRatesTable = ({ results }) => {
           </Table>
         </TableContainer>
 
-        {/* Helper component to explain the rates */}
-        <Box sx={{ mt: 3, p: 2, bgcolor: alpha(theme.palette.info.main, 0.05), borderRadius: 1 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            About Coupon Rates
-          </Typography>
-          <Typography variant="body2">
-            <strong>Direct Coupon Rate:</strong> The simple percentage of coupon payment relative to principal (non-annualized).
-          </Typography>
-          <Typography variant="body2">
-            <strong>Effective Coupon Rate:</strong> The annualized coupon rate, calculated as direct rate × (365 ÷ maturity days).
-          </Typography>
-        </Box>
-
         {/* Debug information in development mode */}
         {process.env.NODE_ENV === 'development' && (
           <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>

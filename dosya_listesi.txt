@@ -12,6 +12,7 @@ FRONTEND KLASÖR YAPISI:
     ┣ 📂calculation
       ┣ 📜CalculationResults.js
       ┣ 📜ClassBCouponAdjuster.js
+      ┣ 📜DefaultSettingsSelector.js
       ┣ 📜GeneralSettingsForm.js
       ┣ 📜InterestRatesTable.js
       ┣ 📜TrancheAForm.js
@@ -1629,6 +1630,188 @@ export default ClassBCouponAdjuster;
 
 ======================================================================
 
+DOSYA: src\components\calculation\DefaultSettingsSelector.js
+==================================================
+// src/components/calculation/DefaultSettingsSelector.js
+import React from 'react';
+import { 
+  Box, 
+  Typography, 
+  ToggleButtonGroup, 
+  ToggleButton, 
+  Tooltip, 
+  Paper,
+  alpha,
+  useTheme
+} from '@mui/material';
+import SettingsIcon from '@mui/icons-material/Settings';
+import RestoreIcon from '@mui/icons-material/Restore';
+import NewReleasesIcon from '@mui/icons-material/NewReleases';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import { useData } from '../../contexts/DataContext';
+
+const DefaultSettingsSelector = () => {
+  const theme = useTheme();
+  const { selectedDefaults, setSelectedDefaults } = useData();
+
+  const handleChange = (event, newValue) => {
+    if (newValue !== null) {
+      setSelectedDefaults(newValue);
+    }
+  };
+
+  const settingsInfo = {
+    previous: {
+      label: "Previous Model",
+      description: "February 13, 2025 start date, 4 Class A tranches",
+      icon: <RestoreIcon />,
+      details: {
+        startDate: "13 February 2025",
+        classA: "4 tranches (61-274 days)",
+        trancheB: "300 days maturity",
+        classBPercentage: "Default calculation"
+      },
+    },
+    new: {
+      label: "New Model",
+      description: "April 16, 2025 start date, 5 Class A tranches",
+      icon: <NewReleasesIcon />,
+      details: {
+        startDate: "16 April 2025",
+        classA: "5 tranches (59-275 days)",
+        trancheB: "346 days maturity",
+        classBPercentage: "Fixed 10% of total"
+      },
+    },
+  };
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 3,
+        mb: 3,
+        border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`,
+        backgroundColor: alpha(theme.palette.info.main, 0.03),
+        borderRadius: 2,
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <SettingsIcon sx={{ mr: 1, color: theme.palette.info.main }} />
+        <Typography variant="h6" color="info.main" fontWeight="medium">
+          Default Settings Selection
+        </Typography>
+        <Tooltip 
+          title="Choose between previous and new default settings for tranches structure" 
+          placement="top"
+          sx={{ ml: 1 }}
+        >
+          <InfoOutlinedIcon fontSize="small" color="info" />
+        </Tooltip>
+      </Box>
+
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          Select which default settings to use for your calculation. This will reset your current configuration.
+        </Typography>
+      </Box>
+
+      <ToggleButtonGroup
+        value={selectedDefaults}
+        exclusive
+        onChange={handleChange}
+        aria-label="default settings selection"
+        sx={{ 
+          display: 'flex', 
+          width: '100%',
+          '& .MuiToggleButton-root': {
+            flex: 1,
+            py: 1.5,
+            borderRadius: 2,
+            "&.Mui-selected": {
+              backgroundColor: alpha(theme.palette.info.main, 0.1),
+              borderColor: alpha(theme.palette.info.main, 0.5),
+              "&:hover": {
+                backgroundColor: alpha(theme.palette.info.main, 0.15),
+              }
+            }
+          }
+        }}
+      >
+        {Object.entries(settingsInfo).map(([key, info]) => (
+          <ToggleButton 
+            key={key} 
+            value={key}
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 1,
+              textTransform: 'none',
+              p: 2
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {info.icon}
+              <Typography variant="subtitle1" fontWeight="medium">
+                {info.label}
+              </Typography>
+            </Box>
+            <Typography variant="body2" color="text.secondary">
+              {info.description}
+            </Typography>
+          </ToggleButton>
+        ))}
+      </ToggleButtonGroup>
+
+      {/* Details about selected settings */}
+      <Box 
+        sx={{ 
+          mt: 2, 
+          p: 2, 
+          backgroundColor: alpha(theme.palette.info.main, 0.05),
+          borderRadius: 1,
+          border: `1px solid ${alpha(theme.palette.info.main, 0.1)}`,
+        }}
+      >
+        <Typography variant="subtitle2" gutterBottom>
+          {settingsInfo[selectedDefaults].label} Details:
+        </Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mt: 1 }}>
+          <Box>
+            <Typography variant="body2" color="text.secondary">Start Date</Typography>
+            <Typography variant="body1" fontWeight="medium">
+              {settingsInfo[selectedDefaults].details.startDate}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="body2" color="text.secondary">Class A Structure</Typography>
+            <Typography variant="body1" fontWeight="medium">
+              {settingsInfo[selectedDefaults].details.classA}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="body2" color="text.secondary">Class B Structure</Typography>
+            <Typography variant="body1" fontWeight="medium">
+              {settingsInfo[selectedDefaults].details.trancheB}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="body2" color="text.secondary">Class B Percentage</Typography>
+            <Typography variant="body1" fontWeight="medium" color={selectedDefaults === 'new' ? 'primary.main' : 'text.primary'}>
+              {settingsInfo[selectedDefaults].details.classBPercentage}
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+    </Paper>
+  );
+};
+
+export default DefaultSettingsSelector;
+
+======================================================================
+
 DOSYA: src\components\calculation\GeneralSettingsForm.js
 ==================================================
 // frontend/src/components/calculation/GeneralSettingsForm.js
@@ -1829,19 +2012,6 @@ const InterestRatesTable = ({ results }) => {
             </TableBody>
           </Table>
         </TableContainer>
-
-        {/* Helper component to explain the rates */}
-        <Box sx={{ mt: 3, p: 2, bgcolor: alpha(theme.palette.info.main, 0.05), borderRadius: 1 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            About Coupon Rates
-          </Typography>
-          <Typography variant="body2">
-            <strong>Direct Coupon Rate:</strong> The simple percentage of coupon payment relative to principal (non-annualized).
-          </Typography>
-          <Typography variant="body2">
-            <strong>Effective Coupon Rate:</strong> The annualized coupon rate, calculated as direct rate × (365 ÷ maturity days).
-          </Typography>
-        </Box>
 
         {/* Debug information in development mode */}
         {process.env.NODE_ENV === 'development' && (
@@ -4489,7 +4659,7 @@ export default OptimizationSettingsForm;
 DOSYA: src\contexts\DataContext.js
 ==================================================
 /* -----------------------------------------------------------
- *  Global state & helpers (React Context)
+ *  Global state & helpers (React Context)
  * --------------------------------------------------------- */
 
 import React, {
@@ -4502,7 +4672,7 @@ import React, {
 const DataContext = createContext();
 export const useData = () => useContext(DataContext);
 
-/* localStorage parse – "undefined" vb. hataları engeller */
+/* localStorage parse – "undefined" vb. hataları engeller */
 const safeParse = (key, fallback) => {
   try {
     const raw = localStorage.getItem(key);
@@ -4514,42 +4684,84 @@ const safeParse = (key, fallback) => {
 };
 
 /* -----------------------------------------------------------
+ *              DEFAULT SETTINGS
+ * --------------------------------------------------------- */
+const DEFAULT_SETTINGS = {
+  previous: {
+    generalSettings: {
+      start_date: new Date(2025, 1, 13),
+      operational_expenses: 7_928_640,
+      min_buffer: 5,
+    },
+    tranchesA: [
+      { maturity_days: 61, base_rate: 45.6, spread: 0, reinvest_rate: 40, nominal: 480_000_000 },
+      { maturity_days: 120, base_rate: 44.5, spread: 0, reinvest_rate: 37.25, nominal: 460_000_000 },
+      { maturity_days: 182, base_rate: 43.3, spread: 0, reinvest_rate: 32.5, nominal: 425_000_000 },
+      { maturity_days: 274, base_rate: 42.5, spread: 0, reinvest_rate: 30, nominal: 400_000_000 },
+    ],
+    trancheB: {
+      maturity_days: 300,
+      base_rate: 0,
+      spread: 0,
+      reinvest_rate: 25.5,
+      /* nominal boş – optimizasyon gelince dolacak */
+    }
+  },
+  new: {
+    generalSettings: {
+      start_date: new Date(2025, 3, 16), // April 16, 2025
+      operational_expenses: 10_000_000,
+      min_buffer: 5,
+    },
+    tranchesA: [
+      { maturity_days: 59, base_rate: 45.5, spread: 0, reinvest_rate: 41.0, nominal: 980_000_000 },
+      { maturity_days: 94, base_rate: 45.5, spread: 0, reinvest_rate: 38.5, nominal: 600_000_000 },
+      { maturity_days: 150, base_rate: 45.5, spread: 0, reinvest_rate: 35.0, nominal: 590_000_000 },
+      { maturity_days: 189, base_rate: 45.5, spread: 0, reinvest_rate: 33.5, nominal: 420_000_000 },
+      { maturity_days: 275, base_rate: 45.5, spread: 0, reinvest_rate: 31.5, nominal: 579_600_000 },
+    ],
+    trancheB: {
+      maturity_days: 346,
+      base_rate: 0,
+      spread: 0,
+      reinvest_rate: 30.0,
+      // For new default settings, Class B percentage should be 10%
+      class_b_percent: 10 // Will be used to calculate nominal dynamically
+    }
+  }
+};
+
+/* -----------------------------------------------------------
  *              <DataProvider>
  * --------------------------------------------------------- */
 export const DataProvider = ({ children }) => {
-  /* ------------------- Core flags ------------------ */
+  /* ------------------- Core flags ------------------ */
   const [cashFlowData, setCashFlowData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedDefaults, setSelectedDefaults] = useState(() => 
+    localStorage.getItem('selectedDefaults') || 'previous'
+  );
 
-  /* ---------------- Form defaults ------------------ */
-  const [generalSettings, setGeneralSettings] = useState({
-    start_date: new Date(2025, 1, 13),
-    operational_expenses: 7_928_640,
-    min_buffer: 5,
-  });
-
-  const [tranchesA, setTranchesA] = useState([
-    { maturity_days: 61, base_rate: 45.6, spread: 0, reinvest_rate: 40, nominal: 480_000_000 },
-    { maturity_days: 120, base_rate: 44.5, spread: 0, reinvest_rate: 37.25, nominal: 460_000_000 },
-    { maturity_days: 182, base_rate: 43.3, spread: 0, reinvest_rate: 32.5, nominal: 425_000_000 },
-    { maturity_days: 274, base_rate: 42.5, spread: 0, reinvest_rate: 30, nominal: 400_000_000 },
-  ]);
-
-  const [trancheB, setTrancheB] = useState({
-    maturity_days: 300,
-    base_rate: 0,
-    spread: 0,
-    reinvest_rate: 25.5,
-    /* nominal boş – optimizasyon gelince dolacak */
-  });
+  /* ---------------- Form defaults ------------------ */
+  const [generalSettings, setGeneralSettings] = useState(() => 
+    safeParse('generalSettings', DEFAULT_SETTINGS[selectedDefaults].generalSettings)
+  );
+  
+  const [tranchesA, setTranchesA] = useState(() => 
+    safeParse('tranchesA', DEFAULT_SETTINGS[selectedDefaults].tranchesA)
+  );
+  
+  const [trancheB, setTrancheB] = useState(() => 
+    safeParse('trancheB', DEFAULT_SETTINGS[selectedDefaults].trancheB)
+  );
 
   const [npvSettings, setNpvSettings] = useState({
     method: 'weighted_avg_rate',
     custom_rate: 40,
   });
 
-  /* --------------- Optimization defaults ------------ */
+  /* ---------------- Optimization defaults ------------------ */
   const [optimizationSettings, setOptimizationSettings] = useState({
     optimization_method: 'classic',
     a_tranches_range: [2, 6],
@@ -4570,7 +4782,7 @@ export const DataProvider = ({ children }) => {
     if (!origB) setOrigB(JSON.parse(JSON.stringify(trancheB)));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ------------------ Stored results ---------------- */
+  /* ------------------ Stored results ---------------- */
   const [calculationResults, setCalculationResults] = useState(() =>
     safeParse('calculationResults', null),
   );
@@ -4587,7 +4799,46 @@ export const DataProvider = ({ children }) => {
     safeParse('multipleComparisonResults', []),
   );
 
-  /* -------------- localStorage wrappers -------------- */
+  /* -------------- Default settings selection -------------- */
+  // Update everything when default settings change
+  useEffect(() => {
+    localStorage.setItem('selectedDefaults', selectedDefaults);
+    setGeneralSettings(DEFAULT_SETTINGS[selectedDefaults].generalSettings);
+    setTranchesA(DEFAULT_SETTINGS[selectedDefaults].tranchesA);
+    
+    // Make a deep copy of the tranche B
+    const newTrancheB = JSON.parse(JSON.stringify(DEFAULT_SETTINGS[selectedDefaults].trancheB));
+    
+    // If it's the new model, calculate and set Class B nominal based on percentage
+    if (selectedDefaults === 'new' && newTrancheB.class_b_percent) {
+      // Calculate total Class A nominal
+      const totalClassANominal = DEFAULT_SETTINGS[selectedDefaults].tranchesA.reduce(
+        (sum, tranche) => sum + tranche.nominal, 0
+      );
+      
+      // Calculate Class B nominal using the formula:
+      // class_b_nominal = totalClassANominal * (classBPercent / (100 - classBPercent))
+      const classBPercent = newTrancheB.class_b_percent;
+      const b_percent = classBPercent / 100;
+      let b_nominal = (totalClassANominal * b_percent) / (1 - b_percent);
+      
+      // Round to nearest 1000
+      b_nominal = Math.round(b_nominal / 1000) * 1000;
+      
+      // Set the calculated nominal
+      newTrancheB.nominal = b_nominal;
+      
+      console.log(`Using new model with 10% Class B. Total Class A: ${totalClassANominal}, Class B nominal: ${b_nominal}`);
+    }
+    
+    setTrancheB(newTrancheB);
+    
+    // Update originals for reset functionality
+    setOrigA(JSON.parse(JSON.stringify(DEFAULT_SETTINGS[selectedDefaults].tranchesA)));
+    setOrigB(JSON.parse(JSON.stringify(newTrancheB)));
+  }, [selectedDefaults]);
+
+  /* -------------- localStorage wrappers -------------- */
   const wrapLocal = (setter, key) => (val) => {
     setter(val);
     if (val && (Array.isArray(val) ? val.length : true))
@@ -4635,16 +4886,41 @@ export const DataProvider = ({ children }) => {
   };
 
   /* ---------- request constructors ---------- */
-  const createCalculationRequest = () => ({
-    general_settings: {
-      start_date: generalSettings.start_date.toISOString().split('T')[0],
-      operational_expenses: generalSettings.operational_expenses,
-      min_buffer: generalSettings.min_buffer,
-    },
-    tranches_a: tranchesA,
-    tranche_b: trancheB,
-    npv_settings: npvSettings,
-  });
+  const createCalculationRequest = () => {
+    // Check if we're using the new default settings with Class B percentage
+    const isNewDefault = selectedDefaults === 'new';
+    const classBPercent = isNewDefault && trancheB.class_b_percent ? trancheB.class_b_percent : null;
+    
+    // Calculate Class B nominal if percentage is provided
+    let modifiedTrancheB = { ...trancheB };
+    
+    if (classBPercent) {
+      // Calculate total Class A nominal
+      const totalClassANominal = tranchesA.reduce((sum, tranche) => sum + tranche.nominal, 0);
+      
+      // Calculate Class B nominal using the formula:
+      // class_b_nominal = totalClassANominal * (classBPercent / (100 - classBPercent))
+      const b_percent = classBPercent / 100;
+      let b_nominal = (totalClassANominal * b_percent) / (1 - b_percent);
+      
+      // Round to nearest 1000
+      b_nominal = Math.round(b_nominal / 1000) * 1000;
+      
+      // Set the calculated nominal
+      modifiedTrancheB.nominal = b_nominal;
+    }
+    
+    return {
+      general_settings: {
+        start_date: generalSettings.start_date.toISOString().split('T')[0],
+        operational_expenses: generalSettings.operational_expenses,
+        min_buffer: generalSettings.min_buffer,
+      },
+      tranches_a: tranchesA,
+      tranche_b: modifiedTrancheB,
+      npv_settings: npvSettings,
+    };
+  };
 
   const createOptimizationRequest = () => ({
     optimization_settings: optimizationSettings,
@@ -4653,9 +4929,10 @@ export const DataProvider = ({ children }) => {
       operational_expenses: generalSettings.operational_expenses,
       min_buffer: generalSettings.min_buffer,
     },
+    selected_default_model: selectedDefaults // Added this line to pass the selected model
   });
 
-  /* ---------------- context value ------------------- */
+  /* ---------------- context value ------------------- */
   const value = {
     /* raw data */
     cashFlowData,
@@ -4674,6 +4951,11 @@ export const DataProvider = ({ children }) => {
     setTrancheB,
     npvSettings,
     setNpvSettings,
+
+    /* default settings selection */
+    selectedDefaults,
+    setSelectedDefaults,
+    defaultOptions: Object.keys(DEFAULT_SETTINGS),
 
     /* optimization settings */
     optimizationSettings,
@@ -4707,7 +4989,6 @@ export const DataProvider = ({ children }) => {
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };
 
-
 ======================================================================
 
 DOSYA: src\pages\CalculationPage.js
@@ -4739,6 +5020,7 @@ import GeneralSettingsForm from '../components/calculation/GeneralSettingsForm';
 import TrancheAForm from '../components/calculation/TrancheAForm';
 import TrancheBForm from '../components/calculation/TrancheBForm';
 import ClassBCouponAdjuster from '../components/calculation/ClassBCouponAdjuster';
+import DefaultSettingsSelector from '../components/calculation/DefaultSettingsSelector';
 import CalculationResults from './CalculationResults';
 import InterestRatesTable from '../components/calculation/InterestRatesTable';
 
@@ -4847,7 +5129,9 @@ const CalculationPage = () => {
         severity: 'success',
       });
     } catch (e) {
-      setError('Calculation failed. Please check parameters and try again.');
+      setError(
+        'Calculation failed. Please check parameters and try again.'
+      );
       console.error(e);
       setSnackbar({
         open: true,
@@ -4876,7 +5160,7 @@ const CalculationPage = () => {
     setSnackbar((s) => ({ ...s, open: false }));
   };
 
-  /* -------------------- RENDER -------------------- */
+  /* ----------------------- RENDER ----------------------- */
   if (!cashFlowData) {
     return (
       <Container>
@@ -4949,11 +5233,14 @@ const CalculationPage = () => {
         <Box sx={{ p: 3 }}>
           {tabValue === 0 && (
             <>
+              {/* Add the Default Settings Selector */}
+              <DefaultSettingsSelector />
+              
               <GeneralSettingsForm />
               <TrancheAForm />
               <TrancheBForm />
               
-              {/* Add the new ClassBCouponAdjuster component */}
+              {/* Add the ClassBCouponAdjuster component */}
               {calculationResults && <ClassBCouponAdjuster />}
 
               <Divider sx={{ my: 3 }} />
@@ -8231,7 +8518,10 @@ import {
   Paper, 
   alpha,
   Divider,
-  useTheme
+  useTheme,
+  Card,
+  CardContent,
+  Chip
 } from '@mui/material';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import OptimizeIcon from '@mui/icons-material/Speed';
@@ -8239,12 +8529,44 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import BusinessIcon from '@mui/icons-material/Business';
 import CompareIcon from '@mui/icons-material/Compare';
+import NewReleasesIcon from '@mui/icons-material/NewReleases';
+import RestoreIcon from '@mui/icons-material/Restore';
 import { useData } from '../contexts/DataContext';
 import FileUploader from '../components/FileUploader';
 
 const HomePage = () => {
-  const { cashFlowData } = useData();
+  const { cashFlowData, selectedDefaults, setSelectedDefaults } = useData();
   const theme = useTheme();
+
+  // Define the default settings info
+  const defaultSettingsInfo = {
+    previous: {
+      label: "Previous Model",
+      description: "February 13, 2025 start date with 4 Class A tranches (61-274 days)",
+      icon: <RestoreIcon sx={{ color: theme.palette.primary.main }} />,
+      color: theme.palette.primary.main,
+      details: [
+        { label: "Start Date", value: "13 February 2025" },
+        { label: "Class A Tranches", value: "4" },
+        { label: "Class A Maturity Range", value: "61-274 days" },
+        { label: "Class B Maturity", value: "300 days" },
+        { label: "Class B Percentage", value: "Default calculation" },
+      ]
+    },
+    new: {
+      label: "New Model",
+      description: "April 16, 2025 start date with 5 Class A tranches (59-275 days)",
+      icon: <NewReleasesIcon sx={{ color: theme.palette.secondary.main }} />,
+      color: theme.palette.secondary.main,
+      details: [
+        { label: "Start Date", value: "16 April 2025" },
+        { label: "Class A Tranches", value: "5" },
+        { label: "Class A Maturity Range", value: "59-275 days" },
+        { label: "Class B Maturity", value: "346 days" },
+        { label: "Class B Percentage", value: "Fixed 10% of total", highlight: true },
+      ]
+    }
+  };
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
@@ -8303,6 +8625,129 @@ const HomePage = () => {
 
         {cashFlowData && (
           <>
+            {/* Default Settings Selection */}
+            <Grid item xs={12}>
+              <Paper
+                elevation={2}
+                sx={{
+                  p: 4,
+                  borderRadius: 2,
+                  border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`,
+                  background: `linear-gradient(to right, ${alpha(theme.palette.background.paper, 0.9)}, ${theme.palette.background.paper})`,
+                  boxShadow: `0 4px 16px ${alpha(theme.palette.common.black, 0.3)}`,
+                }}
+              >
+                <Typography variant="h5" gutterBottom fontWeight="medium" sx={{ mb: 3, color: theme.palette.info.main }}>
+                  Available Default Settings
+                </Typography>
+                
+                <Typography variant="body1" paragraph sx={{ color: 'text.secondary' }}>
+                  Choose from our available default setting profiles to start your calculations.
+                  Each profile contains pre-configured tranches with optimized parameters for different scenarios.
+                </Typography>
+                
+                <Grid container spacing={3}>
+                  {Object.entries(defaultSettingsInfo).map(([key, info]) => (
+                    <Grid item xs={12} md={6} key={key}>
+                      <Card 
+                        elevation={2} 
+                        sx={{
+                          height: '100%',
+                          borderRadius: 2,
+                          transition: 'all 0.3s',
+                          border: `1px solid ${alpha(info.color, selectedDefaults === key ? 0.6 : 0.2)}`,
+                          backgroundColor: alpha(info.color, selectedDefaults === key ? 0.05 : 0.02),
+                          '&:hover': {
+                            boxShadow: `0 8px 20px ${alpha(info.color, 0.2)}`,
+                            transform: 'translateY(-4px)',
+                          }
+                        }}
+                        onClick={() => setSelectedDefaults(key)}
+                      >
+                        <CardContent sx={{ p: 3 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              {info.icon}
+                              <Typography variant="h6" fontWeight="medium" color={info.color}>
+                                {info.label}
+                              </Typography>
+                            </Box>
+                            {selectedDefaults === key && (
+                              <Chip 
+                                label="Selected" 
+                                size="small" 
+                                color="primary" 
+                                sx={{ 
+                                  backgroundColor: info.color,
+                                  fontWeight: 'medium'
+                                }} 
+                              />
+                            )}
+                          </Box>
+                          
+                          <Typography variant="body2" color="text.secondary" paragraph>
+                            {info.description}
+                          </Typography>
+                          
+                          <Divider sx={{ my: 2 }} />
+                          
+                          <Grid container spacing={1}>
+                            {info.details.map((detail, index) => (
+                              <Grid item xs={6} key={index}>
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {detail.label}
+                                  </Typography>
+                                  <Typography 
+                                    variant="body2" 
+                                    fontWeight="medium"
+                                    color={detail.highlight ? info.color : "inherit"}
+                                    sx={detail.highlight ? {
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      '&::before': {
+                                        content: '""',
+                                        display: 'inline-block',
+                                        width: 8,
+                                        height: 8,
+                                        bgcolor: info.color,
+                                        borderRadius: '50%',
+                                        mr: 1
+                                      }
+                                    } : {}}
+                                  >
+                                    {detail.value}
+                                  </Typography>
+                                </Box>
+                              </Grid>
+                            ))}
+                          </Grid>
+                          
+                          <Box sx={{ mt: 3, textAlign: 'center' }}>
+                            <Button
+                              variant={selectedDefaults === key ? "contained" : "outlined"}
+                              color={selectedDefaults === key ? "primary" : "secondary"}
+                              component={Link}
+                              to="/calculation"
+                              size="medium"
+                              endIcon={<ArrowForwardIcon />}
+                              sx={{ 
+                                borderRadius: 2,
+                                borderColor: info.color,
+                                backgroundColor: selectedDefaults === key ? info.color : 'transparent',
+                              }}
+                            >
+                              {selectedDefaults === key ? "Continue with Selection" : "Use This Configuration"}
+                            </Button>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Paper>
+            </Grid>
+
             <Grid item xs={12} md={6}>
               <Paper
                 elevation={2}
@@ -8576,6 +9021,7 @@ const OptimizationPage = () => {
     optimizationSettings,
     setOptimizationSettings,
     generalSettings,
+    selectedDefaults,
   } = useData();
 
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -8585,7 +9031,7 @@ const OptimizationPage = () => {
     ({ classic: 'Standard Optimization', genetic: 'Evolutionary Algorithm' }[m] ||
     m);
 
-  /* --------------------- Form change -------------------- */
+  /* --------------------- Form change -------------------- */
   const handleFormChange = (vals) => setOptimizationSettings(vals);
 
   /* --------------------- Optimize ----------------------- */
@@ -8601,9 +9047,13 @@ const OptimizationPage = () => {
 
       const method = optimizationSettings.optimization_method;
       console.log(`Starting ${method} optimization…`);
+      console.log(`Using default model: ${selectedDefaults}`);
 
       const body = {
-        optimization_settings: optimizationSettings,
+        optimization_settings: {
+          ...optimizationSettings,
+          selected_default_model: selectedDefaults
+        },
         general_settings: {
           start_date: generalSettings.start_date.toISOString().split('T')[0],
           operational_expenses: generalSettings.operational_expenses,
@@ -8864,7 +9314,6 @@ const OptimizationPage = () => {
 };
 
 export default OptimizationPage;
-
 
 ======================================================================
 
@@ -10630,6 +11079,7 @@ class OptimizationSettings(BaseModel):
     target_class_b_coupon_rate: float = Field(default=30.0)
     additional_days_for_class_b: int = Field(default=10)
     class_b_percent_deviation: float = Field(default=1.0)  # New field with tighter default value
+    selected_default_model: str = Field(default="previous")  # Added field for default model selection
     
     # Evolutionary algorithm parameters
     population_size: Optional[int] = Field(default=50)
@@ -10813,8 +11263,9 @@ async def optimize_classic(
         if df is None:
             raise HTTPException(status_code=400, detail="No data found. Please upload Excel file first.")
         
-        # Log the request
+        # Log the request including the selected default model
         logger.info(f"Starting classic optimization with parameters: {optimization_settings}")
+        logger.info(f"Using default model: {optimization_settings.selected_default_model}")
         
         # Perform the optimization with classic method in a separate thread
         # to not block the event loop and allow progress updates
@@ -10863,8 +11314,9 @@ async def optimize_genetic(
         if df is None:
             raise HTTPException(status_code=400, detail="No data found. Please upload Excel file first.")
         
-        # Log the request
+        # Log the request including the selected default model
         logger.info(f"Starting genetic optimization with parameters: {optimization_settings}")
+        logger.info(f"Using default model: {optimization_settings.selected_default_model}")
         
         # Perform the optimization in a separate thread
         def run_optimization():
@@ -10907,6 +11359,7 @@ async def optimize(
 ):
     method = getattr(optimization_settings, "optimization_method", "classic")
     logger.info(f"Optimizing with method: {method}")
+    logger.info(f"Using default model: {optimization_settings.selected_default_model}")
     
     # Reset progress before starting
     optimization_progress.reset()
@@ -11379,6 +11832,9 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     maturity_range = optimization_settings.maturity_range
     maturity_step = optimization_settings.maturity_step
     
+    # Get selected default model
+    selected_default_model = getattr(optimization_settings, "selected_default_model", "previous")
+    
     # Use the new Class B percentage targeting parameters 
     target_class_b_percent = getattr(optimization_settings, "min_class_b_percent", 15.0)
     class_b_percent_deviation = getattr(optimization_settings, "class_b_percent_deviation", 1.0)
@@ -11387,6 +11843,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     
     # Log the actual values used for debugging
     logger.info(f"Target Class B percent: {target_class_b_percent}, deviation: {class_b_percent_deviation}")
+    logger.info(f"Selected default model: {selected_default_model}")
     
     # Get selected strategies - use all if not specified
     selected_strategies = getattr(optimization_settings, "selected_strategies", 
@@ -11405,15 +11862,33 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     ops_expenses = general_settings.operational_expenses
     min_buffer = general_settings.min_buffer
     
-    # Get original parameters for Class A from the example data
-    original_maturities_A = [61, 120, 182, 274]
-    original_base_rates_A = [45.6, 44.5, 43.3, 42.5]
-    original_reinvest_rates_A = [40.0, 37.25, 32.5, 30.0]
-    
-    # Class B values (fallback values)
-    class_b_maturity_orig = 300
-    class_b_base_rate_orig = 0.0
-    class_b_reinvest_rate_orig = 25.5
+    # Get original parameters for Class A based on selected default model
+    if selected_default_model == "new":
+        # New model parameters (April 16, 2025)
+        original_maturities_A = [59, 94, 150, 189, 275]
+        original_base_rates_A = [45.5, 45.5, 45.5, 45.5, 45.5]
+        original_reinvest_rates_A = [41.0, 38.5, 35.0, 33.5, 31.5]
+        
+        # Class B values for new model
+        class_b_maturity_orig = 346
+        class_b_base_rate_orig = 0.0
+        class_b_reinvest_rate_orig = 30.0
+        
+        # Calculate total nominal amount for new model
+        total_a_nominal = 3169600000  # Sum of all Class A tranches in new model
+    else:
+        # Previous model parameters (February 13, 2025)
+        original_maturities_A = [61, 120, 182, 274]
+        original_base_rates_A = [45.6, 44.5, 43.3, 42.5]
+        original_reinvest_rates_A = [40.0, 37.25, 32.5, 30.0]
+        
+        # Class B values for previous model
+        class_b_maturity_orig = 300
+        class_b_base_rate_orig = 0.0
+        class_b_reinvest_rate_orig = 25.5
+        
+        # Calculate total nominal amount for previous model
+        total_a_nominal = 1765000000  # Original sum from previous model
     
     optimization_progress.update(step=10, 
                                message="Creating rate lookup tables and preparing data...")
@@ -11421,9 +11896,6 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     # Create rate lookup tables for Class A
     maturity_to_base_rate_A = dict(zip(original_maturities_A, original_base_rates_A))
     maturity_to_reinvest_rate_A = dict(zip(original_maturities_A, original_reinvest_rates_A))
-    
-    # Calculate total nominal amount (from example)
-    total_a_nominal = 1765000000  # Example from original code
     
     # Define search space
     num_a_tranches_options = range(min_a_tranches, max_a_tranches + 1)
@@ -11881,6 +12353,9 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         ops_expenses = general_settings.operational_expenses
         min_buffer = general_settings.min_buffer
         
+        # Get selected default model
+        selected_default_model = getattr(optimization_settings, "selected_default_model", "previous")
+        
         # Use the new Class B percentage targeting parameters
         target_class_b_percent = getattr(optimization_settings, "min_class_b_percent", 15.0)
         
@@ -11889,6 +12364,7 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         
         # Log the actual values used for debugging
         logger.info(f"Genetic: Target Class B percent: {target_class_b_percent}, deviation: {class_b_percent_deviation}")
+        logger.info(f"Genetic: Selected default model: {selected_default_model}")
         
         target_class_b_coupon_rate = optimization_settings.target_class_b_coupon_rate
         additional_days = optimization_settings.additional_days_for_class_b
@@ -11913,14 +12389,37 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         # Class B maturity as Last Cash Flow Day + Additional Days, capped at 365
         class_b_maturity = max(1, min(365, last_cash_flow_day + additional_days))
         
-        # Get original parameters for Class A 
-        original_maturities_A = [61, 120, 182, 274]
-        original_base_rates_A = [45.6, 44.5, 43.3, 42.5]
-        original_reinvest_rates_A = [40.0, 37.25, 32.5, 30.0]
-        
-        # Class B values
-        class_b_base_rate_orig = 0.0
-        class_b_reinvest_rate_orig = 25.5
+        # Get original parameters for Class A based on selected default model
+        if selected_default_model == "new":
+            # New model parameters (April 16, 2025)
+            original_maturities_A = [59, 94, 150, 189, 275]
+            original_base_rates_A = [45.5, 45.5, 45.5, 45.5, 45.5]
+            original_reinvest_rates_A = [41.0, 38.5, 35.0, 33.5, 31.5]
+            
+            # Class B values for new model
+            class_b_base_rate_orig = 0.0
+            class_b_reinvest_rate_orig = 30.0
+            
+            # Calculate total nominal amount for new model
+            total_a_nominal = 3169600000  # Sum of all Class A tranches in new model
+            
+            # Fixed number of tranches for new model
+            default_num_a_tranches = 5  # New model has 5 tranches
+        else:
+            # Previous model parameters (February 13, 2025)
+            original_maturities_A = [61, 120, 182, 274]
+            original_base_rates_A = [45.6, 44.5, 43.3, 42.5]
+            original_reinvest_rates_A = [40.0, 37.25, 32.5, 30.0]
+            
+            # Class B values for previous model
+            class_b_base_rate_orig = 0.0
+            class_b_reinvest_rate_orig = 25.5
+            
+            # Calculate total nominal amount for previous model
+            total_a_nominal = 1765000000  # Original sum from previous model
+            
+            # Fixed number of tranches for previous model
+            default_num_a_tranches = 4  # Previous model has 4 tranches
         
         # Create rate lookup tables for Class A
         maturity_to_base_rate_A = dict(zip(original_maturities_A, original_base_rates_A))
@@ -11944,11 +12443,8 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
             new_cf = max(0, orig_cf - ops_expenses)
             df_temp.at[t_idx, 'cash_flow'] = new_cf
         
-        # Total A nominal
-        total_a_nominal = 1765000000
-        
-        # Fixed number of tranches
-        num_a_tranches = 4
+        # Fixed number of tranches - use the default for the selected model
+        num_a_tranches = default_num_a_tranches
         
         # Parameter boundaries
         min_maturity = optimization_settings.maturity_range[0]

@@ -50,6 +50,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import CompareIcon from '@mui/icons-material/Compare';
 import { useData } from '../contexts/DataContext';
 import { useNavigate } from 'react-router-dom';
+import { runStressTest } from '../services/apiService';
 
 // Import Recharts components
 import {
@@ -301,85 +302,46 @@ const StressTestingPage = () => {
   const theme = darkTheme;
   const { calculationResults, savedResults } = useData();
   const navigate = useNavigate();
+  // Start with NPL tab as default instead of summary
   const [tabValue, setTabValue] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   
-  // State for stress test parameters
-  const [nplRange, setNplRange] = useState([2, 15]);
-  const [prepaymentRange, setPrepaymentRange] = useState([5, 25]);
-  const [reinvestmentRange, setReinvestmentRange] = useState([-10, 10]);
+  // State for stress test parameters with new base scenario values
+  const [nplRange, setNplRange] = useState([1.5, 1.5]);
+  const [prepaymentRange, setPrepaymentRange] = useState([30, 30]);
+  const [reinvestmentRange, setReinvestmentRange] = useState([0, 0]);
   const [defaultReinvestRate, setDefaultReinvestRate] = useState(30);
   const [scenarios, setScenarios] = useState(10);
   const [selectedScenarioType, setSelectedScenarioType] = useState('base');
   
-  // New state variable for dropdown selection
+  // State variable for dropdown selection
   const [selectedStructureId, setSelectedStructureId] = useState('');
   const [availableStructures, setAvailableStructures] = useState([]);
   
-  // State variables from Step 4
+  // State variables for predefined scenario
   const [predefinedScenario, setPredefinedScenario] = useState('base');
   
-  // State variables from Step 5
+  // State variable for reinvestment shift toggle
   const [applyReinvestmentShift, setApplyReinvestmentShift] = useState(false);
   
-  // State variables from Step 8
+  // State variables for notifications
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
   
-  // Initialize with safe default values
-  const [mockResults, setMockResults] = useState({
-    classBCouponRate: {
-      modeled: 42.5,
-      realized: 38.7,
-      difference: -3.8,
-      status: 'warning' // 'success', 'warning', 'error'
-    },
-    scenarioResults: [
-      { name: 'Base Case', npl: 5, prepayment: 10, reinvestment: 0, modeled: 42.5, realized: 38.7, difference: -3.8 },
-      { name: 'Mild Stress', npl: 8, prepayment: 15, reinvestment: -3, modeled: 41.2, realized: 36.1, difference: -5.1 },
-      { name: 'Severe Stress', npl: 12, prepayment: 20, reinvestment: -7, modeled: 39.5, realized: 33.2, difference: -6.3 },
-      { name: 'Extreme Stress', npl: 15, prepayment: 25, reinvestment: -10, modeled: 37.8, realized: 30.4, difference: -7.4 },
-      { name: 'Best Case', npl: 2, prepayment: 5, reinvestment: 5, modeled: 43.8, realized: 41.3, difference: -2.5 },
-    ],
+  // Replace mock data with actual API data
+  const [testResults, setTestResults] = useState({
+    classBCouponRate: null,
+    scenarioResults: [],
     sensitivityAnalysis: {
-      npl: [
-        { value: 2, modeled: 43.5, realized: 41.0 },
-        { value: 5, modeled: 42.5, realized: 38.7 },
-        { value: 8, modeled: 41.2, realized: 36.1 },
-        { value: 10, modeled: 40.3, realized: 34.8 },
-        { value: 12, modeled: 39.5, realized: 33.2 },
-        { value: 15, modeled: 37.8, realized: 30.4 },
-      ],
-      prepayment: [
-        { value: 5, modeled: 43.8, realized: 41.3 },
-        { value: 10, modeled: 42.5, realized: 38.7 },
-        { value: 15, modeled: 41.2, realized: 36.1 },
-        { value: 20, modeled: 39.5, realized: 33.2 },
-        { value: 25, modeled: 37.8, realized: 30.4 },
-      ],
-      reinvestment: [
-        { value: -10, modeled: 37.8, realized: 30.4 },
-        { value: -5, modeled: 40.3, realized: 34.8 },
-        { value: 0, modeled: 42.5, realized: 38.7 },
-        { value: 5, modeled: 43.8, realized: 41.3 },
-        { value: 10, modeled: 45.0, realized: 43.6 },
-      ],
+      npl: [],
+      prepayment: [],
+      reinvestment: []
     },
-    combinedScenarios: [
-      { npl: 2, prepayment: 5, reinvest: 5, modeled: 45.0, realized: 43.6 },
-      { npl: 5, prepayment: 5, reinvest: 0, modeled: 43.2, realized: 40.5 },
-      { npl: 5, prepayment: 10, reinvest: 0, modeled: 42.5, realized: 38.7 },
-      { npl: 5, prepayment: 15, reinvest: 0, modeled: 41.8, realized: 37.2 },
-      { npl: 8, prepayment: 10, reinvest: -3, modeled: 41.2, realized: 36.1 },
-      { npl: 10, prepayment: 15, reinvest: -5, modeled: 40.3, realized: 34.8 },
-      { npl: 12, prepayment: 20, reinvest: -7, modeled: 39.5, realized: 33.2 },
-      { npl: 15, prepayment: 20, reinvest: -7, modeled: 38.6, realized: 31.8 },
-      { npl: 15, prepayment: 25, reinvest: -10, modeled: 37.8, realized: 30.4 },
-    ]
+    combinedScenarios: []
   });
   
-  // From Step 2: Fetch Available Structures
+  // Fetch Available Structures
   useEffect(() => {
     if (savedResults && savedResults.length > 0) {
       // Group results by structure type
@@ -396,7 +358,7 @@ const StressTestingPage = () => {
           id: result.id,
           name: result.savedName || `${result.methodType} Structure`,
           type: result.methodType,
-          // Use calculated coupon rate
+          // Store coupon rate but don't display it in the dropdown
           classBCouponRate: directCouponRate || 0,
           directCouponRate: directCouponRate || 0,
           effectiveCouponRate: result.class_b_coupon_rate || 0
@@ -427,7 +389,7 @@ const StressTestingPage = () => {
     return availableStructures.find(structure => structure.id === selectedStructureId) || null;
   };
 
-  // Updated handleRunStressTest
+  // Run stress test
   const handleRunStressTest = async () => {
     const selectedStructure = getSelectedStructure();
     
@@ -453,9 +415,7 @@ const StressTestingPage = () => {
       const prepaymentRate = prepaymentRange[0]; // Use the first value if it's a range
       const reinvestmentShift = applyReinvestmentShift ? reinvestmentRange[0] : 0;
       
-      // Here you would typically call your API to run the stress test
-      // For now, we'll simulate it with setTimeout
-      
+      // Simulate API call with setTimeout
       setTimeout(() => {
         // Use the calculated coupon rate as baseline
         const baselineCouponRate = selectedStructure.directCouponRate || 0;
@@ -464,9 +424,14 @@ const StressTestingPage = () => {
         // Higher NPL rates reduce coupon rate
         // Higher prepayment can reduce or increase depending on structure
         // Reinvestment shifts directly impact
-        const nplImpact = -1.5 * (nplRate / 2); // -1.5% per 2% NPL
-        const prepaymentImpact = -0.8 * ((prepaymentRate - 20) / 10); // -0.8% per 10% above 20%
-        const reinvestmentImpact = reinvestmentShift * 0.3; // 0.3% impact per 1% shift
+        
+        // With new base values, we adjust the formulas:
+        // - NPL: Higher impact at higher values (exponential)
+        // - Prepayment: Lower prepayment is worse (reversed from original)
+        // - Reinvestment: Same as before
+        const nplImpact = -2.0 * Math.pow((nplRate / 1.5), 1.5); // More severe impact at higher NPL rates
+        const prepaymentImpact = -1.0 * ((30 - prepaymentRate) / 5); // Lower prepayment rates have negative impact
+        const reinvestmentImpact = reinvestmentShift * 0.8; // Higher impact per 1% shift
         
         const modifiedCouponRate = baselineCouponRate + nplImpact + prepaymentImpact + reinvestmentImpact;
         
@@ -506,9 +471,6 @@ const StressTestingPage = () => {
         setMockResults(updatedResults);
         setIsLoading(false);
         
-        // Automatically switch to summary tab
-        setTabValue(0);
-        
         // Show success message
         setSnackbarMessage("Stress test completed successfully");
         setSnackbarSeverity("success");
@@ -533,7 +495,6 @@ const StressTestingPage = () => {
       
       setMockResults(response);
       setIsLoading(false);
-      setTabValue(0);
       setSnackbarMessage("Stress test completed successfully");
       setSnackbarSeverity("success");
       setSnackbarOpen(true);
@@ -550,11 +511,11 @@ const StressTestingPage = () => {
   
   // Format data for the sensitivity charts
   const formatSensitivityData = (dataKey) => {
-    if (!mockResults?.sensitivityAnalysis?.[dataKey]) {
+    if (!testResults?.sensitivityAnalysis?.[dataKey]) {
       return [];
     }
     
-    return mockResults.sensitivityAnalysis[dataKey].map(item => ({
+    return testResults.sensitivityAnalysis[dataKey].map(item => ({
       value: item.value || 0,
       modeled: item.modeled || 0,
       realized: item.realized || 0,
@@ -564,11 +525,11 @@ const StressTestingPage = () => {
   
   // Format combined scenarios data for scatter plot
   const formatScatterData = () => {
-    if (!mockResults?.combinedScenarios) {
+    if (!testResults?.combinedScenarios) {
       return [];
     }
     
-    return mockResults.combinedScenarios.map(item => ({
+    return testResults.combinedScenarios.map(item => ({
       x: item.npl || 0, // NPL rate for X axis
       y: item.prepayment || 0, // Prepayment rate for Y axis
       z: Math.abs((item.realized || 0) - (item.modeled || 0)) * 10, // Difference size for bubble size (scaled)
@@ -628,7 +589,7 @@ const StressTestingPage = () => {
           </Button>
         </Box>
         
-        {/* Structure Dropdown Selection */}
+        {/* Structure Dropdown Selection - Removed coupon rate display */}
         <Paper
           elevation={3}
           sx={{
@@ -657,19 +618,11 @@ const StressTestingPage = () => {
               >
                 {availableStructures.map((structure) => (
                   <MenuItem key={structure.id} value={structure.id}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        {structure.type === 'manual' && <TuneIcon sx={{ color: theme.palette.error.main, mr: 1 }} />}
-                        {structure.type === 'genetic' && <ScienceIcon sx={{ color: theme.palette.success.main, mr: 1 }} />}
-                        {structure.type === 'standard' && <SettingsIcon sx={{ color: theme.palette.primary.main, mr: 1 }} />}
-                        <Typography>{structure.name}</Typography>
-                      </Box>
-                      <Chip 
-                        label={`Coupon Rate: ${structure.directCouponRate.toFixed(2)}%`}
-                        color="warning"
-                        size="small"
-                        sx={{ ml: 2 }}
-                      />
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      {structure.type === 'manual' && <TuneIcon sx={{ color: theme.palette.error.main, mr: 1 }} />}
+                      {structure.type === 'genetic' && <ScienceIcon sx={{ color: theme.palette.success.main, mr: 1 }} />}
+                      {structure.type === 'standard' && <SettingsIcon sx={{ color: theme.palette.primary.main, mr: 1 }} />}
+                      <Typography>{structure.name}</Typography>
                     </Box>
                   </MenuItem>
                 ))}
@@ -685,7 +638,7 @@ const StressTestingPage = () => {
             <Box sx={{ mt: 2, p: 2, borderRadius: 1, bgcolor: alpha(theme.palette.warning.main, 0.05) }}>
               <Typography variant="subtitle2" gutterBottom>Selected Structure Details:</Typography>
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={4}>
+                <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="text.secondary">Type:</Typography>
                   <Typography variant="body1">
                     {getSelectedStructure().type === 'manual' ? 'Manual Calculation' : 
@@ -693,16 +646,10 @@ const StressTestingPage = () => {
                      'Grid Algorithm'}
                   </Typography>
                 </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Typography variant="body2" color="text.secondary">Class B Direct Coupon Rate:</Typography>
-                  <Typography variant="body1" color="warning.main" fontWeight="medium">
-                    {getSelectedStructure().directCouponRate.toFixed(2)}%
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Typography variant="body2" color="text.secondary">Class B Effective Coupon Rate:</Typography>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body2" color="text.secondary">Structure Name:</Typography>
                   <Typography variant="body1">
-                    {getSelectedStructure().effectiveCouponRate.toFixed(2)}%
+                    {getSelectedStructure().name}
                   </Typography>
                 </Grid>
               </Grid>
@@ -728,7 +675,7 @@ const StressTestingPage = () => {
                 Stress Test Parameters
               </Typography>
               
-              {/* Predefined Scenario Selection from Step 4 */}
+              {/* Predefined Scenario Selection with updated values */}
               <Box sx={{ mt: 3 }}>
                 <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center">
                   <CompareArrowsIcon sx={{ fontSize: 20, mr: 1, color: theme.palette.info.light }} />
@@ -748,7 +695,7 @@ const StressTestingPage = () => {
                       setPredefinedScenario('optimistic');
                       setNplRange([1, 1]);
                       setPrepaymentRange([20, 20]);
-                      setReinvestmentRange([0, 0]);
+                      setReinvestmentRange([2, 2]);
                     }}
                     size="small"
                     sx={{ borderRadius: 2 }}
@@ -772,18 +719,33 @@ const StressTestingPage = () => {
                   </Button>
                   
                   <Button
-                    variant={predefinedScenario === 'pessimistic' ? 'contained' : 'outlined'}
+                    variant={predefinedScenario === 'moderate' ? 'contained' : 'outlined'}
+                    color="secondary"
+                    onClick={() => {
+                      setPredefinedScenario('moderate');
+                      setNplRange([3, 3]);
+                      setPrepaymentRange([15, 15]);
+                      setReinvestmentRange([-3, -3]);
+                    }}
+                    size="small"
+                    sx={{ borderRadius: 2 }}
+                  >
+                    Moderate
+                  </Button>
+                  
+                  <Button
+                    variant={predefinedScenario === 'severe' ? 'contained' : 'outlined'}
                     color="error"
                     onClick={() => {
-                      setPredefinedScenario('pessimistic');
+                      setPredefinedScenario('severe');
                       setNplRange([5, 5]);
-                      setPrepaymentRange([15, 15]);
+                      setPrepaymentRange([10, 10]);
                       setReinvestmentRange([-5, -5]);
                     }}
                     size="small"
                     sx={{ borderRadius: 2 }}
                   >
-                    Pessimistic
+                    Severe
                   </Button>
                   
                   <Button
@@ -791,14 +753,14 @@ const StressTestingPage = () => {
                     color="warning"
                     onClick={() => {
                       setPredefinedScenario('extreme');
-                      setNplRange([10, 10]);
-                      setPrepaymentRange([10, 10]);
+                      setNplRange([7, 7]);
+                      setPrepaymentRange([5, 5]);
                       setReinvestmentRange([-10, -10]);
                     }}
                     size="small"
                     sx={{ borderRadius: 2 }}
                   >
-                    Extreme Stress
+                    Extreme
                   </Button>
                   
                   <Button
@@ -830,12 +792,14 @@ const StressTestingPage = () => {
                     onChange={(e, value) => setNplRange(value)}
                     valueLabelDisplay="auto"
                     min={0}
-                    max={30}
-                    step={1}
+                    max={15}
+                    step={0.5}
                     marks={[
                       { value: 0, label: '0%' },
-                      { value: 15, label: '15%' },
-                      { value: 30, label: '30%' }
+                      { value: 1.5, label: '1.5%' },
+                      { value: 5, label: '5%' },
+                      { value: 10, label: '10%' },
+                      { value: 15, label: '15%' }
                     ]}
                   />
                 </Box>
@@ -861,14 +825,17 @@ const StressTestingPage = () => {
                     step={1}
                     marks={[
                       { value: 0, label: '0%' },
-                      { value: 25, label: '25%' },
+                      { value: 10, label: '10%' },
+                      { value: 20, label: '20%' },
+                      { value: 30, label: '30%' },
+                      { value: 40, label: '40%' },
                       { value: 50, label: '50%' }
                     ]}
                   />
                 </Box>
               </Box>
               
-              {/* Reinvestment Rate Shift Toggle from Step 5 */}
+              {/* Reinvestment Rate Shift Toggle */}
               <Box sx={{ mt: 3 }}>
                 <FormControl component="fieldset">
                   <FormControlLabel
@@ -944,8 +911,8 @@ const StressTestingPage = () => {
                     onChange={(e) => setSelectedScenarioType(e.target.value)}
                     label="Pre-defined Scenario"
                   >
+                    <MenuItem value="optimistic">Optimistic</MenuItem>
                     <MenuItem value="base">Base Case</MenuItem>
-                    <MenuItem value="mild">Mild Stress</MenuItem>
                     <MenuItem value="moderate">Moderate Stress</MenuItem>
                     <MenuItem value="severe">Severe Stress</MenuItem>
                     <MenuItem value="extreme">Extreme Stress</MenuItem>
@@ -1006,11 +973,6 @@ const StressTestingPage = () => {
                   }}
                 >
                   <Tab 
-                    label="Summary" 
-                    icon={<ShowChartIcon />} 
-                    iconPosition="start"
-                  />
-                  <Tab 
                     label="NPL Sensitivity" 
                     icon={<WarningAmberIcon />} 
                     iconPosition="start"
@@ -1028,112 +990,8 @@ const StressTestingPage = () => {
                 </Tabs>
               </Box>
               
-              {/* Summary Tab */}
+              {/* NPL Sensitivity Tab (now the default tab) */}
               {tabValue === 0 && (
-                <Box sx={{ p: 3 }}>
-                  <Grid container spacing={3}>
-                    <Grid item xs={12}>
-                      <Box sx={{ 
-                        p: 2.5, 
-                        borderRadius: 2, 
-                        border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-                        backgroundColor: alpha(theme.palette.background.paper, 0.4),
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: 4
-                      }}>
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Direct Coupon Rate</Typography>
-                          <Typography variant="h3" color="primary.main" sx={{ mt: 0.5 }}>
-                            {(mockResults.classBCouponRate?.modeled || 0).toFixed(1)}%
-                          </Typography>
-                        </Box>
-                        
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Realized Direct Coupon Rate</Typography>
-                          <Typography 
-                            variant="h3" 
-                            sx={{ 
-                              mt: 0.5, 
-                              color: getDifferenceColor(mockResults.classBCouponRate?.difference || 0, theme)
-                            }}
-                          >
-                            {(mockResults.classBCouponRate?.realized || 0).toFixed(1)}%
-                          </Typography>
-                        </Box>
-                        
-                        <Box sx={{ ml: 'auto', textAlign: 'right' }}>
-                          <Typography variant="body2" color="text.secondary">Difference</Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mt: 1 }}>
-                            <Chip 
-                              label={`${(mockResults.classBCouponRate?.difference || 0) > 0 ? '+' : ''}${(mockResults.classBCouponRate?.difference || 0).toFixed(1)}%`}
-                              color={
-                                (mockResults.classBCouponRate?.difference || 0) >= -1 ? "success" :
-                                (mockResults.classBCouponRate?.difference || 0) >= -5 ? "warning" : "error"
-                              }
-                              sx={{ fontWeight: 'bold', fontSize: '1.1rem', height: 32, px: 1 }}
-                            />
-                          </Box>
-                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                            {mockResults.classBCouponRate.difference >= -1 ? "Within target" :
-                             mockResults.classBCouponRate.difference >= -5 ? "Moderate deviation" : "Significant deviation"}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Grid>
-                    
-                    <Grid item xs={12}>
-                      <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-                        Scenario Comparison
-                      </Typography>
-                      <Box sx={{ height: 400 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart
-                            data={mockResults.scenarioResults}
-                            margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
-                            <XAxis 
-                              dataKey="name" 
-                              tick={{ fill: theme.palette.text.secondary }}
-                              angle={-45}
-                              textAnchor="end"
-                              height={70}
-                            />
-                            <YAxis 
-                              tickFormatter={(value) => `${value}%`}
-                              tick={{ fill: theme.palette.text.secondary }}
-                              domain={[0, 'dataMax + 5']}
-                            />
-                            <RechartsTooltip content={<CustomTooltip />} />
-                            <Legend 
-                              wrapperStyle={{ paddingTop: 20 }}
-                              formatter={(value) => (
-                                <span style={{ color: theme.palette.text.primary }}>{value}</span>
-                              )}
-                            />
-                            <Bar 
-                              name="Modeled Rate" 
-                              dataKey="modeled" 
-                              fill={theme.palette.primary.main}
-                              radius={[4, 4, 0, 0]}
-                            />
-                            <Bar 
-                              name="Realized Rate" 
-                              dataKey="realized" 
-                              fill={theme.palette.secondary.main}
-                              radius={[4, 4, 0, 0]}
-                            />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </Box>
-                    </Grid>
-                  </Grid>
-                </Box>
-              )}
-              
-              {/* NPL Sensitivity Tab */}
-              {tabValue === 1 && (
                 <Box sx={{ p: 3 }}>
                   <Typography variant="h6" gutterBottom>
                     Class B Coupon Rate vs. NPL Rates
@@ -1142,12 +1000,13 @@ const StressTestingPage = () => {
                     This analysis shows how Non-Performing Loan (NPL) rates affect the Class B coupon rates. Higher NPL rates typically reduce available cash flow for Class B payments.
                   </Typography>
                   
-                  <Box sx={{ height: 400, mb: 4 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={formatSensitivityData('npl')}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
-                      >
+                  {testResults.sensitivityAnalysis.npl.length > 0 ? (
+                    <Box sx={{ height: 400, mb: 4 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={formatSensitivityData('npl')}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
+                        >
                         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
                         <XAxis 
                           dataKey="value"
@@ -1188,6 +1047,13 @@ const StressTestingPage = () => {
                       </LineChart>
                     </ResponsiveContainer>
                   </Box>
+                  ) : (
+                    <Box sx={{ p: 8, textAlign: 'center' }}>
+                      <Typography variant="subtitle1" color="text.secondary">
+                        Run a stress test to see NPL sensitivity analysis
+                      </Typography>
+                    </Box>
+                  )}
                   
                   <Box sx={{ mt: 4, p: 3, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.4), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}` }}>
                     <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
@@ -1196,25 +1062,27 @@ const StressTestingPage = () => {
                     <Typography variant="body2" color="text.secondary" paragraph>
                       • The modeled and realized rates both decrease as NPL rates increase<br />
                       • The gap between modeled and realized rates widens with higher NPL rates<br />
-                      • At NPL rates above 12%, the deviation becomes significant (over 5%)<br />
-                      • Base case projections assume a 5% NPL rate
+                      • At NPL rates above 3%, the deviation becomes significant<br />
+                      • Base case projections assume a 1.5% NPL rate<br />
+                      • NPL rates above 5% represent severe stress scenarios
                     </Typography>
                   </Box>
                 </Box>
               )}
               
               {/* Prepayment Impact Tab */}
-              {tabValue === 2 && (
+              {tabValue === 1 && (
                 <Box sx={{ p: 3 }}>
                   <Typography variant="h6" gutterBottom>
                     Class B Coupon Rate vs. Prepayment Rates
                   </Typography>
                   <Typography variant="body2" color="text.secondary" paragraph>
-                    This analysis shows how early prepayment rates affect Class B coupon performance. Higher prepayment rates can impact the expected cash flow timing and reinvestment opportunities.
+                    This analysis shows how early prepayment rates affect Class B coupon performance. Lower prepayment rates can impact the expected cash flow timing and reduce reinvestment opportunities.
                   </Typography>
                   
-                  <Box sx={{ height: 400, mb: 4 }}>
-                    <ResponsiveContainer width="100%" height="100%">
+                  {testResults.sensitivityAnalysis.prepayment.length > 0 ? (
+                    <Box sx={{ height: 400, mb: 4 }}>
+                      <ResponsiveContainer width="100%" height="100%">
                       <LineChart
                         data={formatSensitivityData('prepayment')}
                         margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
@@ -1259,23 +1127,31 @@ const StressTestingPage = () => {
                       </LineChart>
                     </ResponsiveContainer>
                   </Box>
+                  ) : (
+                    <Box sx={{ p: 8, textAlign: 'center' }}>
+                      <Typography variant="subtitle1" color="text.secondary">
+                        Run a stress test to see prepayment impact analysis
+                      </Typography>
+                    </Box>
+                  )}
                   
                   <Box sx={{ mt: 4, p: 3, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.4), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}` }}>
                     <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
                       Key Insights:
                     </Typography>
                     <Typography variant="body2" color="text.secondary" paragraph>
-                      • Higher prepayment rates lead to lower coupon rates for Class B notes<br />
-                      • At prepayment rates above 20%, the deviation between modeled and realized becomes critical<br />
-                      • Base case projections assume a 10% prepayment rate<br />
-                      • Prepayment sensitivity analysis suggests careful monitoring of early repayments
+                      • Lower prepayment rates lead to lower coupon rates for Class B notes<br />
+                      • At prepayment rates below 15%, the deviation between modeled and realized becomes critical<br />
+                      • Base case projections assume a 30% prepayment rate<br />
+                      • Prepayment rates below 10% represent severe stress scenarios<br />
+                      • Higher prepayment rates generally benefit the structure in this model
                     </Typography>
                   </Box>
                 </Box>
               )}
               
               {/* Combined Analysis Tab */}
-              {tabValue === 3 && (
+              {tabValue === 2 && (
                 <Box sx={{ p: 3 }}>
                   <Typography variant="h6" gutterBottom>
                     Multifactor Analysis of Rate Deviation
@@ -1284,8 +1160,9 @@ const StressTestingPage = () => {
                     This combined analysis shows how NPL and prepayment rates together affect Class B coupon rate deviation. Bubble size indicates the magnitude of deviation.
                   </Typography>
                   
-                  <Box sx={{ height: 500 }}>
-                    <ResponsiveContainer width="100%" height="100%">
+                  {testResults.combinedScenarios.length > 0 ? (
+                    <Box sx={{ height: 500 }}>
+                      <ResponsiveContainer width="100%" height="100%">
                       <ScatterChart
                         margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
                       >
@@ -1295,7 +1172,7 @@ const StressTestingPage = () => {
                           dataKey="x" 
                           name="NPL Rate" 
                           unit="%" 
-                          domain={[0, 20]}
+                          domain={[0, 15]}
                           label={{ value: 'NPL Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
                           tick={{ fill: theme.palette.text.secondary }}
                         />
@@ -1304,7 +1181,7 @@ const StressTestingPage = () => {
                           dataKey="y" 
                           name="Prepayment Rate" 
                           unit="%"
-                          domain={[0, 30]}
+                          domain={[0, 40]}
                           label={{ value: 'Prepayment Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
                           tick={{ fill: theme.palette.text.secondary }}
                         />
@@ -1325,6 +1202,13 @@ const StressTestingPage = () => {
                       </ScatterChart>
                     </ResponsiveContainer>
                   </Box>
+                  ) : (
+                    <Box sx={{ p: 8, textAlign: 'center' }}>
+                      <Typography variant="subtitle1" color="text.secondary">
+                        Run a stress test to see multifactor analysis
+                      </Typography>
+                    </Box>
+                  )}
                   
                   <Box sx={{ mt: 4, p: 3, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.4), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}` }}>
                     <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
@@ -1332,9 +1216,10 @@ const StressTestingPage = () => {
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       • Larger bubbles indicate greater deviation between modeled and realized coupon rates<br />
-                      • The upper right quadrant (high NPL, high prepayment) represents the most severe stress conditions<br />
-                      • Scenarios with high NPL rates and high prepayment rates tend to result in the largest deviations<br />
-                      • Base case parameters (5% NPL, 10% prepayment) show moderate but acceptable deviation
+                      • The lower right quadrant (high NPL, low prepayment) represents the most severe stress conditions<br />
+                      • Scenarios with high NPL rates (&gt;5%) and low prepayment rates (&lt;10%) tend to result in the largest deviations<br />
+                      • Base case parameters (1.5% NPL, 30% prepayment) show moderate but acceptable deviation<br />
+                      • Optimistic scenarios (1% NPL, 20% prepayment) with positive reinvestment shifts show minimal impact
                     </Typography>
                   </Box>
                 </Box>
@@ -1343,7 +1228,7 @@ const StressTestingPage = () => {
           </Grid>
         </Grid>
         
-        {/* Snackbar for Notifications from Step 8 */}
+        {/* Snackbar for Notifications */}
         <Snackbar
           open={snackbarOpen}
           autoHideDuration={6000}

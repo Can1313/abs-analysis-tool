@@ -34,8 +34,9 @@ async def optimize_classic(
         if df is None:
             raise HTTPException(status_code=400, detail="No data found. Please upload Excel file first.")
         
-        # Log the request
+        # Log the request including the selected default model
         logger.info(f"Starting classic optimization with parameters: {optimization_settings}")
+        logger.info(f"Using default model: {optimization_settings.selected_default_model}")
         
         # Perform the optimization with classic method in a separate thread
         # to not block the event loop and allow progress updates
@@ -84,8 +85,9 @@ async def optimize_genetic(
         if df is None:
             raise HTTPException(status_code=400, detail="No data found. Please upload Excel file first.")
         
-        # Log the request
+        # Log the request including the selected default model
         logger.info(f"Starting genetic optimization with parameters: {optimization_settings}")
+        logger.info(f"Using default model: {optimization_settings.selected_default_model}")
         
         # Perform the optimization in a separate thread
         def run_optimization():
@@ -128,6 +130,7 @@ async def optimize(
 ):
     method = getattr(optimization_settings, "optimization_method", "classic")
     logger.info(f"Optimizing with method: {method}")
+    logger.info(f"Using default model: {optimization_settings.selected_default_model}")
     
     # Reset progress before starting
     optimization_progress.reset()

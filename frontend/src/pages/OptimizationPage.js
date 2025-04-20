@@ -40,6 +40,7 @@ const OptimizationPage = () => {
     optimizationSettings,
     setOptimizationSettings,
     generalSettings,
+    selectedDefaults,
   } = useData();
 
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -49,7 +50,7 @@ const OptimizationPage = () => {
     ({ classic: 'Standard Optimization', genetic: 'Evolutionary Algorithm' }[m] ||
     m);
 
-  /* --------------------- Form change -------------------- */
+  /* --------------------- Form change -------------------- */
   const handleFormChange = (vals) => setOptimizationSettings(vals);
 
   /* --------------------- Optimize ----------------------- */
@@ -65,9 +66,13 @@ const OptimizationPage = () => {
 
       const method = optimizationSettings.optimization_method;
       console.log(`Starting ${method} optimization…`);
+      console.log(`Using default model: ${selectedDefaults}`);
 
       const body = {
-        optimization_settings: optimizationSettings,
+        optimization_settings: {
+          ...optimizationSettings,
+          selected_default_model: selectedDefaults
+        },
         general_settings: {
           start_date: generalSettings.start_date.toISOString().split('T')[0],
           operational_expenses: generalSettings.operational_expenses,

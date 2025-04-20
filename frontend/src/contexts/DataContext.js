@@ -269,6 +269,7 @@ export const DataProvider = ({ children }) => {
       operational_expenses: generalSettings.operational_expenses,
       min_buffer: generalSettings.min_buffer,
     },
+    selected_default_model: selectedDefaults // Added this line to pass the selected model
   });
 
   /* ---------------- context value ------------------- */
