@@ -1,3 +1,5 @@
+# app/models/input_models.py
+
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import date
@@ -22,11 +24,11 @@ class TrancheB(BaseModel):
     base_rate: float
     spread: float
     reinvest_rate: float
-    nominal: Optional[float] = None  # Added Optional nominal field
+    nominal: Optional[float] = None
 
 
 class NPVSettings(BaseModel):
-    method: str  # "weighted_avg_rate" or "custom_rate"
+    method: str
     custom_rate: Optional[float] = None
 
 
@@ -39,8 +41,8 @@ class OptimizationSettings(BaseModel):
     min_class_b_percent: float = Field(default=10.0)
     target_class_b_coupon_rate: float = Field(default=30.0)
     additional_days_for_class_b: int = Field(default=10)
-    class_b_percent_deviation: float = Field(default=1.0)  # New field with tighter default value
-    selected_default_model: str = Field(default="previous")  # Added field for default model selection
+    class_b_percent_deviation: float = Field(default=1.0)
+    selected_default_model: str = Field(default="previous")
     
     # Evolutionary algorithm parameters
     population_size: Optional[int] = Field(default=50)
@@ -72,6 +74,20 @@ class StructureParameters(BaseModel):
     ops_expenses: float = 0.0
 
 
+class EnhancedScenarioParameters(BaseModel):
+    name: str
+    npl_rate: float
+    prepayment_rate: float
+    reinvestment_shift: float
+    # Additional parameters for cash flow modeling
+    recovery_rate: float = 0.50
+    recovery_lag: int = 6
+    delinquency_rate: Optional[float] = None  # If None, will be derived from npl_rate
+    delinquency_recovery_rate: float = 0.85
+    delinquency_to_default_rate: float = 0.20
+    repeat_delinquency_factor: float = 1.5
+
+
 class ScenarioParameters(BaseModel):
     name: str
     npl_rate: float
@@ -82,3 +98,8 @@ class ScenarioParameters(BaseModel):
 class StressTestRequest(BaseModel):
     structure: StructureParameters
     scenario: ScenarioParameters
+
+
+class EnhancedStressTestRequest(BaseModel):
+    structure: StructureParameters
+    scenario: EnhancedScenarioParameters

@@ -1,3 +1,4 @@
+# app/main.py
 import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,7 +9,7 @@ import uvicorn
 app = FastAPI(
     title="ABS Analysis Tool",
     description="Cash flow analysis for securitization",
-    version="1.0.0"
+    version="1.2.0"  # Updated version number to reflect changes
 )
 
 # Configure CORS
@@ -39,7 +40,15 @@ app.include_router(stress_testing.router, prefix="/api", tags=["Stress Testing"]
 
 @app.get("/")
 async def root():
-    return {"message": "ABS Analysis Tool API is running"}
+    return {
+        "message": "ABS Analysis Tool API is running",
+        "version": "1.2.0",
+        "features": [
+            "Calculation", 
+            "Optimization", 
+            "Unified Stress Testing with Advanced Cash Flow Modeling"
+        ]
+    }
 
 # Configure server settings if run directly
 if __name__ == "__main__":
@@ -47,6 +56,6 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=8000,
-        timeout_keep_alive=600,  # 10 dakika keep-alive timeout
-        workers=1,  # Optimization işlemi için tek bir işçi daha iyi olabilir
+        timeout_keep_alive=600,  # 10 minute keep-alive timeout
+        workers=1,  # Single worker is better for optimization process
     )

@@ -230,6 +230,29 @@ const runStressTest = async (params) => {
   }
 };
 
+/**
+ * Run enhanced stress test with advanced cash flow modeling
+ * @param {Object} params - EnhancedStressTestRequest body
+ * @returns {Promise<Object>}
+ */
+const runEnhancedStressTest = async (params) => {
+  try {
+    console.log('Running enhanced stress test with params:', params);
+    
+    const response = await apiClient.post('/enhanced-stress-test/', params);
+    
+    console.log('Enhanced stress test successful');
+    return response.data;
+  } catch (error) {
+    console.error('Error running enhanced stress test:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+    }
+    throw error;
+  }
+};
+
 /* --------------------------------------------------------------------- */
 /*                                EXPORT                                 */
 /* --------------------------------------------------------------------- */
@@ -240,4 +263,5 @@ export {
   optimizeStructure,
   pollOptimizationProgress,
   runStressTest,
+  runEnhancedStressTest
 };
