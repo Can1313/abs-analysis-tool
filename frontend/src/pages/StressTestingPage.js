@@ -1,4 +1,3 @@
-// src/pages/StressTestingPage.js
 import React, { useState, useEffect } from 'react';
 import { 
   Container, 
@@ -13,8 +12,6 @@ import {
   Tabs, 
   Tab, 
   Divider, 
-  Card, 
-  CardContent, 
   Chip,
   FormControl,
   InputLabel,
@@ -298,6 +295,289 @@ const ScatterTooltip = ({ active, payload }) => {
   return null;
 };
 
+/**
+ * More robust formatter for ensuring data meets backend requirements
+ * 
+ * @param {Object} structureDetails - Structure data from savedResults
+ * @returns {Object} - Properly formatted structure object for API
+ */
+const formatStructureForStressTest = (structureDetails) => {
+  console.log('Input structure details:', structureDetails);
+  
+  // Helper function to find data in different possible locations
+  const extractProperty = (obj, keys, defaultValue) => {
+    if (!obj) return defaultValue;
+    
+    for (const key of keys) {
+      if (obj[key] !== undefined) {
+        console.log(`Found property "${key}" with value:`, obj[key]);
+        return obj[key];
+      }
+    }
+    
+    // For nested property paths using dot notation
+    for (const key of keys) {
+      if (key.includes('.')) {
+        const parts = key.split('.');
+        let value = obj;
+        let found = true;
+        
+        for (const part of parts) {
+          if (value && value[part] !== undefined) {
+            value = value[part];
+          } else {
+            found = false;
+            break;
+          }
+        }
+        
+        if (found) {
+          console.log(`Found nested property "${key}" with value:`, value);
+          return value;
+        }
+      }
+    }
+    
+    console.log(`Property not found for keys: [${keys.join(', ')}], using default:`, defaultValue);
+    return defaultValue;
+  };
+
+  // Ensure start_date is in the correct format (YYYY-MM-DD)
+  const possibleDateFields = ['start_date', 'general_settings.start_date', 'date', 'startDate', 'issue_date'];
+  let rawDate = extractProperty(structureDetails, possibleDateFields, null);
+  let formattedDate;
+  
+  if (rawDate instanceof Date) {
+    formattedDate = rawDate.toISOString().split('T')[0];
+  } else if (typeof rawDate === 'string') {
+    // Try to parse the date and format it correctly
+    try {
+      const parsedDate = new Date(rawDate);
+      if (!isNaN(parsedDate.getTime())) {
+        formattedDate = parsedDate.toISOString().split('T')[0];
+      } else {
+        // If parsing fails, use the original string (assuming it's already in YYYY-MM-DD format)
+        formattedDate = rawDate;
+      }
+    } catch (e) {
+      // If any error occurs, use the original string
+      formattedDate = rawDate;
+    }
+  } else {
+    // Fallback to current date if no valid date is available
+    formattedDate = new Date().toISOString().split('T')[0];
+    console.warn('No valid start_date found, using current date');
+  }
+
+  // Helper function to ensure array fields
+  const ensureNumericArray = (arr, minLength = 1) => {
+    if (!arr) {
+      console.log(`Creating default array of length ${minLength}`);
+      return Array(minLength).fill(0);
+    }
+    
+    if (typeof arr === 'string') {
+      // Try to parse JSON string
+      try {
+        const parsed = JSON.parse(arr);
+        return Array.isArray(parsed) ? parsed.map(Number) : Array(minLength).fill(0);
+      } catch (e) {
+        return Array(minLength).fill(0);
+      }
+    }
+    
+    if (!Array.isArray(arr)) {
+      // If not an array but a single number, create an array with that number
+      const num = Number(arr);
+      return isNaN(num) ? Array(minLength).fill(0) : [num];
+    }
+    
+    // Convert array elements to numbers, replacing NaN with 0
+    return arr.map(item => {
+      const num = Number(item);
+      return isNaN(num) ? 0 : num;
+    });
+  };
+
+  // Helper function to ensure numeric fields
+  const ensureNumber = (value, defaultValue = 0) => {
+    if (value === null || value === undefined) return defaultValue;
+    const num = Number(value);
+    return isNaN(num) ? defaultValue : num;
+  };
+
+  // Expanded list of possible field names for Class A maturities
+  const possibleFieldMappings = {
+    a_maturities: [
+      'a_maturities', 
+      'tranches_a.maturity_days', 
+      'tranchesA.maturity_days', 
+      'class_a_maturities',
+      'maturity_days',
+      'maturities',
+      'tranche_maturities',
+      'class_a.maturities',
+      'class_a.maturity_days'
+    ],
+    a_base_rates: [
+      'a_base_rates', 
+      'tranches_a.base_rate', 
+      'tranchesA.base_rate',
+      'class_a_base_rates',
+      'base_rates',
+      'class_a.base_rates',
+      'class_a.base_rate'
+    ],  
+    a_spreads: [
+      'a_spreads', 
+      'tranches_a.spread', 
+      'tranchesA.spread',
+      'class_a_spreads',
+      'spreads',
+      'class_a.spreads',
+      'class_a.spread'
+    ],
+    a_reinvest_rates: [
+      'a_reinvest_rates', 
+      'tranches_a.reinvest_rate', 
+      'tranchesA.reinvest_rate',
+      'class_a_reinvest_rates',
+      'reinvest_rates',
+      'class_a.reinvest_rates',
+      'class_a.reinvest_rate'
+    ],
+    a_nominals: [
+      'a_nominals', 
+      'tranches_a.nominal', 
+      'tranchesA.nominal',
+      'class_a_nominals',
+      'nominals',
+      'class_a_principal',
+      'class_a.nominals',
+      'class_a.nominal'
+    ],
+    b_maturity: [
+      'b_maturity', 
+      'tranche_b.maturity_days', 
+      'trancheB.maturity_days',
+      'class_b_maturity',
+      'class_b.maturity_days',
+      'class_b.maturity'
+    ],
+    b_base_rate: [
+      'b_base_rate', 
+      'tranche_b.base_rate', 
+      'trancheB.base_rate',
+      'class_b_base_rate',
+      'class_b.base_rate'
+    ],
+    b_spread: [
+      'b_spread', 
+      'tranche_b.spread', 
+      'trancheB.spread',
+      'class_b_spread',
+      'class_b.spread'
+    ],
+    b_reinvest_rate: [
+      'b_reinvest_rate', 
+      'tranche_b.reinvest_rate', 
+      'trancheB.reinvest_rate',
+      'class_b_reinvest_rate',
+      'class_b.reinvest_rate'
+    ],
+    b_nominal: [
+      'b_nominal', 
+      'tranche_b.nominal', 
+      'trancheB.nominal', 
+      'class_b_principal',
+      'class_b.nominal',
+      'class_b.principal'
+    ],
+    ops_expenses: [
+      'ops_expenses', 
+      'operational_expenses', 
+      'general_settings.operational_expenses',
+      'expenses',
+      'operational.expenses'
+    ]
+  };
+
+  // Check if we have a tranche structure or data in one of several possible locations
+  console.log('Looking for Class A tranche data in various locations...');
+  
+  // Check for structured tranche data first
+  let a_maturities = [], a_base_rates = [], a_spreads = [], a_reinvest_rates = [], a_nominals = [];
+  let trancheDataFound = false;
+  
+  // Check for tranches in various possible field names and formats
+  const possibleTrancheFields = [
+    'tranches_a', 'tranchesA', 'class_a_tranches', 'class_a', 'tranches.a', 'a_tranches'
+  ];
+  
+  for (const field of possibleTrancheFields) {
+    const tranches = extractProperty(structureDetails, [field], null);
+    if (Array.isArray(tranches) && tranches.length > 0 && typeof tranches[0] === 'object') {
+      console.log(`Found tranches as array of objects in field: ${field}`, tranches);
+      a_maturities = tranches.map(t => ensureNumber(t.maturity_days || t.maturity));
+      a_base_rates = tranches.map(t => ensureNumber(t.base_rate));
+      a_spreads = tranches.map(t => ensureNumber(t.spread));
+      a_reinvest_rates = tranches.map(t => ensureNumber(t.reinvest_rate));
+      a_nominals = tranches.map(t => ensureNumber(t.nominal || t.principal));
+      trancheDataFound = true;
+      break;
+    }
+  }
+  
+  // If we didn't find structured tranche data, look for the individual arrays
+  if (!trancheDataFound) {
+    console.log('No structured tranche data found, looking for individual arrays...');
+    a_maturities = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_maturities, []));
+    
+    // If we still don't have maturities, create a default one to prevent API errors
+    if (a_maturities.length === 0) {
+      console.log('No Class A maturities found, creating default value of [90]');
+      a_maturities = [90]; // Default 90-day maturity as a fallback
+    }
+    
+    const maxLength = a_maturities.length;
+    a_base_rates = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_base_rates, []), maxLength);
+    a_spreads = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_spreads, []), maxLength);
+    a_reinvest_rates = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_reinvest_rates, []), maxLength);
+    a_nominals = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_nominals, []), maxLength);
+  }
+
+  // Extract class B properties
+  const b_maturity = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_maturity, 180));
+  const b_base_rate = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_base_rate, 0));
+  const b_spread = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_spread, 0));
+  const b_reinvest_rate = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_reinvest_rate, 0));
+  const b_nominal = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_nominal, 0));
+  const ops_expenses = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.ops_expenses, 0));
+
+  // Ensure lengths are consistent
+  const maxLength = a_maturities.length;
+  
+  const result = {
+    start_date: formattedDate,
+    a_maturities: a_maturities,
+    a_base_rates: a_base_rates.length === maxLength ? a_base_rates : Array(maxLength).fill(a_base_rates[0] || 0),
+    a_spreads: a_spreads.length === maxLength ? a_spreads : Array(maxLength).fill(a_spreads[0] || 0),
+    a_reinvest_rates: a_reinvest_rates.length === maxLength ? a_reinvest_rates : Array(maxLength).fill(a_reinvest_rates[0] || 0),
+    a_nominals: a_nominals.length === maxLength ? a_nominals : Array(maxLength).fill(a_nominals[0] || 0),
+    b_maturity: b_maturity,
+    b_base_rate: b_base_rate,
+    b_spread: b_spread,
+    b_reinvest_rate: b_reinvest_rate,
+    b_nominal: b_nominal,
+    ops_expenses: ops_expenses
+  };
+
+  // Log the resulting structure
+  console.log('Formatted structure for API:', result);
+  
+  return result;
+};
+
 const StressTestingPage = () => {
   const theme = darkTheme;
   const { calculationResults, savedResults } = useData();
@@ -329,7 +609,7 @@ const StressTestingPage = () => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
   
-  // Replace mock data with actual API data
+  // State for API test results
   const [testResults, setTestResults] = useState({
     classBCouponRate: null,
     scenarioResults: [],
@@ -389,7 +669,7 @@ const StressTestingPage = () => {
     return availableStructures.find(structure => structure.id === selectedStructureId) || null;
   };
 
-  // Run stress test
+  // Run stress test with enhanced error handling and debugging
   const handleRunStressTest = async () => {
     const selectedStructure = getSelectedStructure();
     
@@ -410,100 +690,114 @@ const StressTestingPage = () => {
         throw new Error("Structure details not found");
       }
       
-      // Extract parameters for the test
-      const nplRate = nplRange[0]; // Use the first value if it's a range
-      const prepaymentRate = prepaymentRange[0]; // Use the first value if it's a range
-      const reinvestmentShift = applyReinvestmentShift ? reinvestmentRange[0] : 0;
+      // Log the structure details for debugging
+      console.log('Original structure details:', structureDetails);
       
-      // Simulate API call with setTimeout
-      setTimeout(() => {
-        // Use the calculated coupon rate as baseline
-        const baselineCouponRate = selectedStructure.directCouponRate || 0;
-        
-        // Calculate impact (this would normally come from backend):
-        // Higher NPL rates reduce coupon rate
-        // Higher prepayment can reduce or increase depending on structure
-        // Reinvestment shifts directly impact
-        
-        // With new base values, we adjust the formulas:
-        // - NPL: Higher impact at higher values (exponential)
-        // - Prepayment: Lower prepayment is worse (reversed from original)
-        // - Reinvestment: Same as before
-        const nplImpact = -2.0 * Math.pow((nplRate / 1.5), 1.5); // More severe impact at higher NPL rates
-        const prepaymentImpact = -1.0 * ((30 - prepaymentRate) / 5); // Lower prepayment rates have negative impact
-        const reinvestmentImpact = reinvestmentShift * 0.8; // Higher impact per 1% shift
-        
-        const modifiedCouponRate = baselineCouponRate + nplImpact + prepaymentImpact + reinvestmentImpact;
-        
-        // Update the mock results
-        const updatedResults = {
-          ...mockResults,
-          classBCouponRate: {
-            modeled: baselineCouponRate,
-            realized: Math.max(0, modifiedCouponRate),
-            difference: modifiedCouponRate - baselineCouponRate,
-            status: modifiedCouponRate < baselineCouponRate - 5 ? 'error' : 
-                  modifiedCouponRate < baselineCouponRate - 1 ? 'warning' : 'success'
-          },
-          scenarioResults: [
-            {
-              name: "Original",
-              npl: 0,
-              prepayment: 0,
-              reinvestment: 0,
-              modeled: baselineCouponRate,
-              realized: baselineCouponRate,
-              difference: 0
-            },
-            {
-              name: predefinedScenario.charAt(0).toUpperCase() + predefinedScenario.slice(1),
-              npl: nplRate,
-              prepayment: prepaymentRate,
-              reinvestment: reinvestmentShift,
-              modeled: baselineCouponRate,
-              realized: modifiedCouponRate,
-              difference: modifiedCouponRate - baselineCouponRate
-            }
-          ]
-        };
-        
-        // Update state with the new results
-        setMockResults(updatedResults);
-        setIsLoading(false);
-        
-        // Show success message
-        setSnackbarMessage("Stress test completed successfully");
-        setSnackbarSeverity("success");
-        setSnackbarOpen(true);
-      }, 1500);
+      // Extract parameters for the test with proper number conversion
+      const nplRate = Number(nplRange[0]); 
+      const prepaymentRate = Number(prepaymentRange[0]);
+      const reinvestmentShift = applyReinvestmentShift ? Number(reinvestmentRange[0]) : 0;
       
-      // In a real implementation, use the API instead of setTimeout:
-      /*
-      const response = await runStressTest({
-        structure: {
-          id: structureDetails.id,
-          direct_coupon_rate: selectedStructure.directCouponRate || 0,
-          effective_coupon_rate: selectedStructure.effectiveCouponRate || 0
-        },
+      // Create request parameters for the API with enhanced formatting
+      const formattedStructure = formatStructureForStressTest(structureDetails);
+      
+      const requestParams = {
+        structure: formattedStructure,
         scenario: {
           name: predefinedScenario,
           npl_rate: nplRate,
           prepayment_rate: prepaymentRate,
           reinvestment_shift: reinvestmentShift
         }
-      });
+      };
       
-      setMockResults(response);
+      // Debug: Log the complete request payload
+      console.log('FULL REQUEST PAYLOAD:', JSON.stringify(requestParams, null, 2));
+      
+      // Call the API
+      const response = await runStressTest(requestParams);
+      
+      console.log('Received stress test response:', response);
+      
+      // Process API response
+      const responseData = {
+        classBCouponRate: {
+          modeled: response.baseline.class_b_coupon_rate,
+          realized: response.stress_test.class_b_coupon_rate,
+          difference: response.difference.class_b_coupon_rate,
+          status: response.difference.class_b_coupon_rate >= -1 ? 'success' : 
+                 response.difference.class_b_coupon_rate >= -5 ? 'warning' : 'error'
+        },
+        scenarioResults: [
+          {
+            name: "Base Case",
+            npl: 0,
+            prepayment: 0,
+            reinvestment: 0,
+            modeled: response.baseline.class_b_coupon_rate,
+            realized: response.baseline.class_b_coupon_rate,
+            difference: 0
+          },
+          {
+            name: predefinedScenario.charAt(0).toUpperCase() + predefinedScenario.slice(1),
+            npl: nplRate,
+            prepayment: prepaymentRate,
+            reinvestment: reinvestmentShift,
+            modeled: response.baseline.class_b_coupon_rate,
+            realized: response.stress_test.class_b_coupon_rate,
+            difference: response.difference.class_b_coupon_rate
+          }
+        ],
+        sensitivityAnalysis: {
+          npl: [],
+          prepayment: [],
+          reinvestment: []
+        },
+        combinedScenarios: []
+      };
+      
+      // Update state with the API results
+      setTestResults(responseData);
       setIsLoading(false);
+      setTabValue(0); // Switch to NPL tab to show results
+      
+      // Show success message
       setSnackbarMessage("Stress test completed successfully");
       setSnackbarSeverity("success");
       setSnackbarOpen(true);
-      */
       
     } catch (error) {
       console.error("Error running stress test:", error);
+      
+      // Enhanced error logging
+      if (error.response) {
+        console.error('RESPONSE ERROR DATA:', error.response.data);
+        if (error.response.data.detail) {
+          console.error('ERROR DETAIL:', error.response.data.detail);
+        }
+      }
+      
       setIsLoading(false);
-      setSnackbarMessage("Error running stress test: " + error.message);
+      
+      // Extract the actual error message from the response if available
+      let errorMessage = "Error running stress test";
+      if (error.response && error.response.data) {
+        if (typeof error.response.data === 'string') {
+          errorMessage += ": " + error.response.data;
+        } else if (error.response.data.detail) {
+          // Check for specific error patterns
+          const detail = error.response.data.detail;
+          if (detail.includes("No data found") || detail.includes("upload Excel file")) {
+            errorMessage = "You need to upload an Excel file with loan data before running a stress test. Please go to the Structure Analysis page first.";
+          } else {
+            errorMessage += ": " + detail;
+          }
+        }
+      } else if (error.message) {
+        errorMessage += ": " + error.message;
+      }
+      
+      setSnackbarMessage(errorMessage);
       setSnackbarSeverity("error");
       setSnackbarOpen(true);
     }
@@ -1007,46 +1301,46 @@ const StressTestingPage = () => {
                           data={formatSensitivityData('npl')}
                           margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
                         >
-                        <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
-                        <XAxis 
-                          dataKey="value"
-                          label={{ value: 'NPL Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
-                          tick={{ fill: theme.palette.text.secondary }}
-                        />
-                        <YAxis 
-                          tickFormatter={(value) => `${value}%`}
-                          label={{ value: 'Coupon Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
-                          tick={{ fill: theme.palette.text.secondary }}
-                          domain={[0, 'dataMax + 5']}
-                        />
-                        <RechartsTooltip content={<CustomTooltip />} />
-                        <Legend 
-                          wrapperStyle={{ paddingTop: 20 }}
-                          formatter={(value) => (
-                            <span style={{ color: theme.palette.text.primary }}>{value}</span>
-                          )}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="modeled" 
-                          name="Modeled Rate" 
-                          stroke={theme.palette.primary.main}
-                          strokeWidth={2}
-                          dot={{ r: 5, fill: theme.palette.primary.main }}
-                          activeDot={{ r: 7, fill: theme.palette.primary.light }}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="realized" 
-                          name="Realized Rate" 
-                          stroke={theme.palette.secondary.main}
-                          strokeWidth={2}
-                          dot={{ r: 5, fill: theme.palette.secondary.main }}
-                          activeDot={{ r: 7, fill: theme.palette.secondary.light }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </Box>
+                          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
+                          <XAxis 
+                            dataKey="value"
+                            label={{ value: 'NPL Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
+                            tick={{ fill: theme.palette.text.secondary }}
+                          />
+                          <YAxis 
+                            tickFormatter={(value) => `${value}%`}
+                            label={{ value: 'Coupon Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
+                            tick={{ fill: theme.palette.text.secondary }}
+                            domain={[0, 'dataMax + 5']}
+                          />
+                          <RechartsTooltip content={<CustomTooltip />} />
+                          <Legend 
+                            wrapperStyle={{ paddingTop: 20 }}
+                            formatter={(value) => (
+                              <span style={{ color: theme.palette.text.primary }}>{value}</span>
+                            )}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="modeled" 
+                            name="Modeled Rate" 
+                            stroke={theme.palette.primary.main}
+                            strokeWidth={2}
+                            dot={{ r: 5, fill: theme.palette.primary.main }}
+                            activeDot={{ r: 7, fill: theme.palette.primary.light }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="realized" 
+                            name="Realized Rate" 
+                            stroke={theme.palette.secondary.main}
+                            strokeWidth={2}
+                            dot={{ r: 5, fill: theme.palette.secondary.main }}
+                            activeDot={{ r: 7, fill: theme.palette.secondary.light }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Box>
                   ) : (
                     <Box sx={{ p: 8, textAlign: 'center' }}>
                       <Typography variant="subtitle1" color="text.secondary">
@@ -1083,50 +1377,50 @@ const StressTestingPage = () => {
                   {testResults.sensitivityAnalysis.prepayment.length > 0 ? (
                     <Box sx={{ height: 400, mb: 4 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={formatSensitivityData('prepayment')}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
-                        <XAxis 
-                          dataKey="value"
-                          label={{ value: 'Prepayment Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
-                          tick={{ fill: theme.palette.text.secondary }}
-                        />
-                        <YAxis 
-                          tickFormatter={(value) => `${value}%`}
-                          label={{ value: 'Coupon Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
-                          tick={{ fill: theme.palette.text.secondary }}
-                          domain={[0, 'dataMax + 5']}
-                        />
-                        <RechartsTooltip content={<CustomTooltip />} />
-                        <Legend 
-                          wrapperStyle={{ paddingTop: 20 }}
-                          formatter={(value) => (
-                            <span style={{ color: theme.palette.text.primary }}>{value}</span>
-                          )}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="modeled" 
-                          name="Modeled Rate" 
-                          stroke={theme.palette.primary.main}
-                          strokeWidth={2}
-                          dot={{ r: 5, fill: theme.palette.primary.main }}
-                          activeDot={{ r: 7, fill: theme.palette.primary.light }}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="realized" 
-                          name="Realized Rate" 
-                          stroke={theme.palette.secondary.main}
-                          strokeWidth={2}
-                          dot={{ r: 5, fill: theme.palette.secondary.main }}
-                          activeDot={{ r: 7, fill: theme.palette.secondary.light }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </Box>
+                        <LineChart
+                          data={formatSensitivityData('prepayment')}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
+                          <XAxis 
+                            dataKey="value"
+                            label={{ value: 'Prepayment Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
+                            tick={{ fill: theme.palette.text.secondary }}
+                          />
+                          <YAxis 
+                            tickFormatter={(value) => `${value}%`}
+                            label={{ value: 'Coupon Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
+                            tick={{ fill: theme.palette.text.secondary }}
+                            domain={[0, 'dataMax + 5']}
+                          />
+                          <RechartsTooltip content={<CustomTooltip />} />
+                          <Legend 
+                            wrapperStyle={{ paddingTop: 20 }}
+                            formatter={(value) => (
+                              <span style={{ color: theme.palette.text.primary }}>{value}</span>
+                            )}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="modeled" 
+                            name="Modeled Rate" 
+                            stroke={theme.palette.primary.main}
+                            strokeWidth={2}
+                            dot={{ r: 5, fill: theme.palette.primary.main }}
+                            activeDot={{ r: 7, fill: theme.palette.primary.light }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="realized" 
+                            name="Realized Rate" 
+                            stroke={theme.palette.secondary.main}
+                            strokeWidth={2}
+                            dot={{ r: 5, fill: theme.palette.secondary.main }}
+                            activeDot={{ r: 7, fill: theme.palette.secondary.light }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Box>
                   ) : (
                     <Box sx={{ p: 8, textAlign: 'center' }}>
                       <Typography variant="subtitle1" color="text.secondary">
@@ -1163,45 +1457,45 @@ const StressTestingPage = () => {
                   {testResults.combinedScenarios.length > 0 ? (
                     <Box sx={{ height: 500 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                      <ScatterChart
-                        margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
-                        <XAxis 
-                          type="number" 
-                          dataKey="x" 
-                          name="NPL Rate" 
-                          unit="%" 
-                          domain={[0, 15]}
-                          label={{ value: 'NPL Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
-                          tick={{ fill: theme.palette.text.secondary }}
-                        />
-                        <YAxis 
-                          type="number" 
-                          dataKey="y" 
-                          name="Prepayment Rate" 
-                          unit="%"
-                          domain={[0, 40]}
-                          label={{ value: 'Prepayment Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
-                          tick={{ fill: theme.palette.text.secondary }}
-                        />
-                        <ZAxis type="number" range={[60, 350]} />
-                        <RechartsTooltip content={<ScatterTooltip />} />
-                        <Legend 
-                          wrapperStyle={{ paddingTop: 20 }}
-                          formatter={(value) => (
-                            <span style={{ color: theme.palette.text.primary }}>{value}</span>
-                          )}
-                        />
-                        <Scatter 
-                          name="Rate Deviation" 
-                          data={formatScatterData()} 
-                          fill={theme.palette.error.main}
-                          fillOpacity={0.7}
-                        />
-                      </ScatterChart>
-                    </ResponsiveContainer>
-                  </Box>
+                        <ScatterChart
+                          margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
+                          <XAxis 
+                            type="number" 
+                            dataKey="x" 
+                            name="NPL Rate" 
+                            unit="%" 
+                            domain={[0, 15]}
+                            label={{ value: 'NPL Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
+                            tick={{ fill: theme.palette.text.secondary }}
+                          />
+                          <YAxis 
+                            type="number" 
+                            dataKey="y" 
+                            name="Prepayment Rate" 
+                            unit="%"
+                            domain={[0, 40]}
+                            label={{ value: 'Prepayment Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
+                            tick={{ fill: theme.palette.text.secondary }}
+                          />
+                          <ZAxis type="number" range={[60, 350]} />
+                          <RechartsTooltip content={<ScatterTooltip />} />
+                          <Legend 
+                            wrapperStyle={{ paddingTop: 20 }}
+                            formatter={(value) => (
+                              <span style={{ color: theme.palette.text.primary }}>{value}</span>
+                            )}
+                          />
+                          <Scatter 
+                            name="Rate Deviation" 
+                            data={formatScatterData()} 
+                            fill={theme.palette.error.main}
+                            fillOpacity={0.7}
+                          />
+                        </ScatterChart>
+                      </ResponsiveContainer>
+                    </Box>
                   ) : (
                     <Box sx={{ p: 8, textAlign: 'center' }}>
                       <Typography variant="subtitle1" color="text.secondary">

@@ -9319,7 +9319,6 @@ export default OptimizationPage;
 
 DOSYA: src\pages\StressTestingPage.js
 ==================================================
-// src/pages/StressTestingPage.js
 import React, { useState, useEffect } from 'react';
 import { 
   Container, 
@@ -9334,8 +9333,6 @@ import {
   Tabs, 
   Tab, 
   Divider, 
-  Card, 
-  CardContent, 
   Chip,
   FormControl,
   InputLabel,
@@ -9371,6 +9368,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import CompareIcon from '@mui/icons-material/Compare';
 import { useData } from '../contexts/DataContext';
 import { useNavigate } from 'react-router-dom';
+import { runStressTest } from '../services/apiService';
 
 // Import Recharts components
 import {
@@ -9618,89 +9616,333 @@ const ScatterTooltip = ({ active, payload }) => {
   return null;
 };
 
+/**
+ * More robust formatter for ensuring data meets backend requirements
+ * 
+ * @param {Object} structureDetails - Structure data from savedResults
+ * @returns {Object} - Properly formatted structure object for API
+ */
+const formatStructureForStressTest = (structureDetails) => {
+  console.log('Input structure details:', structureDetails);
+  
+  // Helper function to find data in different possible locations
+  const extractProperty = (obj, keys, defaultValue) => {
+    if (!obj) return defaultValue;
+    
+    for (const key of keys) {
+      if (obj[key] !== undefined) {
+        console.log(`Found property "${key}" with value:`, obj[key]);
+        return obj[key];
+      }
+    }
+    
+    // For nested property paths using dot notation
+    for (const key of keys) {
+      if (key.includes('.')) {
+        const parts = key.split('.');
+        let value = obj;
+        let found = true;
+        
+        for (const part of parts) {
+          if (value && value[part] !== undefined) {
+            value = value[part];
+          } else {
+            found = false;
+            break;
+          }
+        }
+        
+        if (found) {
+          console.log(`Found nested property "${key}" with value:`, value);
+          return value;
+        }
+      }
+    }
+    
+    console.log(`Property not found for keys: [${keys.join(', ')}], using default:`, defaultValue);
+    return defaultValue;
+  };
+
+  // Ensure start_date is in the correct format (YYYY-MM-DD)
+  const possibleDateFields = ['start_date', 'general_settings.start_date', 'date', 'startDate', 'issue_date'];
+  let rawDate = extractProperty(structureDetails, possibleDateFields, null);
+  let formattedDate;
+  
+  if (rawDate instanceof Date) {
+    formattedDate = rawDate.toISOString().split('T')[0];
+  } else if (typeof rawDate === 'string') {
+    // Try to parse the date and format it correctly
+    try {
+      const parsedDate = new Date(rawDate);
+      if (!isNaN(parsedDate.getTime())) {
+        formattedDate = parsedDate.toISOString().split('T')[0];
+      } else {
+        // If parsing fails, use the original string (assuming it's already in YYYY-MM-DD format)
+        formattedDate = rawDate;
+      }
+    } catch (e) {
+      // If any error occurs, use the original string
+      formattedDate = rawDate;
+    }
+  } else {
+    // Fallback to current date if no valid date is available
+    formattedDate = new Date().toISOString().split('T')[0];
+    console.warn('No valid start_date found, using current date');
+  }
+
+  // Helper function to ensure array fields
+  const ensureNumericArray = (arr, minLength = 1) => {
+    if (!arr) {
+      console.log(`Creating default array of length ${minLength}`);
+      return Array(minLength).fill(0);
+    }
+    
+    if (typeof arr === 'string') {
+      // Try to parse JSON string
+      try {
+        const parsed = JSON.parse(arr);
+        return Array.isArray(parsed) ? parsed.map(Number) : Array(minLength).fill(0);
+      } catch (e) {
+        return Array(minLength).fill(0);
+      }
+    }
+    
+    if (!Array.isArray(arr)) {
+      // If not an array but a single number, create an array with that number
+      const num = Number(arr);
+      return isNaN(num) ? Array(minLength).fill(0) : [num];
+    }
+    
+    // Convert array elements to numbers, replacing NaN with 0
+    return arr.map(item => {
+      const num = Number(item);
+      return isNaN(num) ? 0 : num;
+    });
+  };
+
+  // Helper function to ensure numeric fields
+  const ensureNumber = (value, defaultValue = 0) => {
+    if (value === null || value === undefined) return defaultValue;
+    const num = Number(value);
+    return isNaN(num) ? defaultValue : num;
+  };
+
+  // Expanded list of possible field names for Class A maturities
+  const possibleFieldMappings = {
+    a_maturities: [
+      'a_maturities', 
+      'tranches_a.maturity_days', 
+      'tranchesA.maturity_days', 
+      'class_a_maturities',
+      'maturity_days',
+      'maturities',
+      'tranche_maturities',
+      'class_a.maturities',
+      'class_a.maturity_days'
+    ],
+    a_base_rates: [
+      'a_base_rates', 
+      'tranches_a.base_rate', 
+      'tranchesA.base_rate',
+      'class_a_base_rates',
+      'base_rates',
+      'class_a.base_rates',
+      'class_a.base_rate'
+    ],  
+    a_spreads: [
+      'a_spreads', 
+      'tranches_a.spread', 
+      'tranchesA.spread',
+      'class_a_spreads',
+      'spreads',
+      'class_a.spreads',
+      'class_a.spread'
+    ],
+    a_reinvest_rates: [
+      'a_reinvest_rates', 
+      'tranches_a.reinvest_rate', 
+      'tranchesA.reinvest_rate',
+      'class_a_reinvest_rates',
+      'reinvest_rates',
+      'class_a.reinvest_rates',
+      'class_a.reinvest_rate'
+    ],
+    a_nominals: [
+      'a_nominals', 
+      'tranches_a.nominal', 
+      'tranchesA.nominal',
+      'class_a_nominals',
+      'nominals',
+      'class_a_principal',
+      'class_a.nominals',
+      'class_a.nominal'
+    ],
+    b_maturity: [
+      'b_maturity', 
+      'tranche_b.maturity_days', 
+      'trancheB.maturity_days',
+      'class_b_maturity',
+      'class_b.maturity_days',
+      'class_b.maturity'
+    ],
+    b_base_rate: [
+      'b_base_rate', 
+      'tranche_b.base_rate', 
+      'trancheB.base_rate',
+      'class_b_base_rate',
+      'class_b.base_rate'
+    ],
+    b_spread: [
+      'b_spread', 
+      'tranche_b.spread', 
+      'trancheB.spread',
+      'class_b_spread',
+      'class_b.spread'
+    ],
+    b_reinvest_rate: [
+      'b_reinvest_rate', 
+      'tranche_b.reinvest_rate', 
+      'trancheB.reinvest_rate',
+      'class_b_reinvest_rate',
+      'class_b.reinvest_rate'
+    ],
+    b_nominal: [
+      'b_nominal', 
+      'tranche_b.nominal', 
+      'trancheB.nominal', 
+      'class_b_principal',
+      'class_b.nominal',
+      'class_b.principal'
+    ],
+    ops_expenses: [
+      'ops_expenses', 
+      'operational_expenses', 
+      'general_settings.operational_expenses',
+      'expenses',
+      'operational.expenses'
+    ]
+  };
+
+  // Check if we have a tranche structure or data in one of several possible locations
+  console.log('Looking for Class A tranche data in various locations...');
+  
+  // Check for structured tranche data first
+  let a_maturities = [], a_base_rates = [], a_spreads = [], a_reinvest_rates = [], a_nominals = [];
+  let trancheDataFound = false;
+  
+  // Check for tranches in various possible field names and formats
+  const possibleTrancheFields = [
+    'tranches_a', 'tranchesA', 'class_a_tranches', 'class_a', 'tranches.a', 'a_tranches'
+  ];
+  
+  for (const field of possibleTrancheFields) {
+    const tranches = extractProperty(structureDetails, [field], null);
+    if (Array.isArray(tranches) && tranches.length > 0 && typeof tranches[0] === 'object') {
+      console.log(`Found tranches as array of objects in field: ${field}`, tranches);
+      a_maturities = tranches.map(t => ensureNumber(t.maturity_days || t.maturity));
+      a_base_rates = tranches.map(t => ensureNumber(t.base_rate));
+      a_spreads = tranches.map(t => ensureNumber(t.spread));
+      a_reinvest_rates = tranches.map(t => ensureNumber(t.reinvest_rate));
+      a_nominals = tranches.map(t => ensureNumber(t.nominal || t.principal));
+      trancheDataFound = true;
+      break;
+    }
+  }
+  
+  // If we didn't find structured tranche data, look for the individual arrays
+  if (!trancheDataFound) {
+    console.log('No structured tranche data found, looking for individual arrays...');
+    a_maturities = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_maturities, []));
+    
+    // If we still don't have maturities, create a default one to prevent API errors
+    if (a_maturities.length === 0) {
+      console.log('No Class A maturities found, creating default value of [90]');
+      a_maturities = [90]; // Default 90-day maturity as a fallback
+    }
+    
+    const maxLength = a_maturities.length;
+    a_base_rates = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_base_rates, []), maxLength);
+    a_spreads = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_spreads, []), maxLength);
+    a_reinvest_rates = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_reinvest_rates, []), maxLength);
+    a_nominals = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_nominals, []), maxLength);
+  }
+
+  // Extract class B properties
+  const b_maturity = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_maturity, 180));
+  const b_base_rate = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_base_rate, 0));
+  const b_spread = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_spread, 0));
+  const b_reinvest_rate = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_reinvest_rate, 0));
+  const b_nominal = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_nominal, 0));
+  const ops_expenses = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.ops_expenses, 0));
+
+  // Ensure lengths are consistent
+  const maxLength = a_maturities.length;
+  
+  const result = {
+    start_date: formattedDate,
+    a_maturities: a_maturities,
+    a_base_rates: a_base_rates.length === maxLength ? a_base_rates : Array(maxLength).fill(a_base_rates[0] || 0),
+    a_spreads: a_spreads.length === maxLength ? a_spreads : Array(maxLength).fill(a_spreads[0] || 0),
+    a_reinvest_rates: a_reinvest_rates.length === maxLength ? a_reinvest_rates : Array(maxLength).fill(a_reinvest_rates[0] || 0),
+    a_nominals: a_nominals.length === maxLength ? a_nominals : Array(maxLength).fill(a_nominals[0] || 0),
+    b_maturity: b_maturity,
+    b_base_rate: b_base_rate,
+    b_spread: b_spread,
+    b_reinvest_rate: b_reinvest_rate,
+    b_nominal: b_nominal,
+    ops_expenses: ops_expenses
+  };
+
+  // Log the resulting structure
+  console.log('Formatted structure for API:', result);
+  
+  return result;
+};
+
 const StressTestingPage = () => {
   const theme = darkTheme;
   const { calculationResults, savedResults } = useData();
   const navigate = useNavigate();
+  // Start with NPL tab as default instead of summary
   const [tabValue, setTabValue] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   
-  // State for stress test parameters
-  const [nplRange, setNplRange] = useState([2, 15]);
-  const [prepaymentRange, setPrepaymentRange] = useState([5, 25]);
-  const [reinvestmentRange, setReinvestmentRange] = useState([-10, 10]);
+  // State for stress test parameters with new base scenario values
+  const [nplRange, setNplRange] = useState([1.5, 1.5]);
+  const [prepaymentRange, setPrepaymentRange] = useState([30, 30]);
+  const [reinvestmentRange, setReinvestmentRange] = useState([0, 0]);
   const [defaultReinvestRate, setDefaultReinvestRate] = useState(30);
   const [scenarios, setScenarios] = useState(10);
   const [selectedScenarioType, setSelectedScenarioType] = useState('base');
   
-  // New state variable for dropdown selection
+  // State variable for dropdown selection
   const [selectedStructureId, setSelectedStructureId] = useState('');
   const [availableStructures, setAvailableStructures] = useState([]);
   
-  // State variables from Step 4
+  // State variables for predefined scenario
   const [predefinedScenario, setPredefinedScenario] = useState('base');
   
-  // State variables from Step 5
+  // State variable for reinvestment shift toggle
   const [applyReinvestmentShift, setApplyReinvestmentShift] = useState(false);
   
-  // State variables from Step 8
+  // State variables for notifications
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
   
-  // Initialize with safe default values
-  const [mockResults, setMockResults] = useState({
-    classBCouponRate: {
-      modeled: 42.5,
-      realized: 38.7,
-      difference: -3.8,
-      status: 'warning' // 'success', 'warning', 'error'
-    },
-    scenarioResults: [
-      { name: 'Base Case', npl: 5, prepayment: 10, reinvestment: 0, modeled: 42.5, realized: 38.7, difference: -3.8 },
-      { name: 'Mild Stress', npl: 8, prepayment: 15, reinvestment: -3, modeled: 41.2, realized: 36.1, difference: -5.1 },
-      { name: 'Severe Stress', npl: 12, prepayment: 20, reinvestment: -7, modeled: 39.5, realized: 33.2, difference: -6.3 },
-      { name: 'Extreme Stress', npl: 15, prepayment: 25, reinvestment: -10, modeled: 37.8, realized: 30.4, difference: -7.4 },
-      { name: 'Best Case', npl: 2, prepayment: 5, reinvestment: 5, modeled: 43.8, realized: 41.3, difference: -2.5 },
-    ],
+  // State for API test results
+  const [testResults, setTestResults] = useState({
+    classBCouponRate: null,
+    scenarioResults: [],
     sensitivityAnalysis: {
-      npl: [
-        { value: 2, modeled: 43.5, realized: 41.0 },
-        { value: 5, modeled: 42.5, realized: 38.7 },
-        { value: 8, modeled: 41.2, realized: 36.1 },
-        { value: 10, modeled: 40.3, realized: 34.8 },
-        { value: 12, modeled: 39.5, realized: 33.2 },
-        { value: 15, modeled: 37.8, realized: 30.4 },
-      ],
-      prepayment: [
-        { value: 5, modeled: 43.8, realized: 41.3 },
-        { value: 10, modeled: 42.5, realized: 38.7 },
-        { value: 15, modeled: 41.2, realized: 36.1 },
-        { value: 20, modeled: 39.5, realized: 33.2 },
-        { value: 25, modeled: 37.8, realized: 30.4 },
-      ],
-      reinvestment: [
-        { value: -10, modeled: 37.8, realized: 30.4 },
-        { value: -5, modeled: 40.3, realized: 34.8 },
-        { value: 0, modeled: 42.5, realized: 38.7 },
-        { value: 5, modeled: 43.8, realized: 41.3 },
-        { value: 10, modeled: 45.0, realized: 43.6 },
-      ],
+      npl: [],
+      prepayment: [],
+      reinvestment: []
     },
-    combinedScenarios: [
-      { npl: 2, prepayment: 5, reinvest: 5, modeled: 45.0, realized: 43.6 },
-      { npl: 5, prepayment: 5, reinvest: 0, modeled: 43.2, realized: 40.5 },
-      { npl: 5, prepayment: 10, reinvest: 0, modeled: 42.5, realized: 38.7 },
-      { npl: 5, prepayment: 15, reinvest: 0, modeled: 41.8, realized: 37.2 },
-      { npl: 8, prepayment: 10, reinvest: -3, modeled: 41.2, realized: 36.1 },
-      { npl: 10, prepayment: 15, reinvest: -5, modeled: 40.3, realized: 34.8 },
-      { npl: 12, prepayment: 20, reinvest: -7, modeled: 39.5, realized: 33.2 },
-      { npl: 15, prepayment: 20, reinvest: -7, modeled: 38.6, realized: 31.8 },
-      { npl: 15, prepayment: 25, reinvest: -10, modeled: 37.8, realized: 30.4 },
-    ]
+    combinedScenarios: []
   });
   
-  // From Step 2: Fetch Available Structures
+  // Fetch Available Structures
   useEffect(() => {
     if (savedResults && savedResults.length > 0) {
       // Group results by structure type
@@ -9717,7 +9959,7 @@ const StressTestingPage = () => {
           id: result.id,
           name: result.savedName || `${result.methodType} Structure`,
           type: result.methodType,
-          // Use calculated coupon rate
+          // Store coupon rate but don't display it in the dropdown
           classBCouponRate: directCouponRate || 0,
           directCouponRate: directCouponRate || 0,
           effectiveCouponRate: result.class_b_coupon_rate || 0
@@ -9748,7 +9990,7 @@ const StressTestingPage = () => {
     return availableStructures.find(structure => structure.id === selectedStructureId) || null;
   };
 
-  // Updated handleRunStressTest
+  // Run stress test with enhanced error handling and debugging
   const handleRunStressTest = async () => {
     const selectedStructure = getSelectedStructure();
     
@@ -9769,101 +10011,114 @@ const StressTestingPage = () => {
         throw new Error("Structure details not found");
       }
       
-      // Extract parameters for the test
-      const nplRate = nplRange[0]; // Use the first value if it's a range
-      const prepaymentRate = prepaymentRange[0]; // Use the first value if it's a range
-      const reinvestmentShift = applyReinvestmentShift ? reinvestmentRange[0] : 0;
+      // Log the structure details for debugging
+      console.log('Original structure details:', structureDetails);
       
-      // Here you would typically call your API to run the stress test
-      // For now, we'll simulate it with setTimeout
+      // Extract parameters for the test with proper number conversion
+      const nplRate = Number(nplRange[0]); 
+      const prepaymentRate = Number(prepaymentRange[0]);
+      const reinvestmentShift = applyReinvestmentShift ? Number(reinvestmentRange[0]) : 0;
       
-      setTimeout(() => {
-        // Use the calculated coupon rate as baseline
-        const baselineCouponRate = selectedStructure.directCouponRate || 0;
-        
-        // Calculate impact (this would normally come from backend):
-        // Higher NPL rates reduce coupon rate
-        // Higher prepayment can reduce or increase depending on structure
-        // Reinvestment shifts directly impact
-        const nplImpact = -1.5 * (nplRate / 2); // -1.5% per 2% NPL
-        const prepaymentImpact = -0.8 * ((prepaymentRate - 20) / 10); // -0.8% per 10% above 20%
-        const reinvestmentImpact = reinvestmentShift * 0.3; // 0.3% impact per 1% shift
-        
-        const modifiedCouponRate = baselineCouponRate + nplImpact + prepaymentImpact + reinvestmentImpact;
-        
-        // Update the mock results
-        const updatedResults = {
-          ...mockResults,
-          classBCouponRate: {
-            modeled: baselineCouponRate,
-            realized: Math.max(0, modifiedCouponRate),
-            difference: modifiedCouponRate - baselineCouponRate,
-            status: modifiedCouponRate < baselineCouponRate - 5 ? 'error' : 
-                  modifiedCouponRate < baselineCouponRate - 1 ? 'warning' : 'success'
-          },
-          scenarioResults: [
-            {
-              name: "Original",
-              npl: 0,
-              prepayment: 0,
-              reinvestment: 0,
-              modeled: baselineCouponRate,
-              realized: baselineCouponRate,
-              difference: 0
-            },
-            {
-              name: predefinedScenario.charAt(0).toUpperCase() + predefinedScenario.slice(1),
-              npl: nplRate,
-              prepayment: prepaymentRate,
-              reinvestment: reinvestmentShift,
-              modeled: baselineCouponRate,
-              realized: modifiedCouponRate,
-              difference: modifiedCouponRate - baselineCouponRate
-            }
-          ]
-        };
-        
-        // Update state with the new results
-        setMockResults(updatedResults);
-        setIsLoading(false);
-        
-        // Automatically switch to summary tab
-        setTabValue(0);
-        
-        // Show success message
-        setSnackbarMessage("Stress test completed successfully");
-        setSnackbarSeverity("success");
-        setSnackbarOpen(true);
-      }, 1500);
+      // Create request parameters for the API with enhanced formatting
+      const formattedStructure = formatStructureForStressTest(structureDetails);
       
-      // In a real implementation, use the API instead of setTimeout:
-      /*
-      const response = await runStressTest({
-        structure: {
-          id: structureDetails.id,
-          direct_coupon_rate: selectedStructure.directCouponRate || 0,
-          effective_coupon_rate: selectedStructure.effectiveCouponRate || 0
-        },
+      const requestParams = {
+        structure: formattedStructure,
         scenario: {
           name: predefinedScenario,
           npl_rate: nplRate,
           prepayment_rate: prepaymentRate,
           reinvestment_shift: reinvestmentShift
         }
-      });
+      };
       
-      setMockResults(response);
+      // Debug: Log the complete request payload
+      console.log('FULL REQUEST PAYLOAD:', JSON.stringify(requestParams, null, 2));
+      
+      // Call the API
+      const response = await runStressTest(requestParams);
+      
+      console.log('Received stress test response:', response);
+      
+      // Process API response
+      const responseData = {
+        classBCouponRate: {
+          modeled: response.baseline.class_b_coupon_rate,
+          realized: response.stress_test.class_b_coupon_rate,
+          difference: response.difference.class_b_coupon_rate,
+          status: response.difference.class_b_coupon_rate >= -1 ? 'success' : 
+                 response.difference.class_b_coupon_rate >= -5 ? 'warning' : 'error'
+        },
+        scenarioResults: [
+          {
+            name: "Base Case",
+            npl: 0,
+            prepayment: 0,
+            reinvestment: 0,
+            modeled: response.baseline.class_b_coupon_rate,
+            realized: response.baseline.class_b_coupon_rate,
+            difference: 0
+          },
+          {
+            name: predefinedScenario.charAt(0).toUpperCase() + predefinedScenario.slice(1),
+            npl: nplRate,
+            prepayment: prepaymentRate,
+            reinvestment: reinvestmentShift,
+            modeled: response.baseline.class_b_coupon_rate,
+            realized: response.stress_test.class_b_coupon_rate,
+            difference: response.difference.class_b_coupon_rate
+          }
+        ],
+        sensitivityAnalysis: {
+          npl: [],
+          prepayment: [],
+          reinvestment: []
+        },
+        combinedScenarios: []
+      };
+      
+      // Update state with the API results
+      setTestResults(responseData);
       setIsLoading(false);
-      setTabValue(0);
+      setTabValue(0); // Switch to NPL tab to show results
+      
+      // Show success message
       setSnackbarMessage("Stress test completed successfully");
       setSnackbarSeverity("success");
       setSnackbarOpen(true);
-      */
       
     } catch (error) {
       console.error("Error running stress test:", error);
+      
+      // Enhanced error logging
+      if (error.response) {
+        console.error('RESPONSE ERROR DATA:', error.response.data);
+        if (error.response.data.detail) {
+          console.error('ERROR DETAIL:', error.response.data.detail);
+        }
+      }
+      
       setIsLoading(false);
-      setSnackbarMessage("Error running stress test: " + error.message);
+      
+      // Extract the actual error message from the response if available
+      let errorMessage = "Error running stress test";
+      if (error.response && error.response.data) {
+        if (typeof error.response.data === 'string') {
+          errorMessage += ": " + error.response.data;
+        } else if (error.response.data.detail) {
+          // Check for specific error patterns
+          const detail = error.response.data.detail;
+          if (detail.includes("No data found") || detail.includes("upload Excel file")) {
+            errorMessage = "You need to upload an Excel file with loan data before running a stress test. Please go to the Structure Analysis page first.";
+          } else {
+            errorMessage += ": " + detail;
+          }
+        }
+      } else if (error.message) {
+        errorMessage += ": " + error.message;
+      }
+      
+      setSnackbarMessage(errorMessage);
       setSnackbarSeverity("error");
       setSnackbarOpen(true);
     }
@@ -9871,11 +10126,11 @@ const StressTestingPage = () => {
   
   // Format data for the sensitivity charts
   const formatSensitivityData = (dataKey) => {
-    if (!mockResults?.sensitivityAnalysis?.[dataKey]) {
+    if (!testResults?.sensitivityAnalysis?.[dataKey]) {
       return [];
     }
     
-    return mockResults.sensitivityAnalysis[dataKey].map(item => ({
+    return testResults.sensitivityAnalysis[dataKey].map(item => ({
       value: item.value || 0,
       modeled: item.modeled || 0,
       realized: item.realized || 0,
@@ -9885,11 +10140,11 @@ const StressTestingPage = () => {
   
   // Format combined scenarios data for scatter plot
   const formatScatterData = () => {
-    if (!mockResults?.combinedScenarios) {
+    if (!testResults?.combinedScenarios) {
       return [];
     }
     
-    return mockResults.combinedScenarios.map(item => ({
+    return testResults.combinedScenarios.map(item => ({
       x: item.npl || 0, // NPL rate for X axis
       y: item.prepayment || 0, // Prepayment rate for Y axis
       z: Math.abs((item.realized || 0) - (item.modeled || 0)) * 10, // Difference size for bubble size (scaled)
@@ -9949,7 +10204,7 @@ const StressTestingPage = () => {
           </Button>
         </Box>
         
-        {/* Structure Dropdown Selection */}
+        {/* Structure Dropdown Selection - Removed coupon rate display */}
         <Paper
           elevation={3}
           sx={{
@@ -9978,19 +10233,11 @@ const StressTestingPage = () => {
               >
                 {availableStructures.map((structure) => (
                   <MenuItem key={structure.id} value={structure.id}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        {structure.type === 'manual' && <TuneIcon sx={{ color: theme.palette.error.main, mr: 1 }} />}
-                        {structure.type === 'genetic' && <ScienceIcon sx={{ color: theme.palette.success.main, mr: 1 }} />}
-                        {structure.type === 'standard' && <SettingsIcon sx={{ color: theme.palette.primary.main, mr: 1 }} />}
-                        <Typography>{structure.name}</Typography>
-                      </Box>
-                      <Chip 
-                        label={`Coupon Rate: ${structure.directCouponRate.toFixed(2)}%`}
-                        color="warning"
-                        size="small"
-                        sx={{ ml: 2 }}
-                      />
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      {structure.type === 'manual' && <TuneIcon sx={{ color: theme.palette.error.main, mr: 1 }} />}
+                      {structure.type === 'genetic' && <ScienceIcon sx={{ color: theme.palette.success.main, mr: 1 }} />}
+                      {structure.type === 'standard' && <SettingsIcon sx={{ color: theme.palette.primary.main, mr: 1 }} />}
+                      <Typography>{structure.name}</Typography>
                     </Box>
                   </MenuItem>
                 ))}
@@ -10006,7 +10253,7 @@ const StressTestingPage = () => {
             <Box sx={{ mt: 2, p: 2, borderRadius: 1, bgcolor: alpha(theme.palette.warning.main, 0.05) }}>
               <Typography variant="subtitle2" gutterBottom>Selected Structure Details:</Typography>
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={4}>
+                <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="text.secondary">Type:</Typography>
                   <Typography variant="body1">
                     {getSelectedStructure().type === 'manual' ? 'Manual Calculation' : 
@@ -10014,16 +10261,10 @@ const StressTestingPage = () => {
                      'Grid Algorithm'}
                   </Typography>
                 </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Typography variant="body2" color="text.secondary">Class B Direct Coupon Rate:</Typography>
-                  <Typography variant="body1" color="warning.main" fontWeight="medium">
-                    {getSelectedStructure().directCouponRate.toFixed(2)}%
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Typography variant="body2" color="text.secondary">Class B Effective Coupon Rate:</Typography>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body2" color="text.secondary">Structure Name:</Typography>
                   <Typography variant="body1">
-                    {getSelectedStructure().effectiveCouponRate.toFixed(2)}%
+                    {getSelectedStructure().name}
                   </Typography>
                 </Grid>
               </Grid>
@@ -10049,7 +10290,7 @@ const StressTestingPage = () => {
                 Stress Test Parameters
               </Typography>
               
-              {/* Predefined Scenario Selection from Step 4 */}
+              {/* Predefined Scenario Selection with updated values */}
               <Box sx={{ mt: 3 }}>
                 <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center">
                   <CompareArrowsIcon sx={{ fontSize: 20, mr: 1, color: theme.palette.info.light }} />
@@ -10069,7 +10310,7 @@ const StressTestingPage = () => {
                       setPredefinedScenario('optimistic');
                       setNplRange([1, 1]);
                       setPrepaymentRange([20, 20]);
-                      setReinvestmentRange([0, 0]);
+                      setReinvestmentRange([2, 2]);
                     }}
                     size="small"
                     sx={{ borderRadius: 2 }}
@@ -10093,18 +10334,33 @@ const StressTestingPage = () => {
                   </Button>
                   
                   <Button
-                    variant={predefinedScenario === 'pessimistic' ? 'contained' : 'outlined'}
+                    variant={predefinedScenario === 'moderate' ? 'contained' : 'outlined'}
+                    color="secondary"
+                    onClick={() => {
+                      setPredefinedScenario('moderate');
+                      setNplRange([3, 3]);
+                      setPrepaymentRange([15, 15]);
+                      setReinvestmentRange([-3, -3]);
+                    }}
+                    size="small"
+                    sx={{ borderRadius: 2 }}
+                  >
+                    Moderate
+                  </Button>
+                  
+                  <Button
+                    variant={predefinedScenario === 'severe' ? 'contained' : 'outlined'}
                     color="error"
                     onClick={() => {
-                      setPredefinedScenario('pessimistic');
+                      setPredefinedScenario('severe');
                       setNplRange([5, 5]);
-                      setPrepaymentRange([15, 15]);
+                      setPrepaymentRange([10, 10]);
                       setReinvestmentRange([-5, -5]);
                     }}
                     size="small"
                     sx={{ borderRadius: 2 }}
                   >
-                    Pessimistic
+                    Severe
                   </Button>
                   
                   <Button
@@ -10112,14 +10368,14 @@ const StressTestingPage = () => {
                     color="warning"
                     onClick={() => {
                       setPredefinedScenario('extreme');
-                      setNplRange([10, 10]);
-                      setPrepaymentRange([10, 10]);
+                      setNplRange([7, 7]);
+                      setPrepaymentRange([5, 5]);
                       setReinvestmentRange([-10, -10]);
                     }}
                     size="small"
                     sx={{ borderRadius: 2 }}
                   >
-                    Extreme Stress
+                    Extreme
                   </Button>
                   
                   <Button
@@ -10151,12 +10407,14 @@ const StressTestingPage = () => {
                     onChange={(e, value) => setNplRange(value)}
                     valueLabelDisplay="auto"
                     min={0}
-                    max={30}
-                    step={1}
+                    max={15}
+                    step={0.5}
                     marks={[
                       { value: 0, label: '0%' },
-                      { value: 15, label: '15%' },
-                      { value: 30, label: '30%' }
+                      { value: 1.5, label: '1.5%' },
+                      { value: 5, label: '5%' },
+                      { value: 10, label: '10%' },
+                      { value: 15, label: '15%' }
                     ]}
                   />
                 </Box>
@@ -10182,14 +10440,17 @@ const StressTestingPage = () => {
                     step={1}
                     marks={[
                       { value: 0, label: '0%' },
-                      { value: 25, label: '25%' },
+                      { value: 10, label: '10%' },
+                      { value: 20, label: '20%' },
+                      { value: 30, label: '30%' },
+                      { value: 40, label: '40%' },
                       { value: 50, label: '50%' }
                     ]}
                   />
                 </Box>
               </Box>
               
-              {/* Reinvestment Rate Shift Toggle from Step 5 */}
+              {/* Reinvestment Rate Shift Toggle */}
               <Box sx={{ mt: 3 }}>
                 <FormControl component="fieldset">
                   <FormControlLabel
@@ -10265,8 +10526,8 @@ const StressTestingPage = () => {
                     onChange={(e) => setSelectedScenarioType(e.target.value)}
                     label="Pre-defined Scenario"
                   >
+                    <MenuItem value="optimistic">Optimistic</MenuItem>
                     <MenuItem value="base">Base Case</MenuItem>
-                    <MenuItem value="mild">Mild Stress</MenuItem>
                     <MenuItem value="moderate">Moderate Stress</MenuItem>
                     <MenuItem value="severe">Severe Stress</MenuItem>
                     <MenuItem value="extreme">Extreme Stress</MenuItem>
@@ -10327,11 +10588,6 @@ const StressTestingPage = () => {
                   }}
                 >
                   <Tab 
-                    label="Summary" 
-                    icon={<ShowChartIcon />} 
-                    iconPosition="start"
-                  />
-                  <Tab 
                     label="NPL Sensitivity" 
                     icon={<WarningAmberIcon />} 
                     iconPosition="start"
@@ -10349,112 +10605,8 @@ const StressTestingPage = () => {
                 </Tabs>
               </Box>
               
-              {/* Summary Tab */}
+              {/* NPL Sensitivity Tab (now the default tab) */}
               {tabValue === 0 && (
-                <Box sx={{ p: 3 }}>
-                  <Grid container spacing={3}>
-                    <Grid item xs={12}>
-                      <Box sx={{ 
-                        p: 2.5, 
-                        borderRadius: 2, 
-                        border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-                        backgroundColor: alpha(theme.palette.background.paper, 0.4),
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: 4
-                      }}>
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Direct Coupon Rate</Typography>
-                          <Typography variant="h3" color="primary.main" sx={{ mt: 0.5 }}>
-                            {(mockResults.classBCouponRate?.modeled || 0).toFixed(1)}%
-                          </Typography>
-                        </Box>
-                        
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">Realized Direct Coupon Rate</Typography>
-                          <Typography 
-                            variant="h3" 
-                            sx={{ 
-                              mt: 0.5, 
-                              color: getDifferenceColor(mockResults.classBCouponRate?.difference || 0, theme)
-                            }}
-                          >
-                            {(mockResults.classBCouponRate?.realized || 0).toFixed(1)}%
-                          </Typography>
-                        </Box>
-                        
-                        <Box sx={{ ml: 'auto', textAlign: 'right' }}>
-                          <Typography variant="body2" color="text.secondary">Difference</Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mt: 1 }}>
-                            <Chip 
-                              label={`${(mockResults.classBCouponRate?.difference || 0) > 0 ? '+' : ''}${(mockResults.classBCouponRate?.difference || 0).toFixed(1)}%`}
-                              color={
-                                (mockResults.classBCouponRate?.difference || 0) >= -1 ? "success" :
-                                (mockResults.classBCouponRate?.difference || 0) >= -5 ? "warning" : "error"
-                              }
-                              sx={{ fontWeight: 'bold', fontSize: '1.1rem', height: 32, px: 1 }}
-                            />
-                          </Box>
-                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                            {mockResults.classBCouponRate.difference >= -1 ? "Within target" :
-                             mockResults.classBCouponRate.difference >= -5 ? "Moderate deviation" : "Significant deviation"}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Grid>
-                    
-                    <Grid item xs={12}>
-                      <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-                        Scenario Comparison
-                      </Typography>
-                      <Box sx={{ height: 400 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart
-                            data={mockResults.scenarioResults}
-                            margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
-                            <XAxis 
-                              dataKey="name" 
-                              tick={{ fill: theme.palette.text.secondary }}
-                              angle={-45}
-                              textAnchor="end"
-                              height={70}
-                            />
-                            <YAxis 
-                              tickFormatter={(value) => `${value}%`}
-                              tick={{ fill: theme.palette.text.secondary }}
-                              domain={[0, 'dataMax + 5']}
-                            />
-                            <RechartsTooltip content={<CustomTooltip />} />
-                            <Legend 
-                              wrapperStyle={{ paddingTop: 20 }}
-                              formatter={(value) => (
-                                <span style={{ color: theme.palette.text.primary }}>{value}</span>
-                              )}
-                            />
-                            <Bar 
-                              name="Modeled Rate" 
-                              dataKey="modeled" 
-                              fill={theme.palette.primary.main}
-                              radius={[4, 4, 0, 0]}
-                            />
-                            <Bar 
-                              name="Realized Rate" 
-                              dataKey="realized" 
-                              fill={theme.palette.secondary.main}
-                              radius={[4, 4, 0, 0]}
-                            />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </Box>
-                    </Grid>
-                  </Grid>
-                </Box>
-              )}
-              
-              {/* NPL Sensitivity Tab */}
-              {tabValue === 1 && (
                 <Box sx={{ p: 3 }}>
                   <Typography variant="h6" gutterBottom>
                     Class B Coupon Rate vs. NPL Rates
@@ -10463,52 +10615,60 @@ const StressTestingPage = () => {
                     This analysis shows how Non-Performing Loan (NPL) rates affect the Class B coupon rates. Higher NPL rates typically reduce available cash flow for Class B payments.
                   </Typography>
                   
-                  <Box sx={{ height: 400, mb: 4 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={formatSensitivityData('npl')}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
-                        <XAxis 
-                          dataKey="value"
-                          label={{ value: 'NPL Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
-                          tick={{ fill: theme.palette.text.secondary }}
-                        />
-                        <YAxis 
-                          tickFormatter={(value) => `${value}%`}
-                          label={{ value: 'Coupon Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
-                          tick={{ fill: theme.palette.text.secondary }}
-                          domain={[0, 'dataMax + 5']}
-                        />
-                        <RechartsTooltip content={<CustomTooltip />} />
-                        <Legend 
-                          wrapperStyle={{ paddingTop: 20 }}
-                          formatter={(value) => (
-                            <span style={{ color: theme.palette.text.primary }}>{value}</span>
-                          )}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="modeled" 
-                          name="Modeled Rate" 
-                          stroke={theme.palette.primary.main}
-                          strokeWidth={2}
-                          dot={{ r: 5, fill: theme.palette.primary.main }}
-                          activeDot={{ r: 7, fill: theme.palette.primary.light }}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="realized" 
-                          name="Realized Rate" 
-                          stroke={theme.palette.secondary.main}
-                          strokeWidth={2}
-                          dot={{ r: 5, fill: theme.palette.secondary.main }}
-                          activeDot={{ r: 7, fill: theme.palette.secondary.light }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </Box>
+                  {testResults.sensitivityAnalysis.npl.length > 0 ? (
+                    <Box sx={{ height: 400, mb: 4 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={formatSensitivityData('npl')}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
+                          <XAxis 
+                            dataKey="value"
+                            label={{ value: 'NPL Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
+                            tick={{ fill: theme.palette.text.secondary }}
+                          />
+                          <YAxis 
+                            tickFormatter={(value) => `${value}%`}
+                            label={{ value: 'Coupon Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
+                            tick={{ fill: theme.palette.text.secondary }}
+                            domain={[0, 'dataMax + 5']}
+                          />
+                          <RechartsTooltip content={<CustomTooltip />} />
+                          <Legend 
+                            wrapperStyle={{ paddingTop: 20 }}
+                            formatter={(value) => (
+                              <span style={{ color: theme.palette.text.primary }}>{value}</span>
+                            )}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="modeled" 
+                            name="Modeled Rate" 
+                            stroke={theme.palette.primary.main}
+                            strokeWidth={2}
+                            dot={{ r: 5, fill: theme.palette.primary.main }}
+                            activeDot={{ r: 7, fill: theme.palette.primary.light }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="realized" 
+                            name="Realized Rate" 
+                            stroke={theme.palette.secondary.main}
+                            strokeWidth={2}
+                            dot={{ r: 5, fill: theme.palette.secondary.main }}
+                            activeDot={{ r: 7, fill: theme.palette.secondary.light }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Box>
+                  ) : (
+                    <Box sx={{ p: 8, textAlign: 'center' }}>
+                      <Typography variant="subtitle1" color="text.secondary">
+                        Run a stress test to see NPL sensitivity analysis
+                      </Typography>
+                    </Box>
+                  )}
                   
                   <Box sx={{ mt: 4, p: 3, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.4), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}` }}>
                     <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
@@ -10517,86 +10677,96 @@ const StressTestingPage = () => {
                     <Typography variant="body2" color="text.secondary" paragraph>
                       • The modeled and realized rates both decrease as NPL rates increase<br />
                       • The gap between modeled and realized rates widens with higher NPL rates<br />
-                      • At NPL rates above 12%, the deviation becomes significant (over 5%)<br />
-                      • Base case projections assume a 5% NPL rate
+                      • At NPL rates above 3%, the deviation becomes significant<br />
+                      • Base case projections assume a 1.5% NPL rate<br />
+                      • NPL rates above 5% represent severe stress scenarios
                     </Typography>
                   </Box>
                 </Box>
               )}
               
               {/* Prepayment Impact Tab */}
-              {tabValue === 2 && (
+              {tabValue === 1 && (
                 <Box sx={{ p: 3 }}>
                   <Typography variant="h6" gutterBottom>
                     Class B Coupon Rate vs. Prepayment Rates
                   </Typography>
                   <Typography variant="body2" color="text.secondary" paragraph>
-                    This analysis shows how early prepayment rates affect Class B coupon performance. Higher prepayment rates can impact the expected cash flow timing and reinvestment opportunities.
+                    This analysis shows how early prepayment rates affect Class B coupon performance. Lower prepayment rates can impact the expected cash flow timing and reduce reinvestment opportunities.
                   </Typography>
                   
-                  <Box sx={{ height: 400, mb: 4 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={formatSensitivityData('prepayment')}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
-                        <XAxis 
-                          dataKey="value"
-                          label={{ value: 'Prepayment Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
-                          tick={{ fill: theme.palette.text.secondary }}
-                        />
-                        <YAxis 
-                          tickFormatter={(value) => `${value}%`}
-                          label={{ value: 'Coupon Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
-                          tick={{ fill: theme.palette.text.secondary }}
-                          domain={[0, 'dataMax + 5']}
-                        />
-                        <RechartsTooltip content={<CustomTooltip />} />
-                        <Legend 
-                          wrapperStyle={{ paddingTop: 20 }}
-                          formatter={(value) => (
-                            <span style={{ color: theme.palette.text.primary }}>{value}</span>
-                          )}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="modeled" 
-                          name="Modeled Rate" 
-                          stroke={theme.palette.primary.main}
-                          strokeWidth={2}
-                          dot={{ r: 5, fill: theme.palette.primary.main }}
-                          activeDot={{ r: 7, fill: theme.palette.primary.light }}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="realized" 
-                          name="Realized Rate" 
-                          stroke={theme.palette.secondary.main}
-                          strokeWidth={2}
-                          dot={{ r: 5, fill: theme.palette.secondary.main }}
-                          activeDot={{ r: 7, fill: theme.palette.secondary.light }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </Box>
+                  {testResults.sensitivityAnalysis.prepayment.length > 0 ? (
+                    <Box sx={{ height: 400, mb: 4 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={formatSensitivityData('prepayment')}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
+                          <XAxis 
+                            dataKey="value"
+                            label={{ value: 'Prepayment Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
+                            tick={{ fill: theme.palette.text.secondary }}
+                          />
+                          <YAxis 
+                            tickFormatter={(value) => `${value}%`}
+                            label={{ value: 'Coupon Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
+                            tick={{ fill: theme.palette.text.secondary }}
+                            domain={[0, 'dataMax + 5']}
+                          />
+                          <RechartsTooltip content={<CustomTooltip />} />
+                          <Legend 
+                            wrapperStyle={{ paddingTop: 20 }}
+                            formatter={(value) => (
+                              <span style={{ color: theme.palette.text.primary }}>{value}</span>
+                            )}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="modeled" 
+                            name="Modeled Rate" 
+                            stroke={theme.palette.primary.main}
+                            strokeWidth={2}
+                            dot={{ r: 5, fill: theme.palette.primary.main }}
+                            activeDot={{ r: 7, fill: theme.palette.primary.light }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="realized" 
+                            name="Realized Rate" 
+                            stroke={theme.palette.secondary.main}
+                            strokeWidth={2}
+                            dot={{ r: 5, fill: theme.palette.secondary.main }}
+                            activeDot={{ r: 7, fill: theme.palette.secondary.light }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Box>
+                  ) : (
+                    <Box sx={{ p: 8, textAlign: 'center' }}>
+                      <Typography variant="subtitle1" color="text.secondary">
+                        Run a stress test to see prepayment impact analysis
+                      </Typography>
+                    </Box>
+                  )}
                   
                   <Box sx={{ mt: 4, p: 3, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.4), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}` }}>
                     <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
                       Key Insights:
                     </Typography>
                     <Typography variant="body2" color="text.secondary" paragraph>
-                      • Higher prepayment rates lead to lower coupon rates for Class B notes<br />
-                      • At prepayment rates above 20%, the deviation between modeled and realized becomes critical<br />
-                      • Base case projections assume a 10% prepayment rate<br />
-                      • Prepayment sensitivity analysis suggests careful monitoring of early repayments
+                      • Lower prepayment rates lead to lower coupon rates for Class B notes<br />
+                      • At prepayment rates below 15%, the deviation between modeled and realized becomes critical<br />
+                      • Base case projections assume a 30% prepayment rate<br />
+                      • Prepayment rates below 10% represent severe stress scenarios<br />
+                      • Higher prepayment rates generally benefit the structure in this model
                     </Typography>
                   </Box>
                 </Box>
               )}
               
               {/* Combined Analysis Tab */}
-              {tabValue === 3 && (
+              {tabValue === 2 && (
                 <Box sx={{ p: 3 }}>
                   <Typography variant="h6" gutterBottom>
                     Multifactor Analysis of Rate Deviation
@@ -10605,47 +10775,55 @@ const StressTestingPage = () => {
                     This combined analysis shows how NPL and prepayment rates together affect Class B coupon rate deviation. Bubble size indicates the magnitude of deviation.
                   </Typography>
                   
-                  <Box sx={{ height: 500 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ScatterChart
-                        margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
-                        <XAxis 
-                          type="number" 
-                          dataKey="x" 
-                          name="NPL Rate" 
-                          unit="%" 
-                          domain={[0, 20]}
-                          label={{ value: 'NPL Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
-                          tick={{ fill: theme.palette.text.secondary }}
-                        />
-                        <YAxis 
-                          type="number" 
-                          dataKey="y" 
-                          name="Prepayment Rate" 
-                          unit="%"
-                          domain={[0, 30]}
-                          label={{ value: 'Prepayment Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
-                          tick={{ fill: theme.palette.text.secondary }}
-                        />
-                        <ZAxis type="number" range={[60, 350]} />
-                        <RechartsTooltip content={<ScatterTooltip />} />
-                        <Legend 
-                          wrapperStyle={{ paddingTop: 20 }}
-                          formatter={(value) => (
-                            <span style={{ color: theme.palette.text.primary }}>{value}</span>
-                          )}
-                        />
-                        <Scatter 
-                          name="Rate Deviation" 
-                          data={formatScatterData()} 
-                          fill={theme.palette.error.main}
-                          fillOpacity={0.7}
-                        />
-                      </ScatterChart>
-                    </ResponsiveContainer>
-                  </Box>
+                  {testResults.combinedScenarios.length > 0 ? (
+                    <Box sx={{ height: 500 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ScatterChart
+                          margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
+                          <XAxis 
+                            type="number" 
+                            dataKey="x" 
+                            name="NPL Rate" 
+                            unit="%" 
+                            domain={[0, 15]}
+                            label={{ value: 'NPL Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
+                            tick={{ fill: theme.palette.text.secondary }}
+                          />
+                          <YAxis 
+                            type="number" 
+                            dataKey="y" 
+                            name="Prepayment Rate" 
+                            unit="%"
+                            domain={[0, 40]}
+                            label={{ value: 'Prepayment Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
+                            tick={{ fill: theme.palette.text.secondary }}
+                          />
+                          <ZAxis type="number" range={[60, 350]} />
+                          <RechartsTooltip content={<ScatterTooltip />} />
+                          <Legend 
+                            wrapperStyle={{ paddingTop: 20 }}
+                            formatter={(value) => (
+                              <span style={{ color: theme.palette.text.primary }}>{value}</span>
+                            )}
+                          />
+                          <Scatter 
+                            name="Rate Deviation" 
+                            data={formatScatterData()} 
+                            fill={theme.palette.error.main}
+                            fillOpacity={0.7}
+                          />
+                        </ScatterChart>
+                      </ResponsiveContainer>
+                    </Box>
+                  ) : (
+                    <Box sx={{ p: 8, textAlign: 'center' }}>
+                      <Typography variant="subtitle1" color="text.secondary">
+                        Run a stress test to see multifactor analysis
+                      </Typography>
+                    </Box>
+                  )}
                   
                   <Box sx={{ mt: 4, p: 3, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.4), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}` }}>
                     <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
@@ -10653,9 +10831,10 @@ const StressTestingPage = () => {
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       • Larger bubbles indicate greater deviation between modeled and realized coupon rates<br />
-                      • The upper right quadrant (high NPL, high prepayment) represents the most severe stress conditions<br />
-                      • Scenarios with high NPL rates and high prepayment rates tend to result in the largest deviations<br />
-                      • Base case parameters (5% NPL, 10% prepayment) show moderate but acceptable deviation
+                      • The lower right quadrant (high NPL, low prepayment) represents the most severe stress conditions<br />
+                      • Scenarios with high NPL rates (&gt;5%) and low prepayment rates (&lt;10%) tend to result in the largest deviations<br />
+                      • Base case parameters (1.5% NPL, 30% prepayment) show moderate but acceptable deviation<br />
+                      • Optimistic scenarios (1% NPL, 20% prepayment) with positive reinvestment shifts show minimal impact
                     </Typography>
                   </Box>
                 </Box>
@@ -10664,7 +10843,7 @@ const StressTestingPage = () => {
           </Grid>
         </Grid>
         
-        {/* Snackbar for Notifications from Step 8 */}
+        {/* Snackbar for Notifications */}
         <Snackbar
           open={snackbarOpen}
           autoHideDuration={6000}
@@ -11408,10 +11587,11 @@ async def get_optimization_progress():
 DOSYA: backend\app\routers\stress_testing.py
 ==================================================
 from fastapi import APIRouter, HTTPException
-from app.models.input_models import StressTestRequest  # You'll need to create this
+from app.models.input_models import StressTestRequest
 from app.services.stress_testing_service import perform_stress_test
 from app.routers.calculation import df_store
 import logging
+import traceback
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -11419,17 +11599,87 @@ logger = logging.getLogger(__name__)
 @router.post("/stress-test/", response_model=dict)
 async def stress_test(request: StressTestRequest):
     try:
-        # Get the stored dataframe
+        # Get the stored dataframe with better error message
         df = df_store.get("df")
         if df is None:
-            raise HTTPException(status_code=400, detail="No data found. Please upload Excel file first.")
+            raise HTTPException(
+                status_code=400, 
+                detail="No loan data found. Please upload an Excel file on the Structure Analysis page first."
+            )
+        
+        # Validate dataframe has required columns
+        required_columns = ['principal_amount', 'interest_amount', 'cash_flow', 'installment_date']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required columns in uploaded data: {', '.join(missing_columns)}"
+            )
+        
+        # Basic validation of input data
+        if not request.structure:
+            raise HTTPException(status_code=400, detail="Structure details are missing")
+            
+        # Validate structure parameters
+        if not request.structure.a_maturities:
+            raise HTTPException(status_code=400, detail="No Class A maturities provided")
+        
+        # Ensure lists are of equal length
+        list_lengths = [
+            len(request.structure.a_maturities),
+            len(request.structure.a_base_rates),
+            len(request.structure.a_spreads),
+            len(request.structure.a_reinvest_rates),
+            len(request.structure.a_nominals)
+        ]
+        if len(set(list_lengths)) > 1:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Inconsistent lengths in Class A parameters: {list_lengths}"
+            )
+        
+        # Validate scenario parameters
+        if request.scenario.npl_rate < 0 or request.scenario.npl_rate > 100:
+            raise HTTPException(
+                status_code=400,
+                detail=f"NPL rate must be between 0 and 100, got {request.scenario.npl_rate}"
+            )
+            
+        if request.scenario.prepayment_rate < 0 or request.scenario.prepayment_rate > 100:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Prepayment rate must be between 0 and 100, got {request.scenario.prepayment_rate}"
+            )
+        
+        # Log inputs for debugging
+        logger.info(f"Running stress test with scenario: {request.scenario.name}")
+        logger.info(f"NPL rate: {request.scenario.npl_rate}%, Prepayment: {request.scenario.prepayment_rate}%, Reinvestment shift: {request.scenario.reinvestment_shift}%")
         
         # Perform the stress test
         result = perform_stress_test(df, request)
+        
+        # Log results for debugging
+        logger.info(f"Stress test completed. Baseline rate: {result['baseline']['class_b_coupon_rate']}%, Stress rate: {result['stress_test']['class_b_coupon_rate']}%")
+        logger.info(f"Difference: {result['difference']['class_b_coupon_rate']}%")
+        
         return result
+    except HTTPException:
+        # Re-raise HTTP exceptions directly
+        raise
     except Exception as e:
-        logger.error(f"Stress testing error: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Stress testing error: {str(e)}")
+        # Capture and log the full exception details
+        stack_trace = traceback.format_exc()
+        error_message = str(e)
+        logger.error(f"Stress testing error: {error_message}\n{stack_trace}")
+        
+        # Provide a meaningful error message
+        if not error_message:
+            error_message = "Unknown error occurred during stress testing. Check server logs for details."
+            
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Stress testing error: {error_message}"
+        )
 
 ======================================================================
 
@@ -12910,126 +13160,217 @@ import numpy as np
 from app.utils.tranche_utils import calculate_tranche_results
 from typing import Dict, Any, List
 from app.models.input_models import StressTestRequest
+import logging
+
+logger = logging.getLogger(__name__)
 
 def adjust_cash_flow_for_npl(df: pd.DataFrame, npl_rate: float) -> pd.DataFrame:
     """
     Adjust cash flows by reducing principal payments based on NPL rate
     """
-    df_adjusted = df.copy()
-    
-    # Reduce principal by NPL rate
-    df_adjusted['principal_amount'] = df_adjusted['principal_amount'] * (1 - (npl_rate / 100))
-    
-    # Recalculate total cash flow
-    df_adjusted['cash_flow'] = df_adjusted['principal_amount'] + df_adjusted['interest_amount']
-    df_adjusted['original_cash_flow'] = df_adjusted['cash_flow'].copy()
-    
-    return df_adjusted
+    try:
+        df_adjusted = df.copy()
+        
+        # Ensure all required columns exist
+        if 'principal_amount' not in df_adjusted.columns:
+            logger.error("Missing 'principal_amount' column in DataFrame")
+            raise ValueError("Missing 'principal_amount' column in data")
+            
+        if 'interest_amount' not in df_adjusted.columns:
+            logger.error("Missing 'interest_amount' column in DataFrame")
+            raise ValueError("Missing 'interest_amount' column in data")
+            
+        if 'cash_flow' not in df_adjusted.columns:
+            logger.error("Missing 'cash_flow' column in DataFrame")
+            raise ValueError("Missing 'cash_flow' column in data")
+        
+        # Convert npl_rate to a factor (e.g., 5% -> 0.05)
+        npl_factor = npl_rate / 100.0
+        
+        # Reduce principal by NPL rate
+        df_adjusted['principal_amount'] = df_adjusted['principal_amount'] * (1 - npl_factor)
+        
+        # Recalculate total cash flow
+        df_adjusted['cash_flow'] = df_adjusted['principal_amount'] + df_adjusted['interest_amount']
+        
+        # Keep original cash flow for reference
+        if 'original_cash_flow' not in df_adjusted.columns:
+            df_adjusted['original_cash_flow'] = df['cash_flow'].copy()
+        
+        logger.info(f"Applied NPL rate of {npl_rate}%, reducing principal payments")
+        return df_adjusted
+        
+    except Exception as e:
+        logger.error(f"Error in adjust_cash_flow_for_npl: {str(e)}")
+        raise ValueError(f"Failed to adjust cash flows for NPL rate: {str(e)}")
 
 def adjust_cash_flow_for_prepayment(df: pd.DataFrame, prepayment_rate: float) -> pd.DataFrame:
     """
     Adjust cash flows by shifting some payments earlier based on prepayment rate
     """
-    if prepayment_rate <= 0:
-        return df
-    
-    df_adjusted = df.copy()
-    
-    # Sort by date
-    df_adjusted = df_adjusted.sort_values('installment_date')
-    
-    # Calculate running sum of principal
-    total_principal = df_adjusted['principal_amount'].sum()
-    
-    # Calculate prepayment amount
-    prepayment_amount = total_principal * (prepayment_rate / 100)
-    
-    # Distribution function (more prepayments in early periods)
-    prepayment_weights = np.linspace(3, 1, len(df_adjusted))
-    prepayment_weights = prepayment_weights / prepayment_weights.sum()
-    
-    # Allocate prepayments by weight
-    prepayment_allocations = prepayment_amount * prepayment_weights
-    
-    # Apply prepayments (reduce later periods, increase earlier periods)
-    n = len(df_adjusted)
-    reduction_indices = range(n//2, n)  # Reduce second half
-    addition_indices = range(0, n//2)   # Add to first half
-    
-    # Reduce later payments
-    for i in reduction_indices:
-        if i < len(prepayment_allocations):
-            reduction = min(prepayment_allocations[i], df_adjusted.iloc[i]['principal_amount'] * 0.8)
-            df_adjusted.iloc[i, df_adjusted.columns.get_loc('principal_amount')] -= reduction
-    
-    # Increase earlier payments
-    for i in addition_indices:
-        if i < len(prepayment_allocations):
-            df_adjusted.iloc[i, df_adjusted.columns.get_loc('principal_amount')] += prepayment_allocations[i]
-    
-    # Recalculate total cash flow
-    df_adjusted['cash_flow'] = df_adjusted['principal_amount'] + df_adjusted['interest_amount']
-    df_adjusted['original_cash_flow'] = df_adjusted['cash_flow'].copy()
-    
-    return df_adjusted
+    try:
+        # If prepayment rate is zero or negative, no adjustment needed
+        if prepayment_rate <= 0:
+            return df
+        
+        df_adjusted = df.copy()
+        
+        # Ensure required columns exist
+        if 'principal_amount' not in df_adjusted.columns:
+            logger.error("Missing 'principal_amount' column in DataFrame")
+            raise ValueError("Missing 'principal_amount' column in data")
+            
+        if 'installment_date' not in df_adjusted.columns:
+            logger.error("Missing 'installment_date' column in DataFrame")
+            raise ValueError("Missing 'installment_date' column in data")
+        
+        # Convert prepayment_rate to a factor
+        prepayment_factor = prepayment_rate / 100.0
+        
+        # Sort by date
+        if not pd.api.types.is_datetime64_any_dtype(df_adjusted['installment_date']):
+            df_adjusted['installment_date'] = pd.to_datetime(df_adjusted['installment_date'])
+            
+        df_adjusted = df_adjusted.sort_values('installment_date')
+        
+        # Calculate running sum of principal
+        total_principal = df_adjusted['principal_amount'].sum()
+        
+        # Calculate prepayment amount
+        prepayment_amount = total_principal * prepayment_factor
+        
+        # Distribution function (more prepayments in early periods)
+        n_rows = len(df_adjusted)
+        if n_rows <= 1:
+            logger.warning("Too few rows for prepayment adjustment")
+            return df_adjusted
+            
+        prepayment_weights = np.linspace(3, 1, n_rows)
+        prepayment_weights = prepayment_weights / prepayment_weights.sum()
+        
+        # Allocate prepayments by weight
+        prepayment_allocations = prepayment_amount * prepayment_weights
+        
+        # Apply prepayments (reduce later periods, increase earlier periods)
+        n = len(df_adjusted)
+        reduction_indices = range(n//2, n)  # Reduce second half
+        addition_indices = range(0, n//2)   # Add to first half
+        
+        # Reduce later payments (create a deep copy to avoid warnings)
+        df_temp = df_adjusted.copy()
+        for i in reduction_indices:
+            if i < len(prepayment_allocations):
+                max_reduction = df_temp.iloc[i]['principal_amount'] * 0.8
+                reduction = min(prepayment_allocations[i], max_reduction)
+                df_temp.iloc[i, df_temp.columns.get_loc('principal_amount')] -= reduction
+        
+        # Increase earlier payments
+        for i in addition_indices:
+            if i < len(prepayment_allocations):
+                df_temp.iloc[i, df_temp.columns.get_loc('principal_amount')] += prepayment_allocations[i]
+        
+        # Update the adjusted dataframe
+        df_adjusted = df_temp
+        
+        # Recalculate total cash flow
+        if 'interest_amount' in df_adjusted.columns:
+            df_adjusted['cash_flow'] = df_adjusted['principal_amount'] + df_adjusted['interest_amount']
+            
+        # Keep original cash flow for reference
+        if 'original_cash_flow' not in df_adjusted.columns and 'cash_flow' in df.columns:
+            df_adjusted['original_cash_flow'] = df['cash_flow'].copy()
+        
+        logger.info(f"Applied prepayment rate of {prepayment_rate}%, shifting principal payments")
+        return df_adjusted
+        
+    except Exception as e:
+        logger.error(f"Error in adjust_cash_flow_for_prepayment: {str(e)}")
+        raise ValueError(f"Failed to adjust cash flows for prepayment rate: {str(e)}")
 
 def perform_stress_test(df: pd.DataFrame, request: StressTestRequest) -> Dict[str, Any]:
     """
     Perform stress testing by adjusting cash flows and recalculating with the same structure
     """
-    # Extract parameters
-    structure = request.structure
-    scenario = request.scenario
-    npl_rate = scenario.npl_rate
-    prepayment_rate = scenario.prepayment_rate
-    reinvestment_shift = scenario.reinvestment_shift
-    
-    # Adjust cash flows for NPL
-    df_adjusted = adjust_cash_flow_for_npl(df, npl_rate)
-    
-    # Adjust cash flows for prepayment
-    df_adjusted = adjust_cash_flow_for_prepayment(df_adjusted, prepayment_rate)
-    
-    # Adjust reinvestment rates if needed
-    a_reinvest_rates = [rate + reinvestment_shift for rate in structure.a_reinvest_rates]
-    b_reinvest_rate = structure.b_reinvest_rate + reinvestment_shift
-    
-    # Calculate new results
-    result = calculate_tranche_results(
-        df_adjusted, structure.start_date,
-        structure.a_maturities, structure.a_base_rates, structure.a_spreads, a_reinvest_rates,
-        structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
-        b_reinvest_rate, structure.b_nominal, structure.ops_expenses
-    )
-    
-    # Extract baseline results
-    baseline_result = calculate_tranche_results(
-        df, structure.start_date,
-        structure.a_maturities, structure.a_base_rates, structure.a_spreads, structure.a_reinvest_rates,
-        structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
-        structure.b_reinvest_rate, structure.b_nominal, structure.ops_expenses
-    )
-    
-    # Create response
-    response = {
-        'baseline': {
-            'class_b_coupon_rate': baseline_result['effective_coupon_rate'],
-            'min_buffer_actual': baseline_result['min_buffer_actual']
-        },
-        'stress_test': {
-            'class_b_coupon_rate': result['effective_coupon_rate'],
-            'min_buffer_actual': result['min_buffer_actual'],
-            'npl_rate': npl_rate,
-            'prepayment_rate': prepayment_rate,
-            'reinvestment_shift': reinvestment_shift
-        },
-        'difference': {
-            'class_b_coupon_rate': result['effective_coupon_rate'] - baseline_result['effective_coupon_rate'],
-            'min_buffer_actual': result['min_buffer_actual'] - baseline_result['min_buffer_actual']
+    try:
+        logger.info("Starting stress test calculation")
+        
+        # Extract parameters
+        structure = request.structure
+        scenario = request.scenario
+        npl_rate = scenario.npl_rate
+        prepayment_rate = scenario.prepayment_rate
+        reinvestment_shift = scenario.reinvestment_shift
+        
+        # Log parameters for debugging
+        logger.info(f"Scenario: {scenario.name}")
+        logger.info(f"NPL Rate: {npl_rate}%, Prepayment Rate: {prepayment_rate}%, Reinvestment Shift: {reinvestment_shift}%")
+        
+        # First calculate baseline results with original data
+        logger.info("Calculating baseline results")
+        baseline_result = calculate_tranche_results(
+            df, structure.start_date,
+            structure.a_maturities, structure.a_base_rates, structure.a_spreads, structure.a_reinvest_rates,
+            structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
+            structure.b_reinvest_rate, structure.b_nominal, structure.ops_expenses
+        )
+        
+        # Apply NPL rate
+        df_adjusted = df.copy()
+        if npl_rate > 0:
+            logger.info(f"Adjusting cash flows for NPL rate: {npl_rate}%")
+            df_adjusted = adjust_cash_flow_for_npl(df_adjusted, npl_rate)
+        
+        # Apply prepayment
+        if prepayment_rate > 0:
+            logger.info(f"Adjusting cash flows for prepayment rate: {prepayment_rate}%")
+            df_adjusted = adjust_cash_flow_for_prepayment(df_adjusted, prepayment_rate)
+        
+        # Adjust reinvestment rates if shift is non-zero
+        a_reinvest_rates = structure.a_reinvest_rates
+        b_reinvest_rate = structure.b_reinvest_rate
+        
+        if reinvestment_shift != 0:
+            logger.info(f"Applying reinvestment rate shift: {reinvestment_shift}%")
+            a_reinvest_rates = [rate + reinvestment_shift for rate in structure.a_reinvest_rates]
+            b_reinvest_rate = structure.b_reinvest_rate + reinvestment_shift
+        
+        # Calculate stress test results
+        logger.info("Calculating stress test results")
+        result = calculate_tranche_results(
+            df_adjusted, structure.start_date,
+            structure.a_maturities, structure.a_base_rates, structure.a_spreads, a_reinvest_rates,
+            structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
+            b_reinvest_rate, structure.b_nominal, structure.ops_expenses
+        )
+        
+        # Create response
+        response = {
+            'baseline': {
+                'class_b_coupon_rate': round(baseline_result['effective_coupon_rate'], 4),
+                'min_buffer_actual': round(baseline_result.get('min_buffer_actual', 0), 4)
+            },
+            'stress_test': {
+                'class_b_coupon_rate': round(result['effective_coupon_rate'], 4),
+                'min_buffer_actual': round(result.get('min_buffer_actual', 0), 4),
+                'npl_rate': npl_rate,
+                'prepayment_rate': prepayment_rate,
+                'reinvestment_shift': reinvestment_shift
+            },
+            'difference': {
+                'class_b_coupon_rate': round(result['effective_coupon_rate'] - baseline_result['effective_coupon_rate'], 4),
+                'min_buffer_actual': round(result.get('min_buffer_actual', 0) - baseline_result.get('min_buffer_actual', 0), 4)
+            }
         }
-    }
-    
-    return response
+        
+        logger.info("Stress test completed successfully")
+        logger.info(f"Baseline rate: {response['baseline']['class_b_coupon_rate']}%, Stress rate: {response['stress_test']['class_b_coupon_rate']}%")
+        logger.info(f"Difference: {response['difference']['class_b_coupon_rate']}%")
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in perform_stress_test: {str(e)}")
+        raise ValueError(f"Stress test calculation failed: {str(e)}")
 
 ======================================================================
 
