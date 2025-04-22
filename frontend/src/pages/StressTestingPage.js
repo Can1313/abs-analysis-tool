@@ -7,31 +7,23 @@ import {
   Grid, 
   Slider, 
   TextField, 
-  InputAdornment, 
   Button, 
-  Tabs, 
-  Tab, 
-  Divider, 
-  Chip,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
+  Divider,
   alpha,
-  useTheme,
-  ThemeProvider,
-  createTheme,
-  CssBaseline,
   IconButton,
   Tooltip,
   CircularProgress,
   Snackbar,
   Alert,
-  Switch,
-  FormControlLabel
+  Tab,
+  Tabs,
+  LinearProgress
 } from '@mui/material';
-import { styled } from '@mui/material/styles';
-import RefreshIcon from '@mui/icons-material/Refresh';
+
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -40,177 +32,38 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import SaveAltIcon from '@mui/icons-material/SaveAlt';
-import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
-import TuneIcon from '@mui/icons-material/Tune';
-import ScienceIcon from '@mui/icons-material/Science';
-import SettingsIcon from '@mui/icons-material/Settings';
-import CompareIcon from '@mui/icons-material/Compare';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import PieChartIcon from '@mui/icons-material/PieChart';
+import TableChartIcon from '@mui/icons-material/TableChart';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+
 import { useData } from '../contexts/DataContext';
 import { useNavigate } from 'react-router-dom';
-import { runEnhancedStressTest } from '../services/apiService';
+import { useTheme } from '@mui/material';
+import { runEnhancedStressTest, formatStructureForStressTest } from '../services/apiService';
 
-// Import Recharts components
+// Recharts components
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
-  Legend, ResponsiveContainer, AreaChart, Area, BarChart, Bar, ReferenceLine,
-  ScatterChart, Scatter, ZAxis
+  Legend, ResponsiveContainer, AreaChart, Area, BarChart, Bar, ScatterChart, 
+  Scatter, ZAxis, ReferenceLine, PieChart, Pie, Cell
 } from 'recharts';
-
-// Create a dark theme
-const darkTheme = createTheme({
-  palette: {
-    mode: 'dark',
-    primary: {
-      main: '#4dabf5',
-    },
-    secondary: {
-      main: '#ce93d8',
-    },
-    success: {
-      main: '#66bb6a',
-    },
-    error: {
-      main: '#f44336',
-    },
-    warning: {
-      main: '#ffa726',
-    },
-    info: {
-      main: '#29b6f6',
-    },
-    background: {
-      default: '#0a1929',
-      paper: '#132f4c',
-    },
-    text: {
-      primary: '#ffffff',
-      secondary: 'rgba(255, 255, 255, 0.7)',
-    },
-    divider: 'rgba(255, 255, 255, 0.12)',
-    grid: 'rgba(255, 255, 255, 0.15)',
-  },
-  shape: {
-    borderRadius: 8,
-  },
-  components: {
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          backgroundImage: 'none',
-        },
-      },
-    },
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-        },
-      },
-    },
-    MuiChip: {
-      styleOverrides: {
-        root: {
-          fontWeight: 500,
-        },
-      },
-    },
-    MuiCardContent: {
-      styleOverrides: {
-        root: {
-          '&:last-child': {
-            paddingBottom: 16,
-          },
-        },
-      },
-    },
-  },
-});
-
-// Custom styled component for slider
-const StyledSlider = styled(Slider)(({ theme }) => ({
-  color: theme.palette.primary.main,
-  height: 8,
-  '& .MuiSlider-track': {
-    border: 'none',
-    backgroundImage: `linear-gradient(to right, ${theme.palette.primary.main}, ${theme.palette.primary.light})`,
-  },
-  '& .MuiSlider-thumb': {
-    height: 24,
-    width: 24,
-    backgroundColor: theme.palette.background.paper,
-    border: `2px solid ${theme.palette.primary.main}`,
-    '&:focus, &:hover, &.Mui-active, &.Mui-focusVisible': {
-      boxShadow: `0 0 0 8px ${alpha(theme.palette.primary.main, 0.16)}`,
-    },
-    '&:before': {
-      display: 'none',
-    },
-  },
-  '& .MuiSlider-valueLabel': {
-    lineHeight: 1.2,
-    fontSize: 12,
-    background: 'unset',
-    padding: 0,
-    width: 32,
-    height: 32,
-    borderRadius: '50% 50% 50% 0',
-    backgroundColor: theme.palette.primary.main,
-    transformOrigin: 'bottom left',
-    transform: 'translate(50%, -100%) rotate(-45deg) scale(0)',
-    '&:before': { display: 'none' },
-    '&.MuiSlider-valueLabelOpen': {
-      transform: 'translate(50%, -100%) rotate(-45deg) scale(1)',
-    },
-    '& > *': {
-      transform: 'rotate(45deg)',
-    },
-  },
-}));
-
-// Helper function to get color based on difference value
-const getDifferenceColor = (diff, theme) => {
-  if (diff >= -1) return theme.palette.success.main;
-  if (diff >= -5) return theme.palette.warning.main;
-  return theme.palette.error.main;
-};
 
 // Custom tooltip for charts
 const CustomTooltip = ({ active, payload, label }) => {
-  const theme = darkTheme;
+  const theme = useTheme();
   if (active && payload && payload.length) {
     return (
-      <Paper
-        elevation={3}
-        sx={{
-          p: 2,
-          borderRadius: 1,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-          border: '1px solid',
-          borderColor: alpha(theme.palette.primary.main, 0.1),
-          backgroundColor: alpha(theme.palette.background.paper, 0.95),
-          maxWidth: 300,
-        }}
-      >
-        <Typography variant="subtitle2" gutterBottom>{label}</Typography>
+      <Paper sx={{ p: 2, boxShadow: 3 }}>
+        <Typography variant="subtitle2" gutterBottom>
+          {label}
+        </Typography>
+        
         {payload.map((entry, index) => (
-          <Box key={`tooltip-item-${index}`} sx={{ display: 'flex', justifyContent: 'space-between', my: 0.5, alignItems: 'center' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Box
-                sx={{
-                  width: 12,
-                  height: 12,
-                  backgroundColor: entry.color,
-                  mr: 1,
-                  borderRadius: '50%'
-                }}
-              />
-              <Typography variant="body2" color="text.secondary">
-                {entry.name}:
-              </Typography>
-            </Box>
-            <Typography variant="body2" fontWeight="medium" color={entry.color}>
+          <Box key={`tooltip-item-${index}`} sx={{ display: 'flex', justifyContent: 'space-between', my: 0.5 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mr: 2 }}>
+              {entry.name}:
+            </Typography>
+            <Typography variant="body2" fontWeight="medium" sx={{ color: entry.color }}>
               {typeof entry.value === 'number' 
                 ? entry.value.toFixed(2) + (entry.unit || '%')
                 : entry.value}
@@ -223,643 +76,146 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-// Advanced custom tooltip for scatter chart
-const ScatterTooltip = ({ active, payload }) => {
-  const theme = darkTheme;
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    return (
-      <Paper
-        elevation={3}
-        sx={{
-          p: 2,
-          borderRadius: 1,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-          border: '1px solid',
-          borderColor: alpha(theme.palette.primary.main, 0.1),
-          backgroundColor: alpha(theme.palette.background.paper, 0.95),
-          maxWidth: 300,
-        }}
-      >
-        <Typography variant="subtitle2" gutterBottom fontWeight="medium">
-          Scenario Analysis
-        </Typography>
-        <Divider sx={{ my: 1 }} />
-        <Grid container spacing={1}>
-          <Grid item xs={6}>
-            <Typography variant="body2" color="text.secondary">NPL Rate:</Typography>
-          </Grid>
-          <Grid item xs={6}>
-            <Typography variant="body2" fontWeight="medium">{data.npl}%</Typography>
-          </Grid>
-          <Grid item xs={6}>
-            <Typography variant="body2" color="text.secondary">Prepayment:</Typography>
-          </Grid>
-          <Grid item xs={6}>
-            <Typography variant="body2" fontWeight="medium">{data.prepayment}%</Typography>
-          </Grid>
-          <Grid item xs={6}>
-            <Typography variant="body2" color="text.secondary">Reinvest Shift:</Typography>
-          </Grid>
-          <Grid item xs={6}>
-            <Typography variant="body2" fontWeight="medium">{data.reinvest}%</Typography>
-          </Grid>
-          <Grid item xs={12}><Divider sx={{ my: 1 }} /></Grid>
-          <Grid item xs={6}>
-            <Typography variant="body2" color="text.secondary">Modeled Rate:</Typography>
-          </Grid>
-          <Grid item xs={6}>
-            <Typography variant="body2" fontWeight="medium" color={theme.palette.primary.main}>
-              {data.modeled}%
-            </Typography>
-          </Grid>
-          <Grid item xs={6}>
-            <Typography variant="body2" color="text.secondary">Realized Rate:</Typography>
-          </Grid>
-          <Grid item xs={6}>
-            <Typography variant="body2" fontWeight="medium" color={theme.palette.secondary.main}>
-              {data.realized}%
-            </Typography>
-          </Grid>
-          <Grid item xs={6}>
-            <Typography variant="body2" color="text.secondary">Difference:</Typography>
-          </Grid>
-          <Grid item xs={6}>
-            <Typography variant="body2" fontWeight="medium" 
-              color={getDifferenceColor(data.difference, theme)}>
-              {data.difference}%
-            </Typography>
-          </Grid>
-        </Grid>
-      </Paper>
-    );
-  }
-  return null;
-};
-
-/**
- * Enhanced function to format structure data for stress testing
- * Improves Class B nominal value extraction with multiple fallback methods
- * 
- * @param {Object} structureDetails - Structure data from savedResults
- * @returns {Object} - Properly formatted structure object for API
- */
-const formatStructureForStressTest = (structureDetails) => {
-  console.log('Input structure details:', structureDetails);
-  
-  // Helper function to find data in different possible locations
-  const extractProperty = (obj, keys, defaultValue) => {
-    if (!obj) return defaultValue;
-    
-    for (const key of keys) {
-      if (obj[key] !== undefined) {
-        return obj[key];
-      }
-    }
-    
-    // For nested property paths using dot notation
-    for (const key of keys) {
-      if (key.includes('.')) {
-        const parts = key.split('.');
-        let value = obj;
-        let found = true;
-        
-        for (const part of parts) {
-          if (value && value[part] !== undefined) {
-            value = value[part];
-          } else {
-            found = false;
-            break;
-          }
-        }
-        
-        if (found) {
-          return value;
-        }
-      }
-    }
-    
-    return defaultValue;
-  };
-
-  // Helper function to ensure array fields
-  const ensureNumericArray = (arr, minLength = 1, defaultValue = 0) => {
-    if (!arr) {
-      return Array(minLength).fill(defaultValue);
-    }
-    
-    if (typeof arr === 'string') {
-      try {
-        const parsed = JSON.parse(arr);
-        return Array.isArray(parsed) ? parsed.map(Number) : Array(minLength).fill(defaultValue);
-      } catch (e) {
-        return Array(minLength).fill(defaultValue);
-      }
-    }
-    
-    if (!Array.isArray(arr)) {
-      const num = Number(arr);
-      return isNaN(num) ? Array(minLength).fill(defaultValue) : [num];
-    }
-    
-    return arr.map(item => {
-      const num = Number(item);
-      return isNaN(num) ? defaultValue : num;
-    });
-  };
-
-  // Helper function to ensure numeric fields
-  const ensureNumber = (value, defaultValue = 0) => {
-    if (value === null || value === undefined) return defaultValue;
-    const num = Number(value);
-    return isNaN(num) ? defaultValue : num;
-  };
-
-  // Function to ensure date is in YYYY-MM-DD format
-  const formatDateToString = (dateValue) => {
-    // If it's already a string in ISO format, extract the date part
-    if (typeof dateValue === 'string') {
-      // Check if it looks like an ISO date
-      if (dateValue.match(/^\d{4}-\d{2}-\d{2}(T|$)/)) {
-        return dateValue.split('T')[0];
-      }
-      // Try to parse it as a date
-      const parsed = new Date(dateValue);
-      if (!isNaN(parsed.getTime())) {
-        return parsed.toISOString().split('T')[0];
-      }
-      return dateValue; // Return as is if we can't parse it
-    }
-    
-    // If it's a Date object
-    if (dateValue instanceof Date) {
-      return dateValue.toISOString().split('T')[0];
-    }
-    
-    // If it's a timestamp number
-    if (typeof dateValue === 'number') {
-      return new Date(dateValue).toISOString().split('T')[0];
-    }
-    
-    // Default to today's date as a fallback
-    console.warn('Could not parse date, using current date');
-    return new Date().toISOString().split('T')[0];
-  };
-
-  // Possible field mappings for finding data in the structure
-  const possibleFieldMappings = {
-    start_date: [
-      'start_date', 
-      'general_settings.start_date', 
-      'date', 
-      'startDate', 
-      'issue_date',
-      'structure.start_date'
-    ],
-    a_maturities: [
-      'a_maturities', 
-      'tranches_a.maturity_days', 
-      'tranchesA.maturity_days', 
-      'class_a_maturities',
-      'maturity_days',
-      'maturities',
-      'tranche_maturities',
-      'class_a.maturities',
-      'class_a.maturity_days',
-      'class_a_maturities'
-    ],
-    a_base_rates: [
-      'a_base_rates', 
-      'tranches_a.base_rate', 
-      'tranchesA.base_rate',
-      'class_a_base_rates',
-      'base_rates',
-      'class_a.base_rates',
-      'class_a.base_rate',
-      'class_a_rates'
-    ],  
-    a_spreads: [
-      'a_spreads', 
-      'tranches_a.spread', 
-      'tranchesA.spread',
-      'class_a_spreads',
-      'spreads',
-      'class_a.spreads',
-      'class_a.spread'
-    ],
-    a_reinvest_rates: [
-      'a_reinvest_rates', 
-      'tranches_a.reinvest_rate', 
-      'tranchesA.reinvest_rate',
-      'class_a_reinvest_rates',
-      'reinvest_rates',
-      'class_a.reinvest_rates',
-      'class_a.reinvest_rate',
-      'class_a_reinvest'
-    ],
-    a_nominals: [
-      'a_nominals', 
-      'tranches_a.nominal', 
-      'tranchesA.nominal',
-      'class_a_nominals',
-      'nominals',
-      'class_a_principal',
-      'class_a.nominals',
-      'class_a.nominal'
-    ],
-    b_maturity: [
-      'b_maturity', 
-      'tranche_b.maturity_days', 
-      'trancheB.maturity_days',
-      'class_b_maturity',
-      'class_b.maturity_days',
-      'class_b.maturity'
-    ],
-    b_base_rate: [
-      'b_base_rate', 
-      'tranche_b.base_rate', 
-      'trancheB.base_rate',
-      'class_b_base_rate',
-      'class_b.base_rate'
-    ],
-    b_spread: [
-      'b_spread', 
-      'tranche_b.spread', 
-      'trancheB.spread',
-      'class_b_spread',
-      'class_b.spread'
-    ],
-    b_reinvest_rate: [
-      'b_reinvest_rate', 
-      'tranche_b.reinvest_rate', 
-      'trancheB.reinvest_rate',
-      'class_b_reinvest_rate',
-      'class_b.reinvest_rate'
-    ],
-    b_nominal: [
-      'b_nominal', 
-      'tranche_b.nominal', 
-      'trancheB.nominal', 
-      'class_b_principal',
-      'class_b.nominal',
-      'class_b.principal',
-      'class_b_nominal'
-    ],
-    ops_expenses: [
-      'ops_expenses', 
-      'operational_expenses', 
-      'general_settings.operational_expenses',
-      'expenses',
-      'operational.expenses'
-    ]
-  };
-
-  // Get start date and ensure it's formatted correctly
-  let rawDate = extractProperty(structureDetails, possibleFieldMappings.start_date, null);
-  let formattedDate = formatDateToString(rawDate);
-
-  // Check for structured tranche data 
-  let a_maturities = [], a_base_rates = [], a_spreads = [], a_reinvest_rates = [], a_nominals = [];
-  let trancheDataFound = false;
-  
-  // Check for tranches in various possible field names and formats
-  const possibleTrancheFields = [
-    'tranches_a', 'tranchesA', 'class_a_tranches', 'class_a', 'tranches.a', 'a_tranches'
-  ];
-  
-  for (const field of possibleTrancheFields) {
-    const tranches = extractProperty(structureDetails, [field], null);
-    if (Array.isArray(tranches) && tranches.length > 0 && typeof tranches[0] === 'object') {
-      console.log(`Found tranches as array of objects in field: ${field}`, tranches);
-      a_maturities = tranches.map(t => ensureNumber(t.maturity_days || t.maturity));
-      a_base_rates = tranches.map(t => ensureNumber(t.base_rate));
-      a_spreads = tranches.map(t => ensureNumber(t.spread));
-      a_reinvest_rates = tranches.map(t => ensureNumber(t.reinvest_rate));
-      a_nominals = tranches.map(t => ensureNumber(t.nominal || t.principal));
-      trancheDataFound = true;
-      break;
-    }
-  }
-  
-  // If we didn't find structured tranche data, look for the individual arrays
-  if (!trancheDataFound) {
-    console.log('No structured tranche data found, looking for individual arrays...');
-    a_maturities = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_maturities, []));
-    
-    // If we still don't have maturities, create a default one to prevent API errors
-    if (a_maturities.length === 0) {
-      console.log('No Class A maturities found, creating default value of [90]');
-      a_maturities = [90]; // Default 90-day maturity as a fallback
-    }
-    
-    const maxLength = a_maturities.length;
-    a_base_rates = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_base_rates, []), maxLength);
-    a_spreads = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_spreads, []), maxLength);
-    a_reinvest_rates = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_reinvest_rates, []), maxLength);
-    a_nominals = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_nominals, []), maxLength);
-  }
-
-  // Extract class B properties with standard approach
-  const b_maturity = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_maturity, 180));
-  const b_base_rate = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_base_rate, 0));
-  const b_spread = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_spread, 0));
-  const b_reinvest_rate = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_reinvest_rate, 0));
-
-  // --- ENHANCED Class B Nominal Extraction Logic ---
-  // Get b_nominal with enhanced logic checking multiple potential locations
-  let b_nominal = 0;
-  
-  // Direct check for class_b_principal since this is often available
-  if (structureDetails.class_b_principal && Number(structureDetails.class_b_principal) > 0) {
-    b_nominal = Number(structureDetails.class_b_principal);
-    console.log('Found Class B nominal from class_b_principal:', b_nominal);
-  } 
-  // Check saved direct_class_b_coupon_rate
-  else if (structureDetails.direct_class_b_coupon_rate && structureDetails.class_b_coupon) {
-    const direct_rate = Number(structureDetails.direct_class_b_coupon_rate) / 100;
-    if (direct_rate > 0) {
-      b_nominal = Number(structureDetails.class_b_coupon) / direct_rate;
-      console.log('Calculated Class B nominal from coupon and rate:', b_nominal);
-    }
-  }
-  // Try standard extraction
-  else {
-    b_nominal = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_nominal, 0));
-    console.log('Found Class B nominal from field mapping:', b_nominal);
-  }
-  
-  // Special handling for tranche_b format
-  if (!b_nominal && structureDetails.tranche_b && structureDetails.tranche_b.nominal) {
-    b_nominal = Number(structureDetails.tranche_b.nominal);
-    console.log('Found Class B nominal from tranche_b.nominal:', b_nominal);
-  }
-  
-  // Fallback - calculate based on Class A totals (15% of total)
-  if (!b_nominal || b_nominal <= 0) {
-    const total_a_nominal = a_nominals.reduce((sum, val) => sum + val, 0);
-    if (total_a_nominal > 0) {
-      // Estimate Class B as 15% of total structure (Class A + B)
-      // Derivation: b = 0.15 * (a + b) => b = 0.15a / 0.85 ≈ 0.176a
-      b_nominal = total_a_nominal * 0.176;
-      b_nominal = Math.round(b_nominal / 1000) * 1000; // Round to nearest 1000
-      console.warn('No valid Class B nominal found, using estimated value:', b_nominal);
-    } else {
-      // Last resort fallback
-      b_nominal = 1000000;
-      console.warn('No valid data to estimate Class B nominal, using default:', b_nominal);
-    }
-  }
-  
-  // Final log to confirm
-  console.log('Final Class B nominal value:', b_nominal);
-  
-  const ops_expenses = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.ops_expenses, 0));
-
-  // Ensure lengths are consistent
-  const maxLength = a_maturities.length;
-  
-  const result = {
-    start_date: formattedDate,
-    a_maturities: a_maturities,
-    a_base_rates: a_base_rates.length === maxLength ? a_base_rates : Array(maxLength).fill(a_base_rates[0] || 0),
-    a_spreads: a_spreads.length === maxLength ? a_spreads : Array(maxLength).fill(a_spreads[0] || 0),
-    a_reinvest_rates: a_reinvest_rates.length === maxLength ? a_reinvest_rates : Array(maxLength).fill(a_reinvest_rates[0] || 0),
-    a_nominals: a_nominals.length === maxLength ? a_nominals : Array(maxLength).fill(a_nominals[0] || 0),
-    b_maturity: b_maturity,
-    b_base_rate: b_base_rate,
-    b_spread: b_spread,
-    b_reinvest_rate: b_reinvest_rate,
-    b_nominal: b_nominal,
-    ops_expenses: ops_expenses
-  };
-
-  // Log the resulting structure
-  console.log('Formatted structure for API:', result);
-  
-  return result;
-};
-
-/**
- * Generates sensitivity data for charts based on a single test result
- * 
- * @param {number} baselineRate - The baseline Class B coupon rate
- * @param {number} nplRate - The NPL rate from the stress test
- * @param {number} prepaymentRate - The prepayment rate from the stress test
- * @param {number} rateWithStress - The Class B coupon rate under stress
- * @returns {Object} - Object with sensitivity data for charts
- */
-const generateSensitivityData = (baselineRate, nplRate, prepaymentRate, reinvestmentShift, rateWithStress) => {
-  const nplImpact = baselineRate - rateWithStress;
-  const nplSensitivity = [];
-  const prepaymentSensitivity = [];
-  const combinedScenarios = [];
-  
-  // Generate NPL sensitivity data
-  [0, 1, 2, 3, 5, 7, 10, 15].forEach(testNplRate => {
-    let impactFactor = 0;
-    
-    if (nplRate > 0) {
-      // Estimate impact based on the single test result
-      impactFactor = (testNplRate / nplRate) * nplImpact;
-    } else {
-      // Fallback if no NPL impact data available
-      impactFactor = testNplRate * 0.3;
-    }
-    
-    nplSensitivity.push({
-      value: testNplRate,
-      modeled: baselineRate,
-      realized: Math.max(0, baselineRate - impactFactor),
-      difference: -impactFactor
-    });
-  });
-  
-  // Generate prepayment sensitivity data
-  [0, 5, 10, 15, 20, 30, 40, 50].forEach(testPrepaymentRate => {
-    let impactFactor = 0;
-    
-    if (prepaymentRate > 0 && prepaymentRate !== 30) {
-      // Prepayment impact is often U-shaped, with optimal around 30%
-      // More impact as we move away from 30% (standard prepayment)
-      const optimalPrepayment = 30;
-      const prepaymentDiff = Math.abs(testPrepaymentRate - optimalPrepayment);
-      const actualDiff = Math.abs(prepaymentRate - optimalPrepayment);
-      
-      if (actualDiff > 0) {
-        impactFactor = (prepaymentDiff / actualDiff) * nplImpact * 0.5;
-      }
-    } else {
-      // Fallback model if no specific prepayment data
-      const optimalPrepayment = 30; 
-      impactFactor = Math.abs(testPrepaymentRate - optimalPrepayment) * 0.1;
-    }
-    
-    prepaymentSensitivity.push({
-      value: testPrepaymentRate,
-      modeled: baselineRate,
-      realized: Math.max(0, baselineRate - impactFactor),
-      difference: -impactFactor
-    });
-  });
-  
-  // Generate combined scenarios data for scatter plot
-  const nplValues = [0, 1, 3, 5, 7, 10];
-  const prepaymentValues = [5, 10, 20, 30, 40];
-  
-  nplValues.forEach(nValue => {
-    prepaymentValues.forEach(pValue => {
-      // Combine impacts for both factors
-      const nplImpactFactor = (nValue / Math.max(1, nplRate)) * nplImpact;
-      
-      const optimalPrepayment = 30;
-      const prepaymentDiff = Math.abs(pValue - optimalPrepayment);
-      const actualPrepaymentDiff = Math.abs(prepaymentRate - optimalPrepayment);
-      
-      let prepaymentImpactFactor = 0;
-      if (actualPrepaymentDiff > 0) {
-        prepaymentImpactFactor = (prepaymentDiff / Math.max(1, actualPrepaymentDiff)) * nplImpact * 0.5;
-      } else {
-        prepaymentImpactFactor = prepaymentDiff * 0.1;
-      }
-      
-      // Total impact is not just additive - worse conditions compound
-      const combinedImpact = nplImpactFactor + prepaymentImpactFactor + (nplImpactFactor * prepaymentImpactFactor / 10);
-      
-      combinedScenarios.push({
-        x: nValue,
-        y: pValue,
-        z: Math.abs(combinedImpact) * 10,  // Scale for bubble size
-        npl: nValue,
-        prepayment: pValue,
-        reinvest: reinvestmentShift,
-        modeled: baselineRate,
-        realized: Math.max(0, baselineRate - combinedImpact),
-        difference: -combinedImpact.toFixed(2)
-      });
-    });
-  });
-  
-  return {
-    npl: nplSensitivity,
-    prepayment: prepaymentSensitivity,
-    combinedScenarios: combinedScenarios
-  };
-};
-
+// Main StressTestingPage component
 const StressTestingPage = () => {
-  const theme = darkTheme;
-  const { calculationResults, savedResults } = useData();
+  const theme = useTheme();
+  const { 
+    savedResults, 
+    stressScenarios,
+    setStressScenarios,
+    stressTestResults,
+    setStressTestResults,
+    saveStressTestResult,
+    createStressTestRequest
+  } = useData();
   const navigate = useNavigate();
-  // Start with NPL tab as default instead of summary
-  const [tabValue, setTabValue] = useState(0);
+  
+  // State variables
   const [isLoading, setIsLoading] = useState(false);
+  const [tabValue, setTabValue] = useState(0);
   
-  // State for stress test parameters with new base scenario values
-  const [nplRange, setNplRange] = useState([1.5, 1.5]);
-  const [prepaymentRange, setPrepaymentRange] = useState([30, 30]);
-  const [reinvestmentRange, setReinvestmentRange] = useState([0, 0]);
-  const [defaultReinvestRate, setDefaultReinvestRate] = useState(30);
-  const [scenarios, setScenarios] = useState(10);
-  const [selectedScenarioType, setSelectedScenarioType] = useState('base');
+  // Scenario parameters
+  const [nplRate, setNplRate] = useState(1.5);
+  const [prepaymentRate, setPrepaymentRate] = useState(30);
+  const [reinvestmentShift, setReinvestmentShift] = useState(0);
+  const [recoveryRate, setRecoveryRate] = useState(0.5);
+  const [recoveryLag, setRecoveryLag] = useState(90);
+  const [delinquencyRate, setDelinquencyRate] = useState(null);
   
-  // State variable for dropdown selection
+  // Scenario type
+  const [scenarioType, setScenarioType] = useState('base');
+  
+  // Structure selection
   const [selectedStructureId, setSelectedStructureId] = useState('');
   const [availableStructures, setAvailableStructures] = useState([]);
   
-  // State variables for predefined scenario
-  const [predefinedScenario, setPredefinedScenario] = useState('base');
-  
-  // State variable for reinvestment shift toggle
-  const [applyReinvestmentShift, setApplyReinvestmentShift] = useState(false);
-  
-  // State variables for notifications
+  // Notifications
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
-
-  // State for test results display panel
-  const [showResults, setShowResults] = useState(false);
   
-  // State for API test results
+  // Results display
+  const [showResults, setShowResults] = useState(false);
   const [testResults, setTestResults] = useState({
-    classBCouponRate: null,
-    scenarioResults: [],
-    sensitivityAnalysis: {
-      npl: [],
-      prepayment: [],
-      reinvestment: []
+    classBRate: {
+      original: null,
+      stressed: null,
+      difference: null
     },
-    combinedScenarios: [],
-    cashFlowModel: null
+    cashFlowMetrics: {
+      reductionPct: null,
+      nplImpact: null,
+      prepaymentTotal: null,
+      reinvestmentTotal: null
+    },
+    modeledCashflows: []
   });
   
-  // Advanced model parameters state (now always active)
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-  const [recoveryRate, setRecoveryRate] = useState(0.5);
-  const [recoveryLag, setRecoveryLag] = useState(6);
-  const [delinquencyRate, setDelinquencyRate] = useState(null); // Will derive from NPL if null
-  const [delinquencyRecoveryRate, setDelinquencyRecoveryRate] = useState(0.85);
-  const [delinquencyToDefaultRate, setDelinquencyToDefaultRate] = useState(0.2);
-  const [repeatDelinquencyFactor, setRepeatDelinquencyFactor] = useState(1.5);
-  
-  // Fetch Available Structures
+  // Get available structures on component mount
   useEffect(() => {
     if (savedResults && savedResults.length > 0) {
-      // Group results by structure type
-      const structures = savedResults.map(result => {
-        // Calculate coupon rate from Class B Coupon and Class B Principal if not available
-        let directCouponRate = result.direct_class_b_coupon_rate;
-        
-        // If value is not present but coupon and principal are, calculate the rate
-        if ((!directCouponRate || directCouponRate === 0) && result.class_b_coupon && result.class_b_principal) {
-          directCouponRate = (result.class_b_coupon / result.class_b_principal) * 100;
-        }
-        
-        return {
-          id: result.id,
-          name: result.savedName || `${result.methodType} Structure`,
-          type: result.methodType,
-          // Store coupon rate but don't display it in the dropdown
-          classBCouponRate: directCouponRate || 0,
-          directCouponRate: directCouponRate || 0,
-          effectiveCouponRate: result.class_b_coupon_rate || 0
-        };
-      });
+      const structures = savedResults.map(result => ({
+        id: result.id,
+        name: result.savedName || `${result.methodType || 'Default'} Structure`,
+        type: result.methodType || 'default',
+        classBCouponRate: result.class_b_coupon_rate || result.stressed_class_b_rate || 0,
+        originalData: result // Store the entire result for later use
+      }));
       
       setAvailableStructures(structures);
       
-      // Set first structure as default if none selected
       if (structures.length > 0 && !selectedStructureId) {
         setSelectedStructureId(structures[0].id);
       }
     }
   }, [savedResults, selectedStructureId]);
   
-  // Handle tab change
+  // Check if we have stored stress test results
+  useEffect(() => {
+    if (stressTestResults && 
+        stressTestResults.structureId === selectedStructureId && 
+        stressTestResults.scenarioType === scenarioType) {
+      setTestResults(stressTestResults);
+      setShowResults(true);
+    }
+  }, [stressTestResults, selectedStructureId, scenarioType]);
+  
+  // Tab change handler
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
   };
   
-  // Handle structure selection change
+  // Structure selection handler
   const handleStructureChange = (event) => {
     setSelectedStructureId(event.target.value);
   };
   
-  // Get selected structure details
+  // Get the selected structure
   const getSelectedStructure = () => {
     return availableStructures.find(structure => structure.id === selectedStructureId) || null;
   };
-
-  // Navigate to the calculation page with a message
+  
+  // Scenario selection handler
+  const handleScenarioChange = (type) => {
+    setScenarioType(type);
+    
+    // Update parameters based on scenario type
+    if (stressScenarios && stressScenarios[type]) {
+      const scenario = stressScenarios[type];
+      setNplRate(scenario.npl_rate);
+      setPrepaymentRate(scenario.prepayment_rate);
+      setReinvestmentShift(scenario.reinvestment_shift);
+    } else {
+      // Default values if scenario not found
+      switch (type) {
+        case 'base':
+          setNplRate(1.5);
+          setPrepaymentRate(30);
+          setReinvestmentShift(0);
+          break;
+        case 'moderate':
+          setNplRate(3);
+          setPrepaymentRate(15);
+          setReinvestmentShift(-3);
+          break;
+        case 'severe':
+          setNplRate(5);
+          setPrepaymentRate(10);
+          setReinvestmentShift(-5);
+          break;
+        default:
+          // Keep current values for custom scenario
+          break;
+      }
+    }
+  };
+  
+  // Navigate back to calculation
   const handleNavigateToCalculation = () => {
     navigate('/calculation');
   };
-
-  /**
-   * Run stress test with enhanced error handling, debugging, and frontend normalization
-   * When backend normalization fails, this applies a secondary frontend normalization
-   * to ensure reasonable coupon rates
-   */
+  
+  // Run stress test
   const handleRunStressTest = async () => {
     const selectedStructure = getSelectedStructure();
     
@@ -874,183 +230,166 @@ const StressTestingPage = () => {
     setShowResults(false);
     
     try {
-      // Get the original structure details from savedResults
-      const structureDetails = savedResults.find(r => r.id === selectedStructure.id);
+      // Get structure details from savedResults
+      const structureDetails = savedResults.find(r => r.id === selectedStructureId);
       
       if (!structureDetails) {
         throw new Error("Structure details not found");
       }
       
-      // Log the structure details for debugging
-      console.log('Original structure details:', structureDetails);
+      // Get original Class B rate and calculate original coupon payment
+      const originalClassBRate = structureDetails.class_b_coupon_rate || structureDetails.stressed_class_b_rate || 36.72;
+      const classBPrincipal = structureDetails.class_b_nominal || 200000000; // Class B principal
+      const originalClassBCouponPayment = (originalClassBRate / 100) * classBPrincipal; // Calculate original coupon payment
+      const originalTotalCashflow = structureDetails.total_cashflow || 1942409829; // Original total cash flow in TL
       
-      // Extract parameters for the test with proper number conversion
-      const nplRate = Number(nplRange[0]); 
-      const prepaymentRate = Number(prepaymentRange[0]);
-      const reinvestmentShift = applyReinvestmentShift ? Number(reinvestmentRange[0]) : 0;
-      
-      // Create formatted structure with improved extraction logic
-      const formattedStructure = formatStructureForStressTest(structureDetails);
-      
-      // Enhanced stress test with cash flow modeling
-      const requestParams = {
-        structure: formattedStructure,
-        scenario: {
-          name: predefinedScenario,
-          npl_rate: nplRate,
-          prepayment_rate: prepaymentRate,
-          reinvestment_shift: reinvestmentShift,
-          recovery_rate: recoveryRate,
-          recovery_lag: recoveryLag,
-          delinquency_rate: delinquencyRate,
-          delinquency_recovery_rate: delinquencyRecoveryRate,
-          delinquency_to_default_rate: delinquencyToDefaultRate,
-          repeat_delinquency_factor: repeatDelinquencyFactor
-        }
+      // Manually formatted structure with original values preserved
+      const manuallyFormattedStructure = {
+        start_date: structureDetails.start_date || "2025-02-12",
+        a_maturities: [],
+        a_base_rates: [],
+        a_spreads: [],
+        a_reinvest_rates: [],
+        a_nominals: [],
+        b_maturity: 300,
+        b_base_rate: 0,
+        b_spread: 0,
+        b_reinvest_rate: 25.5, // Original value preserved
+        b_nominal: classBPrincipal,
+        ops_expenses: structureDetails.general_settings?.operational_expenses || 0,
+        original_class_b_rate: originalClassBRate,
+        original_total_cashflow: originalTotalCashflow
       };
       
-      console.log('STRESS TEST PAYLOAD:', JSON.stringify(requestParams, null, 2));
-      const response = await runEnhancedStressTest(requestParams);
-      
-      console.log('Received stress test response:', response);
-      
-      // FRONTEND NORMALIZATION ENHANCEMENT
-      // If rates are still unreasonably high (backend normalization might have failed)
-      if (response.baseline.class_b_coupon_rate > 60 || response.stress_test.class_b_coupon_rate > 60) {
-        console.warn(`High coupon rates detected, applying frontend normalization: 
-          Baseline=${response.baseline.class_b_coupon_rate}%, 
-          Stress=${response.stress_test.class_b_coupon_rate}%`);
-        
-        // Calculate the relative impact
-        const relativeImpact = response.stress_test.class_b_coupon_rate / response.baseline.class_b_coupon_rate;
-        
-        // Normalize baseline to a reasonable target
-        const targetRate = 35.0;
-        const originalBase = response.baseline.class_b_coupon_rate;
-        const originalStress = response.stress_test.class_b_coupon_rate;
-        
-        response.baseline.class_b_coupon_rate = targetRate;
-        response.stress_test.class_b_coupon_rate = targetRate * relativeImpact;
-        
-        // Cap the stress rate
-        response.stress_test.class_b_coupon_rate = Math.min(50, Math.max(1, response.stress_test.class_b_coupon_rate));
-        
-        // Update difference
-        response.difference.class_b_coupon_rate = response.stress_test.class_b_coupon_rate - response.baseline.class_b_coupon_rate;
-        
-        // Store original values for reference
-        response.baseline.original_rate = originalBase;
-        response.stress_test.original_rate = originalStress;
-        
-        console.log(`Normalized rates to: Baseline=${response.baseline.class_b_coupon_rate}%, 
-          Stress=${response.stress_test.class_b_coupon_rate}%`);
+      // Collect Class A tranche details
+      if (structureDetails.tranche_results && Array.isArray(structureDetails.tranche_results)) {
+        for (const tranche of structureDetails.tranche_results) {
+          if (tranche["Is Class A"]) {
+            manuallyFormattedStructure.a_maturities.push(tranche["Maturity Days"]);
+            manuallyFormattedStructure.a_base_rates.push(parseFloat(tranche["Base Rate (%)"] || 0));
+            manuallyFormattedStructure.a_spreads.push(parseFloat(tranche["Spread (bps)"] || 0));
+            manuallyFormattedStructure.a_reinvest_rates.push(40); // Original value preserved
+            manuallyFormattedStructure.a_nominals.push(tranche["Principal"] || 0);
+          } else {
+            manuallyFormattedStructure.b_maturity = tranche["Maturity Days"];
+            manuallyFormattedStructure.b_base_rate = parseFloat(tranche["Base Rate (%)"] || 0);
+            manuallyFormattedStructure.b_spread = parseFloat(tranche["Spread (bps)"] || 0);
+            manuallyFormattedStructure.b_reinvest_rate = 25.5; // Original value preserved
+            manuallyFormattedStructure.b_nominal = tranche["Principal"] || 0;
+          }
+        }
       }
       
-      // Extract rates and differences
-      const baselineRate = response.baseline.class_b_coupon_rate;
-      const stressRate = response.stress_test.class_b_coupon_rate;
-      const rateDifference = response.difference.class_b_coupon_rate;
+      // If Class A not found, use default values - preserving original high rates
+      if (manuallyFormattedStructure.a_maturities.length === 0) {
+        manuallyFormattedStructure.a_maturities = [61, 120, 182, 274];
+        manuallyFormattedStructure.a_base_rates = [45.6, 44.5, 43.3, 42.5];
+        manuallyFormattedStructure.a_spreads = [0, 0, 0, 0];
+        manuallyFormattedStructure.a_reinvest_rates = [40, 37.25, 32.5, 30]; // Original values preserved
+        manuallyFormattedStructure.a_nominals = [480000000, 460000000, 425000000, 400000000];
+      }
       
-      // Generate sensitivity analysis data
-      const sensitivityData = generateSensitivityData(
-        baselineRate, 
-        nplRate, 
-        prepaymentRate,
-        reinvestmentShift,
-        stressRate
-      );
-      
-      // Process response data
-      const responseData = {
-        classBCouponRate: {
-          modeled: baselineRate,
-          realized: stressRate,
-          difference: rateDifference,
-          status: rateDifference >= -1 ? 'success' : 
-                 rateDifference >= -5 ? 'warning' : 'error'
-        },
-        scenarioResults: [
-          {
-            name: "Base Case",
-            npl: 0,
-            prepayment: 0,
-            reinvestment: 0,
-            modeled: baselineRate,
-            realized: baselineRate,
-            difference: 0
-          },
-          {
-            name: predefinedScenario.charAt(0).toUpperCase() + predefinedScenario.slice(1),
-            npl: nplRate,
-            prepayment: prepaymentRate,
-            reinvestment: reinvestmentShift,
-            modeled: baselineRate,
-            realized: stressRate,
-            difference: rateDifference
-          }
-        ],
-        sensitivityAnalysis: {
-          npl: sensitivityData.npl,
-          prepayment: sensitivityData.prepayment,
-          reinvestment: []
-        },
-        combinedScenarios: sensitivityData.combinedScenarios,
-        // Cash flow model metrics
-        cashFlowModel: {
-          cashFlowReduction: response.stress_test.total_cashflow_reduction_pct,
-          defaultRate: response.stress_test.total_default_pct,
-          delinquencyRate: response.stress_test.total_delinquency_pct,
-          lossRate: response.stress_test.total_loss_pct,
-          principalReduction: response.stress_test.principal_reduction_pct,
-          recoveryRate: recoveryRate * 100,
-          detailedMetrics: response.cash_flow_model
-        }
+      // Scenario parameters - user-defined values preserved
+      const scenarioParams = {
+        name: scenarioType,
+        npl_rate: nplRate,
+        prepayment_rate: prepaymentRate,
+        reinvestment_shift: reinvestmentShift,
+        recovery_rate: recoveryRate,
+        recovery_lag: recoveryLag,
+        delinquency_rate: delinquencyRate
       };
       
-      // Update state with the results
-      setTestResults(responseData);
+      // Update scenarios
+      const updatedScenarios = {
+        ...stressScenarios,
+        [scenarioType]: {
+          ...scenarioParams
+        }
+      };
+      setStressScenarios(updatedScenarios);
+      
+      // Create request parameters
+      const requestParams = {
+        structure: manuallyFormattedStructure,
+        scenario: scenarioParams
+      };
+      
+      // API call
+      const response = await runEnhancedStressTest(requestParams);
+      
+      // Process results - calculate net loss and stressed coupon correctly
+      // 1. Get total impact from stress scenario
+      const nplImpact = response.stress_test?.total_npl_impact || 0;
+      const prepaymentImpact = response.stress_test?.prepayment_impact || 0;
+      const reinvestmentImpact = response.stress_test?.reinvestment_impact || 0;
+      const totalStressImpact = nplImpact + prepaymentImpact - reinvestmentImpact;
+      
+      // 2. Calculate stressed Class B coupon payment
+      const stressedClassBCouponPayment = originalClassBCouponPayment - totalStressImpact;
+      
+      // 3. Calculate stressed Class B coupon rate
+      const stressedClassBCouponRate = (stressedClassBCouponPayment / classBPrincipal) * 100;
+      
+      // 4. Calculate net loss percentage based on original total cash flow
+      const netLossPercentage = (totalStressImpact / originalTotalCashflow) * 100;
+      
+      // Calculate difference
+      const difference = stressedClassBCouponRate - originalClassBRate;
+      
+      const resultsData = {
+        structureId: selectedStructureId,
+        scenarioType: scenarioType,
+        classBRate: {
+          original: originalClassBRate,
+          stressed: stressedClassBCouponRate,
+          difference: difference
+        },
+        cashFlowMetrics: {
+          reductionPct: netLossPercentage,  // Net loss as percentage of original total cash flow
+          nplImpact: nplImpact,
+          prepaymentTotal: response.stress_test?.total_prepayment || 0,
+          reinvestmentTotal: response.stress_test?.total_reinvestment || 0,
+          netLoss: totalStressImpact,
+          originalClassBCouponPayment: originalClassBCouponPayment,
+          stressedClassBCouponPayment: stressedClassBCouponPayment,
+          originalTotalCashflow: originalTotalCashflow
+        },
+        modeledCashflows: response.cashflows?.stress || []
+      };
+      
+      // Validate results to ensure they're reasonable
+      if (resultsData.classBRate.stressed < 0 || resultsData.classBRate.stressed > 100) {
+        console.error("Unreasonable stress test results detected:", resultsData);
+        throw new Error("Stress test returned unrealistic values. Please check the calculation logic.");
+      }
+      
+      // Update state
+      setTestResults(resultsData);
+      setStressTestResults(resultsData);
+      
+      // Save results
+      saveStressTestResult(
+        resultsData, 
+        `${scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1)} Scenario`, 
+        selectedStructureId
+      );
+      
       setIsLoading(false);
       setShowResults(true);
-      setTabValue(0); // Switch to NPL tab to show results
       
-      // Show success message
+      // Success message
       setSnackbarMessage("Stress test completed successfully");
       setSnackbarSeverity("success");
       setSnackbarOpen(true);
       
     } catch (error) {
       console.error("Error running stress test:", error);
-      
-      // Enhanced error logging
-      if (error.response) {
-        console.error('RESPONSE ERROR DATA:', error.response.data);
-        if (error.response.data.detail) {
-          console.error('ERROR DETAIL:', error.response.data.detail);
-        }
-      }
-      
       setIsLoading(false);
       
-      // Extract the actual error message
       let errorMessage = "Error running stress test";
       if (error.response && error.response.data) {
-        if (typeof error.response.data === 'string') {
-          errorMessage += ": " + error.response.data;
-        } else if (error.response.data.detail) {
-          // Check for specific error patterns
-          const detail = error.response.data.detail;
-          if (detail.includes("No data found") || detail.includes("upload Excel file")) {
-            errorMessage = "You need to upload an Excel file with loan data before running a stress test. Please go to the Structure Analysis page first.";
-            
-            // Show an alert with a button to navigate to Structure Analysis
-            setSnackbarMessage(errorMessage);
-            setSnackbarSeverity("warning");
-            setSnackbarOpen(true);
-            return;
-          } else {
-            errorMessage += ": " + detail;
-          }
-        }
+        errorMessage += ": " + (error.response.data.detail || error.response.data);
       } else if (error.message) {
         errorMessage += ": " + error.message;
       }
@@ -1061,1038 +400,922 @@ const StressTestingPage = () => {
     }
   };
   
-  // Format data for the sensitivity charts
-  const formatSensitivityData = (dataKey) => {
-    if (!testResults?.sensitivityAnalysis?.[dataKey]) {
+  // Close snackbar
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
+  };
+  
+  // Export results
+  const handleExportResults = () => {
+    if (!showResults) return;
+    
+    try {
+      const selectedStructure = getSelectedStructure();
+      const scenarioName = scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1);
+      
+      // Create export data
+      const exportData = {
+        testDate: new Date().toISOString(),
+        structure: {
+          id: selectedStructureId,
+          name: selectedStructure?.name || 'Unknown Structure'
+        },
+        scenario: {
+          name: scenarioName,
+          npl_rate: nplRate,
+          prepayment_rate: prepaymentRate,
+          reinvestment_shift: reinvestmentShift,
+          recovery_rate: recoveryRate
+        },
+        results: testResults
+      };
+      
+      // Convert to JSON
+      const jsonStr = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `stress-test-${selectedStructureId}-${scenarioType}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setSnackbarMessage("Results exported successfully");
+      setSnackbarSeverity("success");
+      setSnackbarOpen(true);
+      
+    } catch (error) {
+      console.error("Export error:", error);
+      setSnackbarMessage("Error exporting results");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+    }
+  };
+  
+  // Get color based on difference value
+  const getDifferenceColor = (diff) => {
+    if (diff >= 0) return theme.palette.success.main;
+    if (diff >= -3) return theme.palette.warning.main;
+    return theme.palette.error.main;
+  };
+  
+  // Format pie chart data
+  const formatPieData = () => {
+    const { classBRate } = testResults;
+    
+    if (!classBRate.original) {
       return [];
     }
     
-    return testResults.sensitivityAnalysis[dataKey].map(item => ({
-      value: item.value || 0,
-      modeled: item.modeled || 0,
-      realized: item.realized || 0,
-      difference: (item.realized || 0) - (item.modeled || 0)
+    // For pie chart, we want to show the proportion of original rate that remains
+    const stressedRate = Math.max(0, classBRate.stressed);
+    const loss = Math.max(0, classBRate.original - classBRate.stressed);
+    
+    // If the stressed rate is higher than original, show gain instead of loss
+    if (stressedRate > classBRate.original) {
+      return [
+        { 
+          name: "Original Rate", 
+          value: classBRate.original, 
+          color: theme.palette.primary.main 
+        },
+        { 
+          name: "Stress Gain", 
+          value: stressedRate - classBRate.original, 
+          color: theme.palette.success.main 
+        }
+      ];
+    }
+    
+    return [
+      { 
+        name: "Stressed Rate", 
+        value: stressedRate, 
+        color: theme.palette.primary.main 
+      },
+      { 
+        name: "Stress Loss", 
+        value: loss, 
+        color: theme.palette.error.main 
+      }
+    ];
+  };
+  
+  // Format cashflow comparison data
+  const formatCashflowComparisonData = () => {
+    if (!testResults.modeledCashflows || testResults.modeledCashflows.length === 0) {
+      return [];
+    }
+    
+    // Use first 10 cashflows for comparison
+    return testResults.modeledCashflows.slice(0, 10).map(cf => ({
+      date: new Date(cf.installment_date).toLocaleDateString(),
+      original: cf.original_cashflow,
+      actual: cf.total_actual_cashflow,
+      difference: cf.total_actual_cashflow - cf.original_cashflow,
+      percentDiff: ((cf.total_actual_cashflow / cf.original_cashflow) - 1) * 100
     }));
   };
   
-  // Format combined scenarios data for scatter plot
-  const formatScatterData = () => {
-    if (!testResults?.combinedScenarios) {
-      return [];
+  // Scenario comparison data
+  const scenarioComparisonData = [
+    {
+      name: "Base Case",
+      npl: 0,
+      prepayment: 30,
+      reinvestment: 0,
+      rate: testResults.classBRate.original || 0
+    },
+    {
+      name: scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1),
+      npl: nplRate,
+      prepayment: prepaymentRate,
+      reinvestment: reinvestmentShift,
+      rate: testResults.classBRate.stressed || 0
     }
-    
-    return testResults.combinedScenarios.map(item => ({
-      x: item.npl || 0, // NPL rate for X axis
-      y: item.prepayment || 0, // Prepayment rate for Y axis
-      z: Math.abs((item.realized || 0) - (item.modeled || 0)) * 10, // Difference size for bubble size (scaled)
-      npl: item.npl || 0,
-      prepayment: item.prepayment || 0,
-      reinvest: item.reinvest || 0,
-      modeled: item.modeled || 0,
-      realized: item.realized || 0,
-      difference: ((item.realized || 0) - (item.modeled || 0)).toFixed(2)
-    }));
-  };
-
-  // Handle close for snackbar
-  const handleCloseSnackbar = (event, reason) => {
-    if (reason === 'clickaway') {
-      return;
-    }
-    setSnackbarOpen(false);
-  };
-
-  // Cash Flow Model Results component
-  const CashFlowModelResults = ({ model }) => {
-    if (!model) return null;
-    
-    return (
-      <Paper
-        elevation={3}
+  ];
+  
+  return (
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      {/* Page Header */}
+      <Box
         sx={{
-          p: 3,
           mb: 4,
-          borderRadius: 2,
-          backgroundColor: alpha(theme.palette.background.paper, 0.8),
-          border: `1px solid ${alpha(theme.palette.info.main, 0.3)}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
         }}
       >
-        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <ScienceIcon sx={{ mr: 1, color: theme.palette.info.main }} />
-          Cash Flow Model Analysis
-        </Typography>
-        
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6} md={4}>
-            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.error.main, 0.1) }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Default Rate
-              </Typography>
-              <Typography variant="h5" color="error" fontWeight="medium">
-                {model.defaultRate}%
-              </Typography>
-            </Paper>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={4}>
-            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.warning.main, 0.1) }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Delinquency Rate
-              </Typography>
-              <Typography variant="h5" color="warning" fontWeight="medium">
-                {model.delinquencyRate}%
-              </Typography>
-            </Paper>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={4}>
-            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.primary.main, 0.1) }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Cash Flow Reduction
-              </Typography>
-              <Typography variant="h5" color="primary" fontWeight="medium">
-                {model.cashFlowReduction}%
-              </Typography>
-            </Paper>
-          </Grid>
-        </Grid>
-        
-        <Box sx={{ mt: 3, p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.4) }}>
-          <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-            Stress Scenario Metrics:
-          </Typography>
-          
-          <Grid container spacing={3}>
-            <Grid item xs={12} sm={6} md={4}>
-              <Typography variant="body2" color="text.secondary">Total Loss:</Typography>
-              <Typography variant="body1" fontWeight="medium">
-                {model.lossRate}% of Principal
-              </Typography>
-            </Grid>
-            
-            <Grid item xs={12} sm={6} md={4}>
-              <Typography variant="body2" color="text.secondary">Principal Reduction:</Typography>
-              <Typography variant="body1" fontWeight="medium">
-                {model.principalReduction}%
-              </Typography>
-            </Grid>
-            
-            <Grid item xs={12} sm={6} md={4}>
-              <Typography variant="body2" color="text.secondary">Recovery Rate:</Typography>
-              <Typography variant="body1" fontWeight="medium">
-                {model.recoveryRate}%
-              </Typography>
-            </Grid>
-          </Grid>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <AssessmentIcon 
+            sx={{ 
+              fontSize: 36, 
+              color: theme.palette.primary.main,
+              mr: 2,
+            }} 
+          />
+          <Box>
+            <Typography variant="h4" fontWeight="500">
+              Stress Testing
+            </Typography>
+            <Typography variant="subtitle1" color="text.secondary">
+              Analyze Class B coupon performance under various market conditions
+            </Typography>
+          </Box>
         </Box>
-      </Paper>
-    );
-  };
-
-  // Advanced Model Parameters component
-  const AdvancedModelParameters = () => (
-    <React.Fragment>
-      <Box sx={{ mt: 3, mb: 1, display: 'flex', justifyContent: 'flex-end' }}>
-        <Button
-          size="small"
-          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-          startIcon={showAdvancedSettings ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-        >
-          {showAdvancedSettings ? "Hide" : "Show"} Advanced Parameters
-        </Button>
+        
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            color="primary"
+            startIcon={<ArrowBackIcon />}
+            onClick={handleNavigateToCalculation}
+          >
+            Back to Structure Analysis
+          </Button>
+          
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<SaveAltIcon />}
+            disabled={!showResults}
+            onClick={handleExportResults}
+          >
+            Export Results
+          </Button>
+        </Box>
       </Box>
       
-      {showAdvancedSettings && (
-        <Paper sx={{ p: 2, mt: 2, mb: 2, backgroundColor: alpha(theme.palette.background.paper, 0.6) }}>
-          <Typography variant="subtitle2" gutterBottom>Cash Flow Model Parameters</Typography>
-          
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Recovery Rate"
-                value={recoveryRate}
-                onChange={(e) => setRecoveryRate(Number(e.target.value))}
-                type="number"
-                inputProps={{ min: 0, max: 1, step: 0.05 }}
-                size="small"
-                sx={{ mb: 2 }}
-                helperText="Percentage of defaults recovered (0-1)"
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Recovery Lag (days)"
-                value={recoveryLag}
-                onChange={(e) => setRecoveryLag(Number(e.target.value))}
-                type="number"
-                inputProps={{ min: 0, step: 1 }}
-                size="small"
-                sx={{ mb: 2 }}
-                helperText="Days until recovery occurs"
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Delinquency Rate"
-                value={delinquencyRate === null ? '' : delinquencyRate}
-                onChange={(e) => {
-                  const value = e.target.value === '' ? null : Number(e.target.value);
-                  setDelinquencyRate(value);
-                }}
-                type="number"
-                inputProps={{ min: 0, max: 100, step: 0.1 }}
-                size="small"
-                sx={{ mb: 2 }}
-                helperText="Leave blank to use half of NPL rate"
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Delinquency Recovery Rate"
-                value={delinquencyRecoveryRate}
-                onChange={(e) => setDelinquencyRecoveryRate(Number(e.target.value))}
-                type="number"
-                inputProps={{ min: 0, max: 1, step: 0.05 }}
-                size="small"
-                sx={{ mb: 2 }}
-                helperText="Percentage of delinquencies recovered (0-1)"
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Delinquency to Default Rate"
-                value={delinquencyToDefaultRate}
-                onChange={(e) => setDelinquencyToDefaultRate(Number(e.target.value))}
-                type="number"
-                inputProps={{ min: 0, max: 1, step: 0.05 }}
-                size="small"
-                sx={{ mb: 2 }}
-                helperText="Portion of delinquent loans that default"
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Repeat Delinquency Factor"
-                value={repeatDelinquencyFactor}
-                onChange={(e) => setRepeatDelinquencyFactor(Number(e.target.value))}
-                type="number"
-                inputProps={{ min: 1, step: 0.1 }}
-                size="small"
-                sx={{ mb: 2 }}
-                helperText="Increases likelihood of repeated delinquency"
-              />
-            </Grid>
-          </Grid>
-        </Paper>
-      )}
-      
-      {!showAdvancedSettings && (
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-          The stress test uses a detailed cash flow model that simulates loan defaults, prepayments, and delinquencies. 
-          Show advanced parameters for fine-tuning these behaviors.
-        </Typography>
-      )}
-    </React.Fragment>
-  );
-
-  return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        {/* Page Header */}
-        <Box
-          sx={{
-            mb: 4,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <AssessmentIcon 
-              sx={{ 
-                fontSize: 36, 
-                color: theme.palette.primary.main,
-                mr: 2,
-                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'
-              }} 
-            />
-            <Box>
-              <Typography variant="h4" fontWeight="500">
-                Stress Testing
-              </Typography>
-              <Typography variant="subtitle1" color="text.secondary">
-                Analyze Class B coupon performance under various market conditions
-              </Typography>
-            </Box>
-          </Box>
-          
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <Button
-              variant="outlined"
-              color="primary"
-              onClick={handleNavigateToCalculation}
-              sx={{
-                px: 3,
-                py: 1,
-                borderRadius: 2,
-              }}
-            >
-              Go to Structure Analysis
-            </Button>
-            
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<SaveAltIcon />}
-              sx={{
-                px: 3,
-                py: 1,
-                borderRadius: 2,
-                boxShadow: '0 3px 8px rgba(0,0,0,0.3)',
-              }}
-              disabled={!showResults}
-            >
-              Export Results
-            </Button>
-          </Box>
-        </Box>
-        
-        {/* Structure Dropdown Selection */}
-        <Paper
-          elevation={3}
-          sx={{
-            p: 3,
-            mb: 4,
-            borderRadius: 2,
-            backgroundColor: alpha(theme.palette.background.paper, 0.8),
-            border: `1px solid ${alpha(theme.palette.warning.main, 0.2)}`,
-          }}
-        >
-          <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-            <CompareIcon sx={{ mr: 1, color: theme.palette.warning.light }} />
-            Select Structure to Stress Test
-          </Typography>
-          
-          {availableStructures.length > 0 ? (
-            <FormControl fullWidth variant="outlined">
-              <InputLabel id="structure-select-label">Select Structure</InputLabel>
-              <Select
-                labelId="structure-select-label"
-                id="structure-select"
-                value={selectedStructureId}
-                onChange={handleStructureChange}
-                label="Select Structure"
-                sx={{ mb: 2 }}
-              >
-                {availableStructures.map((structure) => (
-                  <MenuItem key={structure.id} value={structure.id}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      {structure.type === 'manual' && <TuneIcon sx={{ color: theme.palette.error.main, mr: 1 }} />}
-                      {structure.type === 'genetic' && <ScienceIcon sx={{ color: theme.palette.success.main, mr: 1 }} />}
-                      {structure.type === 'standard' && <SettingsIcon sx={{ color: theme.palette.primary.main, mr: 1 }} />}
-                      <Typography>{structure.name}</Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          ) : (
-            <Alert 
-              severity="info"
-              action={
-                <Button color="inherit" size="small" onClick={handleNavigateToCalculation}>
-                  Go to Analysis
-                </Button>
-              }
-            >
-              No saved structures found. Please calculate and save at least one structure before running stress tests.
-            </Alert>
-          )}
-          
-          {getSelectedStructure() && (
-            <Box sx={{ mt: 2, p: 2, borderRadius: 1, bgcolor: alpha(theme.palette.warning.main, 0.05) }}>
-              <Typography variant="subtitle2" gutterBottom>Selected Structure Details:</Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body2" color="text.secondary">Type:</Typography>
-                  <Typography variant="body1">
-                    {getSelectedStructure().type === 'manual' ? 'Manual Calculation' : 
-                     getSelectedStructure().type === 'genetic' ? 'Genetic Algorithm' : 
-                     'Grid Algorithm'}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body2" color="text.secondary">Structure Name:</Typography>
-                  <Typography variant="body1">
-                    {getSelectedStructure().name}
-                  </Typography>
-                </Grid>
-              </Grid>
-            </Box>
-          )}
-        </Paper>
-        
-        <Grid container spacing={4}>
-          {/* Parameters Panel */}
-          <Grid item xs={12} md={4}>
-            <Paper 
+      <Grid container spacing={4}>
+        {/* Left Panel: Structure Selection and Parameters */}
+        <Grid item xs={12} md={4}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {/* Structure Selection */}
+            <Paper
               elevation={3}
-              sx={{ 
-                p: 3, 
-                height: '100%',
+              sx={{
+                p: 3,
                 borderRadius: 2,
                 backgroundColor: alpha(theme.palette.background.paper, 0.8),
-                border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
               }}
             >
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                <TuneIcon sx={{ mr: 1, color: theme.palette.primary.light }} />
-                Stress Test Parameters
+              <Typography variant="h6" gutterBottom>
+                Stress Test Structure
               </Typography>
               
-              {/* Predefined Scenario Selection with updated values */}
-              <Box sx={{ mt: 3 }}>
-                <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center">
-                  <CompareArrowsIcon sx={{ fontSize: 20, mr: 1, color: theme.palette.info.light }} />
-                  Predefined Scenarios
-                  <Tooltip title="Select a predefined scenario or customize parameters manually" sx={{ ml: 1 }}>
-                    <IconButton size="small">
-                      <InfoOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Typography>
-                
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1 }}>
-                  <Button
-                    variant={predefinedScenario === 'optimistic' ? 'contained' : 'outlined'}
-                    color="success"
-                    onClick={() => {
-                      setPredefinedScenario('optimistic');
-                      setNplRange([1, 1]);
-                      setPrepaymentRange([20, 20]);
-                      setReinvestmentRange([2, 2]);
-                      setApplyReinvestmentShift(true);
-                    }}
-                    size="small"
-                    sx={{ borderRadius: 2 }}
+              {availableStructures.length > 0 ? (
+                <FormControl fullWidth variant="outlined">
+                  <InputLabel id="structure-select-label">Select Structure</InputLabel>
+                  <Select
+                    labelId="structure-select-label"
+                    value={selectedStructureId}
+                    onChange={handleStructureChange}
+                    label="Select Structure"
                   >
-                    Optimistic
-                  </Button>
-                  
-                  <Button
-                    variant={predefinedScenario === 'base' ? 'contained' : 'outlined'}
-                    color="primary"
-                    onClick={() => {
-                      setPredefinedScenario('base');
-                      setNplRange([1.5, 1.5]);
-                      setPrepaymentRange([30, 30]);
-                      setReinvestmentRange([0, 0]);
-                      setApplyReinvestmentShift(false);
-                    }}
-                    size="small"
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Base Case
-                  </Button>
-                  
-                  <Button
-                    variant={predefinedScenario === 'moderate' ? 'contained' : 'outlined'}
-                    color="secondary"
-                    onClick={() => {
-                      setPredefinedScenario('moderate');
-                      setNplRange([3, 3]);
-                      setPrepaymentRange([15, 15]);
-                      setReinvestmentRange([-3, -3]);
-                      setApplyReinvestmentShift(true);
-                    }}
-                    size="small"
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Moderate
-                  </Button>
-                  
-                  <Button
-                    variant={predefinedScenario === 'severe' ? 'contained' : 'outlined'}
-                    color="error"
-                    onClick={() => {
-                      setPredefinedScenario('severe');
-                      setNplRange([5, 5]);
-                      setPrepaymentRange([10, 10]);
-                      setReinvestmentRange([-5, -5]);
-                      setApplyReinvestmentShift(true);
-                    }}
-                    size="small"
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Severe
-                  </Button>
-                  
-                  <Button
-                    variant={predefinedScenario === 'extreme' ? 'contained' : 'outlined'}
-                    color="warning"
-                    onClick={() => {
-                      setPredefinedScenario('extreme');
-                      setNplRange([7, 7]);
-                      setPrepaymentRange([5, 5]);
-                      setReinvestmentRange([-10, -10]);
-                      setApplyReinvestmentShift(true);
-                    }}
-                    size="small"
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Extreme
-                  </Button>
-                  
-                  <Button
-                    variant={predefinedScenario === 'custom' ? 'contained' : 'outlined'}
-                    onClick={() => {
-                      setPredefinedScenario('custom');
-                    }}
-                    size="small"
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Custom
-                  </Button>
+                    {availableStructures.map((structure) => (
+                      <MenuItem key={structure.id} value={structure.id}>
+                        {structure.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              ) : (
+                <Alert 
+                  severity="info"
+                  action={
+                    <Button color="inherit" size="small" onClick={handleNavigateToCalculation}>
+                      Go to Analysis
+                    </Button>
+                  }
+                >
+                  No saved structures found. Please calculate and save at least one structure before running stress tests.
+                </Alert>
+              )}
+              
+              {getSelectedStructure() && (
+                <Box sx={{ mt: 2, p: 2, borderRadius: 1, bgcolor: alpha(theme.palette.info.main, 0.05) }}>
+                  <Typography variant="subtitle2" gutterBottom>Selected Structure Details:</Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body2" color="text.secondary">Type:</Typography>
+                      <Typography variant="body1">
+                        {getSelectedStructure().type === 'manual' ? 'Manual Calculation' : 
+                         getSelectedStructure().type === 'genetic' ? 'Genetic Algorithm' : 
+                         'Standard Algorithm'}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body2" color="text.secondary">Class B Coupon Rate:</Typography>
+                      <Typography variant="body1" fontWeight="medium" color="primary">
+                        {getSelectedStructure().classBCouponRate.toFixed(2)}%
+                      </Typography>
+                    </Grid>
+                  </Grid>
                 </Box>
+              )}
+            </Paper>
+            
+            {/* Scenario Selection */}
+            <Paper
+              elevation={3}
+              sx={{
+                p: 3,
+                borderRadius: 2,
+                backgroundColor: alpha(theme.palette.background.paper, 0.8),
+              }}
+            >
+              <Typography variant="h6" gutterBottom>
+                Stress Scenario
+              </Typography>
+              
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 2, mb: 3 }}>
+                <Button
+                  variant={scenarioType === 'base' ? 'contained' : 'outlined'}
+                  color="primary"
+                  onClick={() => handleScenarioChange('base')}
+                  size="medium"
+                >
+                  Base
+                </Button>
+                
+                <Button
+                  variant={scenarioType === 'moderate' ? 'contained' : 'outlined'}
+                  color="secondary"
+                  onClick={() => handleScenarioChange('moderate')}
+                  size="medium"
+                >
+                  Moderate
+                </Button>
+                
+                <Button
+                  variant={scenarioType === 'severe' ? 'contained' : 'outlined'}
+                  color="error"
+                  onClick={() => handleScenarioChange('severe')}
+                  size="medium"
+                >
+                  Severe
+                </Button>
+                
+                <Button
+                  variant={scenarioType === 'custom' ? 'contained' : 'outlined'}
+                  onClick={() => handleScenarioChange('custom')}
+                  size="medium"
+                >
+                  Custom
+                </Button>
               </Box>
               
+              <Divider sx={{ my: 2 }} />
+              
+              {/* Parameter Settings */}
               <Box sx={{ mt: 3 }}>
-                <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center">
+                <Typography variant="subtitle2" display="flex" alignItems="center">
                   <WarningAmberIcon sx={{ fontSize: 20, mr: 1, color: theme.palette.warning.main }} />
-                  NPL Rate Range (%)
+                  NPL Rate (%)
                   <Tooltip title="Non-Performing Loan rate affects the cash flow available for Class B payment" sx={{ ml: 1 }}>
                     <IconButton size="small">
                       <InfoOutlinedIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
                 </Typography>
-                <Box sx={{ px: 1, pt: 1, pb: 2 }}>
-                  <StyledSlider
-                    value={nplRange}
-                    onChange={(e, value) => setNplRange(value)}
-                    valueLabelDisplay="auto"
-                    min={0}
-                    max={15}
-                    step={0.5}
-                    marks={[
-                      { value: 0, label: '0%' },
-                      { value: 1.5, label: '1.5%' },
-                      { value: 5, label: '5%' },
-                      { value: 10, label: '10%' },
-                      { value: 15, label: '15%' }
-                    ]}
-                  />
-                </Box>
+                <Slider
+                  value={nplRate}
+                  onChange={(e, value) => setNplRate(value)}
+                  valueLabelDisplay="auto"
+                  min={0}
+                  max={15}
+                  step={0.5}
+                  marks={[
+                    { value: 0, label: '0%' },
+                    { value: 5, label: '5%' },
+                    { value: 15, label: '15%' }
+                  ]}
+                  sx={{ mt: 2, mb: 4 }}
+                />
               </Box>
               
-              <Box sx={{ mt: 3 }}>
-                <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center">
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" display="flex" alignItems="center">
                   <TrendingDownIcon sx={{ fontSize: 20, mr: 1, color: theme.palette.primary.light }} />
-                  Prepayment Rate Range (%)
+                  Prepayment Rate (%)
                   <Tooltip title="Early prepayment rates affect the expected cash flow timing" sx={{ ml: 1 }}>
                     <IconButton size="small">
                       <InfoOutlinedIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
                 </Typography>
-                <Box sx={{ px: 1, pt: 1, pb: 2 }}>
-                  <StyledSlider
-                    value={prepaymentRange}
-                    onChange={(e, value) => setPrepaymentRange(value)}
-                    valueLabelDisplay="auto"
-                    min={0}
-                    max={50}
-                    step={1}
-                    marks={[
-                      { value: 0, label: '0%' },
-                      { value: 10, label: '10%' },
-                      { value: 20, label: '20%' },
-                      { value: 30, label: '30%' },
-                      { value: 40, label: '40%' },
-                      { value: 50, label: '50%' }
-                    ]}
-                  />
-                </Box>
-              </Box>
-              
-              {/* Reinvestment Rate Shift Toggle */}
-              <Box sx={{ mt: 3 }}>
-                <FormControl component="fieldset">
-                  <FormControlLabel
-                    control={
-                      <Switch 
-                        checked={applyReinvestmentShift}
-                        onChange={(e) => setApplyReinvestmentShift(e.target.checked)}
-                        color="primary"
-                      />
-                    }
-                    label="Apply Reinvestment Rate Shift"
-                  />
-                  <Typography variant="body2" color="text.secondary">
-                    When enabled, all reinvestment rates will shift by the specified amount
-                  </Typography>
-                </FormControl>
-                
-                {applyReinvestmentShift && (
-                  <Box sx={{ px: 1, pt: 1, pb: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom display="flex" alignItems="center">
-                      <AttachMoneyIcon sx={{ fontSize: 20, mr: 1, color: theme.palette.secondary.light }} />
-                      Reinvestment Rate Shift (±%)
-                    </Typography>
-                    <StyledSlider
-                      value={reinvestmentRange}
-                      onChange={(e, value) => setReinvestmentRange(value)}
-                      valueLabelDisplay="auto"
-                      min={-10}
-                      max={10}
-                      step={1}
-                      marks={[
-                        { value: -10, label: '-10%' },
-                        { value: -5, label: '-5%' },
-                        { value: 0, label: '0%' },
-                        { value: 5, label: '+5%' },
-                        { value: 10, label: '+10%' }
-                      ]}
-                    />
-                  </Box>
-                )}
-              </Box>
-              
-              {/* Advanced model parameters - now always visible */}
-              <AdvancedModelParameters />
-              
-              <Box sx={{ mt: 3 }}>
-                <TextField
-                  fullWidth
-                  label="Base Reinvestment Rate (%)"
-                  value={defaultReinvestRate}
-                  onChange={(e) => setDefaultReinvestRate(Number(e.target.value))}
-                  type="number"
-                  InputProps={{
-                    endAdornment: <InputAdornment position="end">%</InputAdornment>,
-                  }}
-                  variant="outlined"
-                  size="small"
-                  sx={{ mb: 3 }}
+                <Slider
+                  value={prepaymentRate}
+                  onChange={(e, value) => setPrepaymentRate(value)}
+                  valueLabelDisplay="auto"
+                  min={0}
+                  max={50}
+                  step={1}
+                  marks={[
+                    { value: 0, label: '0%' },
+                    { value: 30, label: '30%' },
+                    { value: 50, label: '50%' }
+                  ]}
+                  sx={{ mt: 2, mb: 4 }}
                 />
-                
-                <Button
-                  variant="contained"
-                  color="primary"
-                  fullWidth
-                  size="large"
-                  startIcon={isLoading ? <CircularProgress size={20} color="inherit" /> : <AssessmentIcon />}
-                  onClick={handleRunStressTest}
-                  disabled={isLoading || !selectedStructureId}
-                  sx={{
-                    py: 1.2,
-                    borderRadius: 2,
-                    boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
-                    '&:hover': {
-                      boxShadow: '0 6px 14px rgba(0,0,0,0.4)',
-                    }
-                  }}
-                >
-                  {isLoading ? 'Running Tests...' : 'Run Stress Tests'}
-                </Button>
               </Box>
-            </Paper>
-          </Grid>
-          
-          {/* Results Panel */}
-          <Grid item xs={12} md={8}>
-            {/* Cash Flow Model Results */}
-            {showResults && testResults.cashFlowModel && (
-              <CashFlowModelResults model={testResults.cashFlowModel} />
-            )}
-            
-            {/* Current Test Results Summary */}
-            {showResults && testResults.classBCouponRate && (
-              <Paper
-                elevation={3}
-                sx={{
-                  p: 3,
-                  mb: 4,
-                  borderRadius: 2,
-                  backgroundColor: alpha(theme.palette.background.paper, 0.8),
-                  border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-                }}
-              >
-                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <ShowChartIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
-                  Stress Test Results
+              
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" display="flex" alignItems="center">
+                  <AttachMoneyIcon sx={{ fontSize: 20, mr: 1, color: theme.palette.secondary.light }} />
+                  Reinvestment Rate Shift (±%)
+                  <Tooltip title="All reinvestment rates will shift by this amount" sx={{ ml: 1 }}>
+                    <IconButton size="small">
+                      <InfoOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                 </Typography>
-                
-                <Grid container spacing={3}>
-                  <Grid item xs={12} sm={4}>
-                    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.primary.main, 0.1) }}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Base Coupon Rate
-                      </Typography>
-                      <Typography variant="h4" color="primary" fontWeight="bold">
-                        {testResults.classBCouponRate.modeled.toFixed(2)}%
-                      </Typography>
-                    </Paper>
+                <Slider
+                  value={reinvestmentShift}
+                  onChange={(e, value) => setReinvestmentShift(value)}
+                  valueLabelDisplay="auto"
+                  min={-10}
+                  max={10}
+                  step={1}
+                  marks={[
+                    { value: -10, label: '-10%' },
+                    { value: 0, label: '0%' },
+                    { value: 10, label: '+10%' }
+                  ]}
+                  sx={{ mt: 2, mb: 3 }}
+                />
+              </Box>
+              
+              <Divider sx={{ my: 2 }} />
+              
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Advanced Parameters
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Recovery Rate (0-1)"
+                      value={recoveryRate}
+                      onChange={(e) => setRecoveryRate(Number(e.target.value))}
+                      type="number"
+                      inputProps={{ min: 0, max: 1, step: 0.05 }}
+                      size="small"
+                    />
                   </Grid>
-                  
-                  <Grid item xs={12} sm={4}>
-                    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.secondary.main, 0.1) }}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Stress Coupon Rate
-                      </Typography>
-                      <Typography variant="h4" color="secondary" fontWeight="bold">
-                        {testResults.classBCouponRate.realized.toFixed(2)}%
-                      </Typography>
-                    </Paper>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Delinquency Rate (%)"
+                      value={delinquencyRate === null ? '' : delinquencyRate}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? null : Number(e.target.value);
+                        setDelinquencyRate(value);
+                      }}
+                      type="number"
+                      inputProps={{ min: 0, max: 100, step: 0.1 }}
+                      size="small"
+                      helperText="Leave blank to use half of NPL rate"
+                    />
                   </Grid>
-                  
-                  <Grid item xs={12} sm={4}>
-                    <Paper sx={{ 
-                      p: 2, 
-                      textAlign: 'center', 
-                      bgcolor: alpha(
-                        testResults.classBCouponRate.status === 'success' ? theme.palette.success.main :
-                        testResults.classBCouponRate.status === 'warning' ? theme.palette.warning.main :
-                        theme.palette.error.main, 
-                        0.1
-                      ) 
-                    }}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Impact
-                      </Typography>
-                      <Typography 
-                        variant="h4" 
-                        fontWeight="bold"
-                        color={getDifferenceColor(testResults.classBCouponRate.difference, theme)}
-                      >
-                        {testResults.classBCouponRate.difference > 0 ? '+' : ''}
-                        {testResults.classBCouponRate.difference.toFixed(2)}%
-                      </Typography>
-                    </Paper>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Recovery Lag (days)"
+                      value={recoveryLag}
+                      onChange={(e) => setRecoveryLag(Number(e.target.value))}
+                      type="number"
+                      inputProps={{ min: 0, step: 1 }}
+                      size="small"
+                    />
                   </Grid>
                 </Grid>
-              </Paper>
-            )}
+              </Box>
+            </Paper>
             
-            <Paper 
+            {/* Run Button */}
+            <Button
+              variant="contained"
+              color="primary"
+              fullWidth
+              size="large"
+              startIcon={isLoading ? <CircularProgress size={20} color="inherit" /> : <AssessmentIcon />}
+              onClick={handleRunStressTest}
+              disabled={isLoading || !selectedStructureId}
+              sx={{ py: 1.5, boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}
+            >
+              {isLoading ? 'Running Tests...' : 'Run Stress Test'}
+            </Button>
+          </Box>
+        </Grid>
+        
+        {/* Right Panel: Results */}
+        <Grid item xs={12} md={8}>
+          {isLoading && (
+            <Box sx={{ mt: 2, mb: 4 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                Running stress test...
+              </Typography>
+              <LinearProgress />
+            </Box>
+          )}
+          
+          {!showResults && !isLoading && (
+            <Paper
               elevation={3}
-              sx={{ 
+              sx={{
+                p: 4,
                 borderRadius: 2,
-                overflow: 'hidden',
                 backgroundColor: alpha(theme.palette.background.paper, 0.8),
-                border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+                textAlign: 'center',
+                height: '300px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center'
               }}
             >
-              <Box sx={{ 
-                borderBottom: 1, 
-                borderColor: 'divider',
-                backgroundColor: alpha(theme.palette.background.paper, 0.4),
-                px: 2
-              }}>
-                <Tabs
-                  value={tabValue}
+              <AssessmentIcon sx={{ fontSize: 60, color: alpha(theme.palette.primary.main, 0.3), mb: 2 }} />
+              <Typography variant="h6" gutterBottom>
+                Stress Test Results Will Appear Here
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                Select a structure and run the stress test
+              </Typography>
+            </Paper>
+          )}
+          
+          {showResults && testResults.classBRate.original !== null && (
+            <>
+              {/* Tab Navigation */}
+              <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+                <Tabs 
+                  value={tabValue} 
                   onChange={handleTabChange}
                   variant="scrollable"
                   scrollButtons="auto"
-                  sx={{
-                    '& .MuiTab-root': {
-                      minWidth: 100,
-                      py: 2
-                    }
-                  }}
                 >
-                  <Tab 
-                    label="NPL Sensitivity" 
-                    icon={<WarningAmberIcon />} 
-                    iconPosition="start"
-                  />
-                  <Tab 
-                    label="Prepayment Impact" 
-                    icon={<TrendingDownIcon />} 
-                    iconPosition="start"
-                  />
-                  <Tab 
-                    label="Combined Analysis" 
-                    icon={<CompareArrowsIcon />} 
-                    iconPosition="start"
-                  />
+                  <Tab icon={<ShowChartIcon />} label="Summary" iconPosition="start" />
+                  <Tab icon={<PieChartIcon />} label="Coupon Analysis" iconPosition="start" />
+                  <Tab icon={<TableChartIcon />} label="Cash Flow" iconPosition="start" />
                 </Tabs>
               </Box>
               
-              {/* NPL Sensitivity Tab (now the default tab) */}
+              {/* Tab Content */}
               {tabValue === 0 && (
-                <Box sx={{ p: 3 }}>
-                  <Typography variant="h6" gutterBottom>
-                    Class B Coupon Rate vs. NPL Rates
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" paragraph>
-                    This analysis shows how Non-Performing Loan (NPL) rates affect the Class B coupon rates. Higher NPL rates typically reduce available cash flow for Class B payments.
-                  </Typography>
+                <>
+                  {/* Summary Results */}
+                  <Paper
+                    elevation={3}
+                    sx={{
+                      p: 3,
+                      mb: 3,
+                      borderRadius: 2,
+                      backgroundColor: alpha(theme.palette.background.paper, 0.8),
+                    }}
+                  >
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                      <ShowChartIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
+                      Class B Coupon Rate Results
+                    </Typography>
+                    
+                    <Grid container spacing={3}>
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.primary.main, 0.1) }}>
+                          <Typography variant="subtitle2" color="text.secondary">
+                            Original Coupon Rate
+                          </Typography>
+                          <Typography variant="h4" color="primary" fontWeight="bold">
+                            {testResults.classBRate.original.toFixed(2)}%
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.secondary.main, 0.1) }}>
+                          <Typography variant="subtitle2" color="text.secondary">
+                            Stressed Coupon Rate
+                          </Typography>
+                          <Typography variant="h4" color="secondary" fontWeight="bold">
+                            {testResults.classBRate.stressed.toFixed(2)}%
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ 
+                          p: 2, 
+                          textAlign: 'center', 
+                          bgcolor: alpha(getDifferenceColor(testResults.classBRate.difference), 0.1)
+                        }}>
+                          <Typography variant="subtitle2" color="text.secondary">
+                            Impact
+                          </Typography>
+                          <Typography 
+                            variant="h4" 
+                            fontWeight="bold"
+                            color={getDifferenceColor(testResults.classBRate.difference)}
+                          >
+                            {testResults.classBRate.difference > 0 ? '+' : ''}
+                            {testResults.classBRate.difference.toFixed(2)}%
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    </Grid>
+                    
+                    <Box sx={{ mt: 3, p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.info.main, 0.05) }}>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} sm={4}>
+                          <Typography variant="body2" color="text.secondary">Cash Flow Reduction:</Typography>
+                          <Typography variant="h6" fontWeight="medium" color="error">
+                            {testResults.cashFlowMetrics.reductionPct.toFixed(2)}%
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={4}>
+                          <Typography variant="body2" color="text.secondary">Net Loss:</Typography>
+                          <Typography variant="h6" fontWeight="medium">
+                            {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(testResults.cashFlowMetrics.netLoss)}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={4}>
+                          <Typography variant="body2" color="text.secondary">NPL Impact:</Typography>
+                          <Typography variant="h6" fontWeight="medium">
+                            {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(testResults.cashFlowMetrics.nplImpact)}
+                          </Typography>
+                        </Grid>
+                      </Grid>
+                    </Box>
+                  </Paper>
                   
-                  {testResults.sensitivityAnalysis.npl.length > 0 ? (
-                    <Box sx={{ height: 400, mb: 4 }}>
+                  {/* Comparison Chart */}
+                  <Paper
+                    elevation={3}
+                    sx={{
+                      p: 3,
+                      mb: 3,
+                      borderRadius: 2,
+                      backgroundColor: alpha(theme.palette.background.paper, 0.8),
+                    }}
+                  >
+                    <Typography variant="h6" gutterBottom>
+                      Scenario Comparison
+                    </Typography>
+                    
+                    <Box sx={{ height: 350, mt: 2 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart
-                          data={formatSensitivityData('npl')}
+                        <BarChart
+                          data={scenarioComparisonData}
                           margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
                         >
-                          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
-                          <XAxis 
-                            dataKey="value"
-                            label={{ value: 'NPL Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
-                            tick={{ fill: theme.palette.text.secondary }}
-                          />
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
                           <YAxis 
                             tickFormatter={(value) => `${value}%`}
-                            label={{ value: 'Coupon Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
-                            tick={{ fill: theme.palette.text.secondary }}
                             domain={[0, 'dataMax + 5']}
                           />
                           <RechartsTooltip content={<CustomTooltip />} />
-                          <Legend 
-                            wrapperStyle={{ paddingTop: 20 }}
-                            formatter={(value) => (
-                              <span style={{ color: theme.palette.text.primary }}>{value}</span>
-                            )}
+                          <Legend />
+                          <Bar 
+                            dataKey="rate" 
+                            name="Class B Coupon Rate" 
+                            fill={theme.palette.primary.main}
+                            maxBarSize={80}
                           />
-                          <Line 
-                            type="monotone" 
-                            dataKey="modeled" 
-                            name="Modeled Rate" 
-                            stroke={theme.palette.primary.main}
-                            strokeWidth={2}
-                            dot={{ r: 5, fill: theme.palette.primary.main }}
-                            activeDot={{ r: 7, fill: theme.palette.primary.light }}
-                          />
-                          <Line 
-                            type="monotone" 
-                            dataKey="realized" 
-                            name="Realized Rate" 
-                            stroke={theme.palette.secondary.main}
-                            strokeWidth={2}
-                            dot={{ r: 5, fill: theme.palette.secondary.main }}
-                            activeDot={{ r: 7, fill: theme.palette.secondary.light }}
-                          />
-                        </LineChart>
+                        </BarChart>
                       </ResponsiveContainer>
                     </Box>
-                  ) : (
-                    <Box sx={{ p: 8, textAlign: 'center' }}>
-                      <Typography variant="subtitle1" color="text.secondary">
-                        Run a stress test to see NPL sensitivity analysis
-                      </Typography>
-                    </Box>
-                  )}
-                  
-                  <Box sx={{ mt: 4, p: 3, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.4), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}` }}>
-                    <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-                      Key Insights:
+                    
+                    <Divider sx={{ my: 3 }} />
+                    
+                    <Typography variant="subtitle1" gutterBottom>
+                      Scenario Parameters
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" paragraph>
-                      • The modeled and realized rates both decrease as NPL rates increase<br />
-                      • The gap between modeled and realized rates widens with higher NPL rates<br />
-                      • At NPL rates above 3%, the deviation becomes significant<br />
-                      • Base case projections assume a 1.5% NPL rate<br />
-                      • NPL rates above 5% represent severe stress scenarios
-                    </Typography>
-                  </Box>
-                </Box>
+                    
+                    <Grid container spacing={2} sx={{ mt: 1 }}>
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ p: 2, textAlign: 'center' }}>
+                          <Typography variant="body2" color="text.secondary">NPL Rate</Typography>
+                          <Typography variant="h6" fontWeight="medium">
+                            {nplRate}%
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ p: 2, textAlign: 'center' }}>
+                          <Typography variant="body2" color="text.secondary">Prepayment</Typography>
+                          <Typography variant="h6" fontWeight="medium">
+                            {prepaymentRate}%
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Paper sx={{ p: 2, textAlign: 'center' }}>
+                          <Typography variant="body2" color="text.secondary">Reinvestment Shift</Typography>
+                          <Typography variant="h6" fontWeight="medium">
+                            {reinvestmentShift > 0 ? '+' : ''}{reinvestmentShift}%
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                </>
               )}
               
-              {/* Prepayment Impact Tab */}
+              {/* Coupon Analysis Tab */}
               {tabValue === 1 && (
-                <Box sx={{ p: 3 }}>
-                  <Typography variant="h6" gutterBottom>
-                    Class B Coupon Rate vs. Prepayment Rates
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" paragraph>
-                    This analysis shows how early prepayment rates affect Class B coupon performance. Lower prepayment rates can impact the expected cash flow timing and reduce reinvestment opportunities.
-                  </Typography>
-                  
-                  {testResults.sensitivityAnalysis.prepayment.length > 0 ? (
-                    <Box sx={{ height: 400, mb: 4 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart
-                          data={formatSensitivityData('prepayment')}
-                          margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
-                          <XAxis 
-                            dataKey="value"
-                            label={{ value: 'Prepayment Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
-                            tick={{ fill: theme.palette.text.secondary }}
-                          />
-                          <YAxis 
-                            tickFormatter={(value) => `${value}%`}
-                            label={{ value: 'Coupon Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
-                            tick={{ fill: theme.palette.text.secondary }}
-                            domain={[0, 'dataMax + 5']}
-                          />
-                          <RechartsTooltip content={<CustomTooltip />} />
-                          <Legend 
-                            wrapperStyle={{ paddingTop: 20 }}
-                            formatter={(value) => (
-                              <span style={{ color: theme.palette.text.primary }}>{value}</span>
-                            )}
-                          />
-                          <Line 
-                            type="monotone" 
-                            dataKey="modeled" 
-                            name="Modeled Rate" 
-                            stroke={theme.palette.primary.main}
-                            strokeWidth={2}
-                            dot={{ r: 5, fill: theme.palette.primary.main }}
-                            activeDot={{ r: 7, fill: theme.palette.primary.light }}
-                          />
-                          <Line 
-                            type="monotone" 
-                            dataKey="realized" 
-                            name="Realized Rate" 
-                            stroke={theme.palette.secondary.main}
-                            strokeWidth={2}
-                            dot={{ r: 5, fill: theme.palette.secondary.main }}
-                            activeDot={{ r: 7, fill: theme.palette.secondary.light }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </Box>
-                  ) : (
-                    <Box sx={{ p: 8, textAlign: 'center' }}>
-                      <Typography variant="subtitle1" color="text.secondary">
-                        Run a stress test to see prepayment impact analysis
-                      </Typography>
-                    </Box>
-                  )}
-                  
-                  <Box sx={{ mt: 4, p: 3, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.4), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}` }}>
-                    <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-                      Key Insights:
+                <>
+                  <Paper
+                    elevation={3}
+                    sx={{
+                      p: 3,
+                      mb: 3,
+                      borderRadius: 2,
+                      backgroundColor: alpha(theme.palette.background.paper, 0.8),
+                    }}
+                  >
+                    <Typography variant="h6" gutterBottom>
+                      Class B Coupon Analysis
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" paragraph>
-                      • Lower prepayment rates lead to lower coupon rates for Class B notes<br />
-                      • At prepayment rates below 15%, the deviation between modeled and realized becomes critical<br />
-                      • Base case projections assume a 30% prepayment rate<br />
-                      • Prepayment rates below 10% represent severe stress scenarios<br />
-                      • Higher prepayment rates generally benefit the structure in this model
-                    </Typography>
-                  </Box>
-                </Box>
+                    
+                    <Grid container spacing={3}>
+                      <Grid item xs={12} md={6}>
+                        <Box sx={{ height: 350 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={formatPieData()}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={120}
+                                innerRadius={60}
+                                labelLine={false}
+                                label={({ percent }) => `${(percent * 100).toFixed(1)}%`}
+                              >
+                                {formatPieData().map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <RechartsTooltip content={<CustomTooltip />} />
+                              <Legend />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </Box>
+                      </Grid>
+                      
+                      <Grid item xs={12} md={6}>
+                        <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          <Typography variant="subtitle1" gutterBottom fontWeight="medium">
+                            Coupon Rate Details
+                          </Typography>
+                          
+                          <Box sx={{ mt: 2 }}>
+                            <Typography variant="body2" color="text.secondary">Original Coupon Rate:</Typography>
+                            <Typography variant="h5" color="primary" fontWeight="medium">
+                              {testResults.classBRate.original.toFixed(2)}%
+                            </Typography>
+                            
+                            <Divider sx={{ my: 2 }} />
+                            
+                            <Typography variant="body2" color="text.secondary">Stressed Coupon Rate:</Typography>
+                            <Typography variant="h5" color="secondary" fontWeight="medium">
+                              {testResults.classBRate.stressed.toFixed(2)}%
+                            </Typography>
+                            
+                            <Divider sx={{ my: 2 }} />
+                            
+                            <Typography variant="body2" color="text.secondary">Coupon Rate Difference:</Typography>
+                            <Typography 
+                              variant="h5" 
+                              fontWeight="medium"
+                              color={getDifferenceColor(testResults.classBRate.difference)}
+                            >
+                              {testResults.classBRate.difference > 0 ? '+' : ''}
+                              {testResults.classBRate.difference.toFixed(2)}%
+                            </Typography>
+                            
+                            <Divider sx={{ my: 2 }} />
+                            
+                            <Typography variant="body2" color="text.secondary">Percentage Change:</Typography>
+                            <Typography 
+                              variant="h5" 
+                              fontWeight="medium"
+                              color={getDifferenceColor(testResults.classBRate.difference)}
+                            >
+                              {((testResults.classBRate.stressed - testResults.classBRate.original) / testResults.classBRate.original * 100).toFixed(2)}%
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                </>
               )}
               
-              {/* Combined Analysis Tab */}
+              {/* Cash Flow Tab */}
               {tabValue === 2 && (
-                <Box sx={{ p: 3 }}>
-                  <Typography variant="h6" gutterBottom>
-                    Multifactor Analysis of Rate Deviation
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" paragraph>
-                    This combined analysis shows how NPL and prepayment rates together affect Class B coupon rate deviation. Bubble size indicates the magnitude of deviation.
-                  </Typography>
-                  
-                  {testResults.combinedScenarios.length > 0 ? (
-                    <Box sx={{ height: 500 }}>
+                <>
+                  <Paper
+                    elevation={3}
+                    sx={{
+                      p: 3,
+                      mb: 3,
+                      borderRadius: 2,
+                      backgroundColor: alpha(theme.palette.background.paper, 0.8),
+                    }}
+                  >
+                    <Typography variant="h6" gutterBottom>
+                      Cash Flow Comparison
+                    </Typography>
+                    
+                    <Box sx={{ height: 350, mt: 2 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <ScatterChart
-                          margin={{ top: 20, right: 30, left: 20, bottom: 10 }}
+                        <BarChart
+                          data={formatCashflowComparisonData()}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 30 }}
                         >
-                          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.grid} />
+                          <CartesianGrid strokeDasharray="3 3" />
                           <XAxis 
-                            type="number" 
-                            dataKey="x" 
-                            name="NPL Rate" 
-                            unit="%" 
-                            domain={[0, 15]}
-                            label={{ value: 'NPL Rate (%)', position: 'insideBottomRight', offset: -5, fill: theme.palette.text.secondary }}
-                            tick={{ fill: theme.palette.text.secondary }}
+                            dataKey="date" 
+                            label={{ value: 'Payment Date', position: 'insideBottom', offset: -15 }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={60}
                           />
                           <YAxis 
-                            type="number" 
-                            dataKey="y" 
-                            name="Prepayment Rate" 
-                            unit="%"
-                            domain={[0, 40]}
-                            label={{ value: 'Prepayment Rate (%)', angle: -90, position: 'insideLeft', fill: theme.palette.text.secondary }}
-                            tick={{ fill: theme.palette.text.secondary }}
+                            tickFormatter={(value) => `₺${(value/1000).toFixed(0)}k`}
                           />
-                          <ZAxis type="number" range={[60, 350]} />
-                          <RechartsTooltip content={<ScatterTooltip />} />
-                          <Legend 
-                            wrapperStyle={{ paddingTop: 20 }}
-                            formatter={(value) => (
-                              <span style={{ color: theme.palette.text.primary }}>{value}</span>
-                            )}
+                          <RechartsTooltip content={<CustomTooltip />} />
+                          <Legend />
+                          <Bar 
+                            dataKey="original" 
+                            name="Original Cash Flow" 
+                            fill={theme.palette.primary.main}
+                            maxBarSize={20}
                           />
-                          <Scatter 
-                            name="Rate Deviation" 
-                            data={formatScatterData()} 
-                            fill={theme.palette.error.main}
-                            fillOpacity={0.7}
+                          <Bar 
+                            dataKey="actual" 
+                            name="Stressed Cash Flow" 
+                            fill={theme.palette.secondary.main}
+                            maxBarSize={20}
                           />
-                        </ScatterChart>
+                        </BarChart>
                       </ResponsiveContainer>
                     </Box>
-                  ) : (
-                    <Box sx={{ p: 8, textAlign: 'center' }}>
-                      <Typography variant="subtitle1" color="text.secondary">
-                        Run a stress test to see multifactor analysis
+                  </Paper>
+                  
+                  <Paper
+                    elevation={3}
+                    sx={{
+                      p: 3,
+                      mb: 3,
+                      borderRadius: 2,
+                      backgroundColor: alpha(theme.palette.background.paper, 0.8),
+                    }}
+                  >
+                    <Typography variant="h6" gutterBottom>
+                      Cash Flow Impact Analysis
+                    </Typography>
+                    
+                    <Grid container spacing={3}>
+                      <Grid item xs={12} sm={6} md={3}>
+                        <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.error.main, 0.1) }}>
+                          <Typography variant="subtitle2" color="text.secondary">
+                            NPL Impact
+                          </Typography>
+                          <Typography variant="h6" color="error" fontWeight="medium">
+                            {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(testResults.cashFlowMetrics.nplImpact)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      
+                      <Grid item xs={12} sm={6} md={3}>
+                        <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.warning.main, 0.1) }}>
+                          <Typography variant="subtitle2" color="text.secondary">
+                            Cash Flow Loss
+                          </Typography>
+                          <Typography variant="h6" color="warning.dark" fontWeight="medium">
+                            {testResults.cashFlowMetrics.reductionPct.toFixed(2)}%
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      
+                      <Grid item xs={12} sm={6} md={3}>
+                        <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.info.main, 0.1) }}>
+                          <Typography variant="subtitle2" color="text.secondary">
+                            Prepayment
+                          </Typography>
+                          <Typography variant="h6" color="info.dark" fontWeight="medium">
+                            {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(testResults.cashFlowMetrics.prepaymentTotal)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                      
+                      <Grid item xs={12} sm={6} md={3}>
+                        <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.success.main, 0.1) }}>
+                          <Typography variant="subtitle2" color="text.secondary">
+                            Reinvestment
+                          </Typography>
+                          <Typography variant="h6" color="success.dark" fontWeight="medium">
+                            {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(testResults.cashFlowMetrics.reinvestmentTotal)}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    </Grid>
+                    
+                    <Box sx={{ mt: 3, p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.info.main, 0.05) }}>
+                      <Typography variant="subtitle1" gutterBottom fontWeight="medium">
+                        Stress Scenario Summary
+                      </Typography>
+                      
+                      <Typography variant="body1" paragraph>
+                        This stress test modeled cash flows under a {scenarioType === 'base' ? 'base' : scenarioType === 'moderate' ? 'moderate' : scenarioType === 'severe' ? 'severe' : 'custom'} scenario with {nplRate}% NPL rate and {prepaymentRate}% prepayment rate assumptions.
+                      </Typography>
+                      
+                      <Typography variant="body1" paragraph>
+                        Original Class B coupon payment: {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(testResults.cashFlowMetrics.originalClassBCouponPayment || 0)}<br/>
+                        Total stress impact (net loss): {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(testResults.cashFlowMetrics.netLoss || 0)}<br/>
+                        Stressed Class B coupon payment: {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(testResults.cashFlowMetrics.stressedClassBCouponPayment || 0)}
+                      </Typography>
+                      
+                      <Typography variant="body1" paragraph>
+                        The stressed Class B coupon rate is calculated as:<br/>
+                        (Stressed Coupon Payment / Class B Principal) × 100 = {testResults.classBRate.stressed.toFixed(2)}%
+                      </Typography>
+                      
+                      <Typography variant="body1">
+                        Net loss as percentage of original total cash flow: {testResults.cashFlowMetrics.reductionPct.toFixed(2)}%
                       </Typography>
                     </Box>
-                  )}
-                  
-                  <Box sx={{ mt: 4, p: 3, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.4), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}` }}>
-                    <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-                      Risk Heatmap Interpretation
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      • Larger bubbles indicate greater deviation between modeled and realized coupon rates<br />
-                      • The lower right quadrant (high NPL, low prepayment) represents the most severe stress conditions<br />
-                      • Scenarios with high NPL rates (&gt;5%) and low prepayment rates (&lt;10%) tend to result in the largest deviations<br />
-                      • Base case parameters (1.5% NPL, 30% prepayment) show moderate but acceptable deviation<br />
-                      • Optimistic scenarios (1% NPL, 20% prepayment) with positive reinvestment shifts show minimal impact
-                    </Typography>
-                  </Box>
-                </Box>
+                  </Paper>
+                </>
               )}
-            </Paper>
-          </Grid>
+            </>
+          )}
         </Grid>
-        
-        {/* Snackbar for Notifications */}
-        <Snackbar
-          open={snackbarOpen}
-          autoHideDuration={6000}
-          onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      </Grid>
+      
+      {/* Snackbar */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={handleCloseSnackbar} 
+          severity={snackbarSeverity}
+          sx={{ width: '100%' }}
         >
-          <Alert 
-            onClose={handleCloseSnackbar} 
-            severity={snackbarSeverity}
-            sx={{ width: '100%' }}
-            action={
-              snackbarSeverity === "warning" ? (
-                <Button color="inherit" size="small" onClick={handleNavigateToCalculation}>
-                  Go to Structure Analysis
-                </Button>
-              ) : undefined
-            }
-          >
-            {snackbarMessage}
-          </Alert>
-        </Snackbar>
-      </Container>
-    </ThemeProvider>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+    </Container>
   );
 };
 

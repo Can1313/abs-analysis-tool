@@ -530,21 +530,26 @@ DOSYA: backend\app\routers\stress_testing.py
 ==================================================
 # app/routers/stress_testing.py
 
-from fastapi import APIRouter, HTTPException
-from app.models.input_models import StressTestRequest, EnhancedStressTestRequest
-# Remove import of old service and only import enhanced
+from fastapi import APIRouter, HTTPException, Body
+from app.models.input_models import StressTestRequest, EnhancedStressTestRequest, StructureParameters, EnhancedScenarioParameters
 from app.services.enhanced_stress_testing_service import perform_enhanced_stress_test
 from app.routers.calculation import df_store
 import logging
 import traceback
+from datetime import date
+from typing import Dict, Any, List
+from pydantic import ValidationError
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.post("/stress-test/", response_model=dict)
+@router.post("/stress-test/", response_model=Dict[str, Any])
 async def stress_test(request: StressTestRequest):
+    """
+    Run a basic stress test with NPL, prepayment and reinvestment shift
+    """
     try:
-        # Get the stored dataframe with better error message
+        # Get the stored dataframe
         df = df_store.get("df")
         if df is None:
             raise HTTPException(
@@ -561,7 +566,7 @@ async def stress_test(request: StressTestRequest):
                 detail=f"Missing required columns in uploaded data: {', '.join(missing_columns)}"
             )
         
-        # Basic validation of input data
+        # Validate input data
         if not request.structure:
             raise HTTPException(status_code=400, detail="Structure details are missing")
             
@@ -603,12 +608,11 @@ async def stress_test(request: StressTestRequest):
         # Convert standard request to enhanced request with default values for enhanced parameters
         enhanced_request = EnhancedStressTestRequest(
             structure=request.structure,
-            scenario=dict(
+            scenario=EnhancedScenarioParameters(
                 name=request.scenario.name,
                 npl_rate=request.scenario.npl_rate,
                 prepayment_rate=request.scenario.prepayment_rate,
                 reinvestment_shift=request.scenario.reinvestment_shift,
-                # Default values for enhanced parameters
                 recovery_rate=0.50,
                 recovery_lag=6,
                 delinquency_rate=None,  # Will be derived from npl_rate
@@ -618,14 +622,12 @@ async def stress_test(request: StressTestRequest):
             )
         )
         
-        # Use enhanced stress test instead of the basic one
+        # Use enhanced stress test
         result = perform_enhanced_stress_test(df, enhanced_request)
         
-        # Log results for debugging
-        logger.info(f"Stress test completed. Baseline rate: {result['baseline']['class_b_coupon_rate']}%, Stress rate: {result['stress_test']['class_b_coupon_rate']}%")
-        logger.info(f"Difference: {result['difference']['class_b_coupon_rate']}%")
-        
+        # Return result directly - it's already in the correct format
         return result
+        
     except HTTPException:
         # Re-raise HTTP exceptions directly
         raise
@@ -644,10 +646,79 @@ async def stress_test(request: StressTestRequest):
             detail=f"Stress testing error: {error_message}"
         )
 
-@router.post("/enhanced-stress-test/", response_model=dict)
-async def enhanced_stress_test(request: EnhancedStressTestRequest):
+@router.post("/enhanced-stress-test/")
+async def enhanced_stress_test(request_data: Dict[str, Any] = Body(...)):
+    """
+    Run enhanced stress test with additional parameters
+    """
     try:
-        # Get the stored dataframe with better error message
+        # Log raw request data for debugging
+        logger.info(f"Enhanced stress test raw request: {request_data}")
+        
+        # Try to parse and validate request data manually
+        try:
+            # Extract structure and scenario data
+            structure_data = request_data.get("structure", {})
+            scenario_data = request_data.get("scenario", {})
+            
+            # Format date string from frontend to date object
+            start_date_str = structure_data.get("start_date")
+            start_date = None
+            
+            if isinstance(start_date_str, str):
+                try:
+                    start_date = date.fromisoformat(start_date_str)
+                except ValueError:
+                    # Try different formats
+                    try:
+                        from datetime import datetime
+                        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                    except ValueError:
+                        raise ValueError(f"Invalid date format: {start_date_str}. Expected YYYY-MM-DD")
+            
+            # Validate structure
+            structure = StructureParameters(
+                start_date=start_date,
+                a_maturities=structure_data.get("a_maturities", []),
+                a_base_rates=structure_data.get("a_base_rates", []),
+                a_spreads=structure_data.get("a_spreads", []),
+                a_reinvest_rates=structure_data.get("a_reinvest_rates", []),
+                a_nominals=structure_data.get("a_nominals", []),
+                b_maturity=structure_data.get("b_maturity"),
+                b_base_rate=structure_data.get("b_base_rate"),
+                b_spread=structure_data.get("b_spread"),
+                b_reinvest_rate=structure_data.get("b_reinvest_rate"),
+                b_nominal=structure_data.get("b_nominal"),
+                ops_expenses=structure_data.get("ops_expenses", 0.0)
+            )
+            
+            # Validate scenario
+            scenario = EnhancedScenarioParameters(
+                name=scenario_data.get("name", "Scenario"),
+                npl_rate=scenario_data.get("npl_rate"),
+                prepayment_rate=scenario_data.get("prepayment_rate"),
+                reinvestment_shift=scenario_data.get("reinvestment_shift"),
+                recovery_rate=scenario_data.get("recovery_rate", 0.5),
+                recovery_lag=scenario_data.get("recovery_lag", 6),
+                delinquency_rate=scenario_data.get("delinquency_rate"),
+                delinquency_recovery_rate=scenario_data.get("delinquency_recovery_rate", 0.85),
+                delinquency_to_default_rate=scenario_data.get("delinquency_to_default_rate", 0.2),
+                repeat_delinquency_factor=scenario_data.get("repeat_delinquency_factor", 1.5)
+            )
+            
+            # Create validated request
+            request = EnhancedStressTestRequest(structure=structure, scenario=scenario)
+            
+        except ValidationError as ve:
+            # Return detailed validation errors
+            error_messages = str(ve).split("\n")
+            logger.error(f"Validation error: {error_messages}")
+            raise HTTPException(
+                status_code=422,
+                detail={"message": "Validation error", "errors": error_messages}
+            )
+        
+        # Get the stored dataframe
         df = df_store.get("df")
         if df is None:
             raise HTTPException(
@@ -655,23 +726,7 @@ async def enhanced_stress_test(request: EnhancedStressTestRequest):
                 detail="No loan data found. Please upload an Excel file on the Structure Analysis page first."
             )
         
-        # Validate dataframe has required columns
-        required_columns = ['principal_amount', 'interest_amount', 'cash_flow', 'installment_date']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Missing required columns in uploaded data: {', '.join(missing_columns)}"
-            )
-        
-        # Basic validation of input data
-        if not request.structure:
-            raise HTTPException(status_code=400, detail="Structure details are missing")
-            
-        # Validate structure parameters
-        if not request.structure.a_maturities:
-            raise HTTPException(status_code=400, detail="No Class A maturities provided")
-        
+        # Perform additional validation on the structure
         # Ensure lists are of equal length
         list_lengths = [
             len(request.structure.a_maturities),
@@ -705,6 +760,24 @@ async def enhanced_stress_test(request: EnhancedStressTestRequest):
                 detail=f"Recovery rate must be between 0 and 1, got {request.scenario.recovery_rate}"
             )
         
+        if request.scenario.recovery_lag <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Recovery lag must be positive, got {request.scenario.recovery_lag}"
+            )
+            
+        if request.scenario.delinquency_recovery_rate < 0 or request.scenario.delinquency_recovery_rate > 1:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Delinquency recovery rate must be between 0 and 1, got {request.scenario.delinquency_recovery_rate}"
+            )
+            
+        if request.scenario.delinquency_to_default_rate < 0 or request.scenario.delinquency_to_default_rate > 1:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Delinquency to default rate must be between 0 and 1, got {request.scenario.delinquency_to_default_rate}"
+            )
+        
         # Log inputs for debugging
         logger.info(f"Running enhanced stress test with scenario: {request.scenario.name}")
         logger.info(f"NPL rate: {request.scenario.npl_rate}%, Prepayment: {request.scenario.prepayment_rate}%, " + 
@@ -713,12 +786,9 @@ async def enhanced_stress_test(request: EnhancedStressTestRequest):
         # Perform the enhanced stress test
         result = perform_enhanced_stress_test(df, request)
         
-        # Log results for debugging
-        logger.info(f"Enhanced stress test completed. Baseline rate: {result['baseline']['class_b_coupon_rate']}%, " + 
-                    f"Stress rate: {result['stress_test']['class_b_coupon_rate']}%")
-        logger.info(f"Difference: {result['difference']['class_b_coupon_rate']}%")
-        
+        # Return result directly - it's already in the correct format
         return result
+        
     except HTTPException:
         # Re-raise HTTP exceptions directly
         raise
@@ -848,579 +918,558 @@ def perform_calculation(df: pd.DataFrame,
 DOSYA: backend\app\services\enhanced_stress_testing_service.py
 ==================================================
 # app/services/enhanced_stress_testing_service.py
+"""
+Enhanced Stress Testing Service for Asset-Backed Securities (ABS)
+This module implements advanced stress testing with detailed cash flow modeling
+"""
 
 import pandas as pd
 import numpy as np
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import logging
-import traceback
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Optional, Union, Tuple
+from pydantic import BaseModel
 
-# Import the necessary modules
-from app.models.input_models import EnhancedStressTestRequest
-from app.utils.tranche_utils import calculate_tranche_results
-
+# Configure logger
 logger = logging.getLogger(__name__)
 
-class CashFlowScenarioProcessor:
+# =========================================================================
+# Data Models
+# =========================================================================
+
+class ClassATranche(BaseModel):
+    """Class A tranche parameters"""
+    maturity_days: int
+    base_rate: float
+    spread: float
+    reinvest_rate: float
+    nominal: float
+
+class ClassBTranche(BaseModel):
+    """Class B tranche parameters"""
+    maturity_days: int
+    base_rate: float
+    spread: float
+    reinvest_rate: float
+    nominal: float
+
+class ABSStructure(BaseModel):
+    """ABS structure parameters"""
+    start_date: str
+    a_tranches: List[ClassATranche]
+    b_tranche: ClassBTranche
+    ops_expenses: float = 0
+
+class StressScenario(BaseModel):
+    """Stress test scenario parameters"""
+    name: str
+    npl_rate: float  # %
+    prepayment_rate: float  # %
+    reinvestment_shift: float  # %
+    recovery_rate: float = 0.5  # Ratio (0-1)
+    recovery_lag: int = 90  # Days
+    delinquency_rate: Optional[float] = None  # %, If None, half of NPL is used
+    delinquency_recovery_rate: float = 0.85  # Ratio (0-1)
+    delinquency_to_default_rate: float = 0.2  # Ratio (0-1)
+    repeat_delinquency_factor: float = 1.5  # Multiplier
+
+class StressTestRequest(BaseModel):
+    """Stress test request parameters"""
+    structure: ABSStructure
+    scenario: StressScenario
+
+class StressTestResponse(BaseModel):
+    """Stress test response parameters"""
+    original_class_b_rate: float
+    stressed_class_b_rate: float
+    difference: float
+    cashflow_reduction_pct: float
+    total_npl_impact: float
+    total_prepayment: float
+    total_reinvestment: float
+    modeled_cashflows: List[Dict[str, Any]]
+
+# =========================================================================
+# Cash Flow Modeling
+# =========================================================================
+
+class CashFlowModeler:
     """
-    Handles cash flow scenario analysis including:
-      - Prepayment
-      - Delinquency
-      - Default (with partial recovery)
+    Cash flow modeling class. Calculates modeled cash flows
+    applying various stress factors.
     """
-
+    
     @staticmethod
-    def cpr_to_smm(cpr):
-        """Convert annual CPR to a daily SMM (Simple Monthly Mortality)."""
-        return 1 - (1 - float(cpr)) ** (1 / 365)
-
-    @staticmethod
-    def cdr_to_mdr(cdr):
-        """Convert annual rates (CDR/Delinquency) to a daily rate."""
-        return 1 - (1 - float(cdr)) ** (1 / 365)
-
-    @staticmethod
-    def ensure_timestamp(date_input: Union[str, date, datetime, pd.Timestamp]) -> pd.Timestamp:
+    def prepare_cashflow_df(cash_flows: pd.DataFrame) -> pd.DataFrame:
         """
-        Convert any date format to pandas Timestamp
+        Prepares the original cash flow DataFrame for modeling
         """
-        if isinstance(date_input, pd.Timestamp):
-            return date_input
+        df = cash_flows.copy()
         
-        if isinstance(date_input, (date, datetime)):
-            return pd.Timestamp(date_input)
+        # Check and fix date column
+        if 'installment_date' not in df.columns:
+            raise ValueError("Cash flow table must contain 'installment_date' column")
         
-        if isinstance(date_input, str):
-            try:
-                return pd.Timestamp(date_input)
-            except Exception as e:
-                logger.error(f"Could not convert date format: {date_input}, error: {str(e)}")
-                # Return today's date as default
-                return pd.Timestamp('today')
+        # Fix date format
+        df['installment_date'] = pd.to_datetime(df['installment_date'])
         
-        # For other types of values
-        logger.warning(f"Unexpected date format: {type(date_input)}, value: {date_input}")
-        return pd.Timestamp('today')
-
-    @staticmethod
-    def prepare_cash_flow_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Prepare the cash flow DataFrame for scenario analysis
-        """
-        try:
-            # Verify required columns exist
-            required_columns = ['installment_date', 'principal_amount', 'interest_amount', 'cash_flow']
-            for col in required_columns:
-                if col not in df.columns:
-                    logger.error(f"Missing column: '{col}'")
-                    raise ValueError(f"Column '{col}' not found in data")
-            
-            # Create a copy of the DataFrame
-            cf_df = df.copy()
-            
-            # Rename columns to match expected format
-            cf_df = cf_df.rename(columns={
-                'installment_date': 'payment_date',
-                'installment_amount': 'payment_amount'
-            })
-            
-            # Ensure payment_date is datetime
-            if not pd.api.types.is_datetime64_any_dtype(cf_df['payment_date']):
-                cf_df['payment_date'] = pd.to_datetime(cf_df['payment_date'], errors='coerce')
-            
-            # Calculate beginning balance
-            cf_df["beginning_balance"] = 0.0
-            total_principal = cf_df["principal_amount"].sum()
-            current_balance = total_principal
-            
-            for i in range(len(cf_df)):
-                cf_df.loc[i, "beginning_balance"] = current_balance
-                current_balance -= cf_df.loc[i, "principal_amount"]
-                if current_balance < 0:
-                    current_balance = 0
-            
-            # Convert to float for numeric operations
-            cf_df["beginning_balance"] = cf_df["beginning_balance"].astype(float)
-            cf_df["principal_amount"] = cf_df["principal_amount"].astype(float)
-            cf_df["interest_amount"] = cf_df["interest_amount"].astype(float)
-            
-            # Sort by payment date
-            cf_df = cf_df.sort_values('payment_date')
-            
-            return cf_df
-            
-        except Exception as e:
-            logger.exception(f"Error preparing cash flow DataFrame: {e}")
-            raise ValueError(f"Error processing cash flow data: {e}")
-
-    @staticmethod
-    def apply_scenario_assumptions(
-        cf_df,
-        sm,  # Daily prepayment rate
-        dr,  # Daily default rate
-        dr_delinq,  # Daily delinquency rate
-        recovery_rate,
-        recovery_lag,
-        delinquency_recovery_rate,
-        delinquency_to_default_rate,
-        repeat_delinquency_factor,
-    ):
-        """
-        Applies prepayment, delinquency, and default assumptions.
-        Returns a DataFrame with modeled cash flows.
-        """
-        df = cf_df.copy().reset_index(drop=True)
-
-        # Initialize new columns
-        df["actual_balance"] = 0.0
-        df["actual_principal"] = 0.0
-        df["actual_interest"] = 0.0
-        df["prepayment"] = 0.0
-        df["default"] = 0.0
-        df["delinquency"] = 0.0
-        df["default_recovery"] = 0.0
-        df["delinquency_recovery"] = 0.0
-        df["loss"] = 0.0
-        df["prepayment_interest_loss"] = 0.0
-        df["net_modeled_cashflow"] = 0.0
-
-        current_balance = df.loc[0, "beginning_balance"]
-
-        ab_list = []  # actual_balance
-        ap_list = []  # actual_principal
-        ai_list = []  # actual_interest
-        pp_list = []  # prepayment
-        def_list = []  # default
-        del_list = []  # delinquency
-        def_rec_list = []  # default_recovery
-        del_rec_list = []  # delinquency_recovery
-        loss_list = []  # loss
-        pp_loss_list = []  # prepayment_interest_loss
-        net_cf_list = []  # net_modeled_cashflow
-
-        # Track default amounts for recovery
-        defaults_for_recovery = []
-        # Track delinquent amounts for recovery
-        delinquencies_for_recovery = []
-
-        # Track outstanding defaults and delinquencies
-        outstanding_defaults = 0.0
-        outstanding_delinquencies = 0.0
-
-        for i, row in df.iterrows():
-            scheduled_principal = row["principal_amount"]
-            scheduled_interest = row["interest_amount"]
-            scheduled_balance = row["beginning_balance"]
-
-            # Scale down based on current balance vs. scheduled
-            scaling_factor = current_balance / scheduled_balance if scheduled_balance > 0 else 0
-            principal_adj = scheduled_principal * scaling_factor
-            interest_adj = scheduled_interest * scaling_factor
-
-            # After scheduled principal
-            remaining_balance = current_balance - principal_adj
-
-            # Prepayment
-            prepayment_amt = remaining_balance * sm
-            remaining_after_prepay = remaining_balance - prepayment_amt
-
-            # Delinquency
-            delinquency_amt = remaining_after_prepay * dr_delinq
-
-            # Repeated delinquency logic
-            if i > 0 and df.loc[i - 1, "delinquency"] > 0:
-                prev_del = df.loc[i - 1, "delinquency"]
-                repeat_factor = min(prev_del / current_balance, 0.5) if current_balance > 0 else 0
-                additional_del = repeat_factor * remaining_after_prepay * (repeat_delinquency_factor - 1) * dr_delinq
-                delinquency_amt += additional_del
-
-            remaining_after_del = remaining_after_prepay - delinquency_amt
-
-            # Some portion of delinquency goes to default
-            delinquency_to_default_amt = delinquency_amt * delinquency_to_default_rate
-            delinquency_amt -= delinquency_to_default_amt
-
-            # Default
-            default_amt = remaining_after_del * dr + delinquency_to_default_amt
-            loss_amt = default_amt * (1 - recovery_rate)
-
-            # Default recovery from earlier periods
-            default_recovery_amt = 0.0
-            if i >= recovery_lag and len(defaults_for_recovery) > recovery_lag:
-                default_recovery_amt = defaults_for_recovery[i - recovery_lag] * recovery_rate
-
-            # Delinquency recovery from earlier periods
-            delinquency_recovery_amt = 0.0
-            if i >= recovery_lag and len(delinquencies_for_recovery) > recovery_lag:
-                delinquency_recovery_amt = delinquencies_for_recovery[i - recovery_lag] * delinquency_recovery_rate
-
-            # Delinquency interest +50% on that portion
-            if (principal_adj + interest_adj) > 0:
-                delinquency_ratio = delinquency_amt / (principal_adj + interest_adj) if (principal_adj + interest_adj) > 0 else 0
-                actual_interest = interest_adj + (interest_adj * 0.5 * delinquency_ratio)
-            else:
-                actual_interest = interest_adj
-
-            # Prepayment interest loss
-            if (principal_adj + prepayment_amt) > 0:
-                fraction_prepay = prepayment_amt / (principal_adj + prepayment_amt)
-            else:
-                fraction_prepay = 0.0
-            prepay_int_loss = scheduled_interest * scaling_factor * fraction_prepay
-
-            # Actual principal paid
-            actual_principal = principal_adj + prepayment_amt
-
-            # Update outstanding defaults/delinquencies
-            outstanding_defaults += default_amt
-            outstanding_defaults -= default_recovery_amt
-            if outstanding_defaults < 0:
-                outstanding_defaults = 0
-
-            outstanding_delinquencies += delinquency_amt
-            outstanding_delinquencies -= delinquency_recovery_amt
-            if outstanding_delinquencies < 0:
-                outstanding_delinquencies = 0
-
-            ab_list.append(current_balance)
-            ap_list.append(actual_principal)
-            ai_list.append(actual_interest)
-            pp_list.append(prepayment_amt)
-            def_list.append(default_amt)
-            del_list.append(delinquency_amt)
-            def_rec_list.append(default_recovery_amt)
-            del_rec_list.append(delinquency_recovery_amt)
-            loss_list.append(loss_amt)
-            pp_loss_list.append(prepay_int_loss)
-
-            defaults_for_recovery.append(default_amt)
-            delinquencies_for_recovery.append(delinquency_amt)
-
-            # Update balance
-            current_balance = current_balance - actual_principal - default_amt - delinquency_amt
-            if current_balance < 0:
-                current_balance = 0
-
-            # Net cash flow
-            net_cf = actual_principal + actual_interest + default_recovery_amt + delinquency_recovery_amt
-            net_cf_list.append(net_cf)
-
-        df["actual_balance"] = ab_list
-        df["actual_principal"] = ap_list
-        df["actual_interest"] = ai_list
-        df["prepayment"] = pp_list
-        df["default"] = def_list
-        df["delinquency"] = del_list
-        df["default_recovery"] = def_rec_list
-        df["delinquency_recovery"] = del_rec_list
-        df["loss"] = loss_list
-        df["prepayment_interest_loss"] = pp_loss_list
-        df["net_modeled_cashflow"] = net_cf_list
-
-        # Derived columns
-        df["actual_cashflow"] = (
-            df["actual_principal"] + df["actual_interest"] + df["default_recovery"] + df["delinquency_recovery"]
-        )
-        df["cumulative_actual_cashflow"] = df["actual_cashflow"].cumsum()
-        df["cumulative_prepayment"] = df["prepayment"].cumsum()
-        df["cumulative_default"] = df["default"].cumsum()
-        df["cumulative_delinquency"] = df["delinquency"].cumsum()
-        df["cumulative_loss"] = df["loss"].cumsum()
-        df["cumulative_default_recovery"] = df["default_recovery"].cumsum()
-        df["cumulative_delinquency_recovery"] = df["delinquency_recovery"].cumsum()
-
+        # Check required columns
+        required_columns = ['principal_amount', 'interest_amount']
+        for col in required_columns:
+            if col not in df.columns:
+                raise ValueError(f"Cash flow table must contain '{col}' column")
+        
+        # Calculate cash flow total
+        if 'cash_flow' not in df.columns:
+            df['cash_flow'] = df['principal_amount'] + df['interest_amount']
+        
+        # Convert data types
+        df['principal_amount'] = pd.to_numeric(df['principal_amount'])
+        df['interest_amount'] = pd.to_numeric(df['interest_amount'])
+        df['cash_flow'] = pd.to_numeric(df['cash_flow'])
+        
         return df
-
-def normalize_coupon_rates(baseline_rate, stress_rate):
-    """
-    Normalizes coupon rates to reasonable values while maintaining their relative relationship.
-    This is used when cash flow modeling results in unrealistically high coupon rates.
     
-    Args:
-        baseline_rate: The original baseline coupon rate
-        stress_rate: The original stress test coupon rate
-        
-    Returns:
-        Tuple of (normalized_baseline_rate, normalized_stress_rate)
-    """
-    # Define reasonable coupon rate ranges
-    MAX_REASONABLE_RATE = 50.0  # Maximum reasonable coupon rate
-    TARGET_AVERAGE_RATE = 30.0  # Target for average coupon rate
+    @staticmethod
+    def calculate_daily_rates(annual_rate: float) -> float:
+        """
+        Converts an annual rate to a daily rate
+        """
+        return 1 - (1 - annual_rate/100) ** (1/365)
     
-    # Check if rates are within reasonable range
-    if baseline_rate <= MAX_REASONABLE_RATE and stress_rate <= MAX_REASONABLE_RATE:
-        return baseline_rate, stress_rate
-    
-    # Calculate average of the rates
-    avg_rate = (baseline_rate + stress_rate) / 2
-    
-    # Calculate difference between rates (preserves the impact direction)
-    rate_diff = stress_rate - baseline_rate
-    
-    # When rates are very high, we need to reduce the scale but preserve the relative difference
-    if avg_rate > MAX_REASONABLE_RATE:
-        # Calculate scaling factor to bring average to target
-        scaling_factor = TARGET_AVERAGE_RATE / avg_rate
+    @staticmethod
+    def model_cashflows(
+        original_cashflows: pd.DataFrame,
+        structure: ABSStructure,
+        scenario: StressScenario
+    ) -> pd.DataFrame:
+        """
+        Models cash flows according to stress parameters
+        """
+        # Create copy of DataFrame
+        df = original_cashflows.copy()
+        result_df = pd.DataFrame()
         
-        # Apply scaling to maintain the relative relationship
-        norm_baseline = baseline_rate * scaling_factor
-        norm_stress = stress_rate * scaling_factor
-        
-        # Ensure we preserve the sign of the difference
-        if (norm_stress - norm_baseline) * rate_diff < 0:
-            # If scaling reversed the relationship, use a different approach
-            norm_baseline = TARGET_AVERAGE_RATE - (rate_diff / 2)
-            norm_stress = TARGET_AVERAGE_RATE + (rate_diff / 2)
-            
-            # Apply bounds
-            norm_baseline = max(1.0, min(MAX_REASONABLE_RATE, norm_baseline))
-            norm_stress = max(1.0, min(MAX_REASONABLE_RATE, norm_stress))
-        
-        logger.warning(f"Normalized rates from {baseline_rate:.2f}%/{stress_rate:.2f}% to {norm_baseline:.2f}%/{norm_stress:.2f}%")
-        return norm_baseline, norm_stress
-    
-    # This shouldn't be reached but return original values as fallback
-    return baseline_rate, stress_rate
-
-def perform_enhanced_stress_test(df: pd.DataFrame, request: EnhancedStressTestRequest) -> Dict[str, Any]:
-    """
-    Performs enhanced stress test that combines cash flow modeling with ABS structure analysis
-    
-    Args:
-        df: Cash flow DataFrame
-        request: Enhanced stress test request with structure and scenario parameters
-        
-    Returns:
-        Dict[str, Any]: Enhanced stress test results
-    """
-    try:
-        logger.info("Starting enhanced stress test calculation")
-        
-        # Extract base parameters
-        structure = request.structure
-        scenario = request.scenario
-        
-        # Extract scenario parameters with defaults
-        npl_rate = scenario.npl_rate
-        prepayment_rate = scenario.prepayment_rate
-        reinvestment_shift = scenario.reinvestment_shift
+        # Prepare scenario parameters
+        npl_rate = scenario.npl_rate / 100
+        prepayment_rate = scenario.prepayment_rate / 100  
+        reinvest_shift = scenario.reinvestment_shift / 100
         recovery_rate = scenario.recovery_rate
-        recovery_lag = scenario.recovery_lag
-        delinquency_rate = scenario.delinquency_rate if scenario.delinquency_rate is not None else npl_rate / 2
+        recovery_lag_days = scenario.recovery_lag
+        
+        # Set delinquency rate, if not specified use half of NPL
+        delinquency_rate = (scenario.delinquency_rate / 100) if scenario.delinquency_rate is not None else (npl_rate / 2)
         delinquency_recovery_rate = scenario.delinquency_recovery_rate
         delinquency_to_default_rate = scenario.delinquency_to_default_rate
-        repeat_delinquency_factor = scenario.repeat_delinquency_factor
         
-        # Log parameters
-        logger.info(f"Scenario: {scenario.name}")
-        logger.info(f"NPL Rate: {npl_rate}%, Prepayment: {prepayment_rate}%, Reinvestment Shift: {reinvestment_shift}%")
-        logger.info(f"Recovery Rate: {recovery_rate}, Recovery Lag: {recovery_lag} days")
-        logger.info(f"Delinquency Rate: {delinquency_rate}%, Delinquency Recovery Rate: {delinquency_recovery_rate}")
+        # Calculate daily rates
+        daily_npl_rate = CashFlowModeler.calculate_daily_rates(scenario.npl_rate)
+        daily_prepayment_rate = CashFlowModeler.calculate_daily_rates(scenario.prepayment_rate)
+        daily_delinquency_rate = CashFlowModeler.calculate_daily_rates(
+            scenario.delinquency_rate if scenario.delinquency_rate is not None else (scenario.npl_rate / 2)
+        )
         
-        # Convert start_date to pandas Timestamp
-        start_date = CashFlowScenarioProcessor.ensure_timestamp(structure.start_date)
-        logger.info(f"Start date: {start_date}")
-        
-        # Data validation
-        if df is None or df.empty:
-            raise ValueError("No valid cash flow data found for analysis")
-        
-        # Check for required columns
-        required_columns = ['principal_amount', 'interest_amount', 'cash_flow', 'installment_date']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            raise ValueError(f"Missing columns in cash flow data: {', '.join(missing_columns)}")
-        
-        # Save original structure parameters to calculate original rates later if needed
-        original_a_nominals = structure.a_nominals.copy()
-        original_b_nominal = structure.b_nominal
-        
-        # First calculate baseline results with original cash flows
-        logger.info("Calculating baseline results")
-        try:
-            baseline_result = calculate_tranche_results(
-                df, start_date,
-                structure.a_maturities, structure.a_base_rates, structure.a_spreads, structure.a_reinvest_rates,
-                structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
-                structure.b_reinvest_rate, structure.b_nominal, structure.ops_expenses
-            )
-        except Exception as e:
-            logger.error(f"Error calculating baseline: {str(e)}")
-            logger.debug(traceback.format_exc())
-            raise ValueError(f"Error calculating baseline scenario: {str(e)}")
-        
-        # Prepare cash flow DataFrame for scenario analysis
-        cf_df = CashFlowScenarioProcessor.prepare_cash_flow_dataframe(df)
-        
-        # Convert annual rates to daily rates
-        daily_prepay_rate = CashFlowScenarioProcessor.cpr_to_smm(prepayment_rate / 100)
-        daily_default_rate = CashFlowScenarioProcessor.cdr_to_mdr(npl_rate / 100)
-        daily_delinquency_rate = CashFlowScenarioProcessor.cdr_to_mdr(delinquency_rate / 100)
-        
-        # Apply scenario assumptions to get modeled cash flows
-        logger.info("Applying cash flow scenario modeling")
-        try:
-            modeled_df = CashFlowScenarioProcessor.apply_scenario_assumptions(
-                cf_df,
-                daily_prepay_rate,
-                daily_default_rate,
-                daily_delinquency_rate,
-                recovery_rate,
-                recovery_lag,
-                delinquency_recovery_rate,
-                delinquency_to_default_rate,
-                repeat_delinquency_factor
-            )
-        except Exception as e:
-            logger.error(f"Error in cash flow modeling: {str(e)}")
-            logger.debug(traceback.format_exc())
-            raise ValueError(f"Error during cash flow scenario modeling: {str(e)}")
-        
-        # Convert modeled cash flows back to original format for structure analysis
-        stress_df = df.copy()
-        stress_df["principal_amount"] = modeled_df["actual_principal"]
-        stress_df["interest_amount"] = modeled_df["actual_interest"]
-        stress_df["cash_flow"] = modeled_df["actual_cashflow"]
-        
-        # Apply reinvestment rate shift if specified
-        a_reinvest_rates = list(structure.a_reinvest_rates)
-        b_reinvest_rate = structure.b_reinvest_rate
-        
-        if reinvestment_shift != 0:
-            logger.info(f"Applying {reinvestment_shift}% shift to reinvestment rates")
-            a_reinvest_rates = [rate + reinvestment_shift for rate in structure.a_reinvest_rates]
-            b_reinvest_rate = structure.b_reinvest_rate + reinvestment_shift
-        
-        # Calculate stress test results with modeled cash flows
-        logger.info("Calculating stress test results using modeled cash flows")
-        try:
-            stress_result = calculate_tranche_results(
-                stress_df, start_date,
-                structure.a_maturities, structure.a_base_rates, structure.a_spreads, a_reinvest_rates,
-                structure.a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
-                b_reinvest_rate, structure.b_nominal, structure.ops_expenses
-            )
-        except Exception as e:
-            logger.error(f"Error calculating stress scenario: {str(e)}")
-            logger.debug(traceback.format_exc())
-            raise ValueError(f"Error calculating stress scenario: {str(e)}")
-        
-        # Calculate summary metrics
-        total_original_principal = df["principal_amount"].sum()
-        total_modeled_principal = modeled_df["actual_principal"].sum()
-        total_default = modeled_df["default"].sum()
-        total_default_pct = (total_default / total_original_principal) * 100 if total_original_principal > 0 else 0
-        total_loss = modeled_df["loss"].sum()
-        total_loss_pct = (total_loss / total_original_principal) * 100 if total_original_principal > 0 else 0
-        total_delinquency = modeled_df["delinquency"].sum()
-        total_delinquency_pct = (total_delinquency / total_original_principal) * 100 if total_original_principal > 0 else 0
-        total_cf_reduction = ((df["cash_flow"].sum() - modeled_df["actual_cashflow"].sum()) / df["cash_flow"].sum()) * 100 if df["cash_flow"].sum() > 0 else 0
-        
-        # Extract key result values
-        baseline_coupon_rate = baseline_result.get('effective_coupon_rate', 0)
-        stress_coupon_rate = stress_result.get('effective_coupon_rate', 0)
-        baseline_buffer = baseline_result.get('min_buffer_actual', 0)
-        stress_buffer = stress_result.get('min_buffer_actual', 0)
-        baseline_coupon = baseline_result.get('class_b_coupon', 0)
-        stress_coupon = stress_result.get('class_b_coupon', 0)
-        
-        # Get direct coupon rates (not annualized)
-        baseline_direct_rate = baseline_result.get('direct_coupon_rate', 0)
-        stress_direct_rate = stress_result.get('direct_coupon_rate', 0)
-        
-        # If rates are unreasonably high, try to normalize them
-        original_baseline_rate = baseline_coupon_rate
-        original_stress_rate = stress_coupon_rate
-        
-        # Check if the rates are unreasonably high (both over 100% suggests modeling issue)
-        if baseline_coupon_rate > 100 and stress_coupon_rate > 100:
-            logger.warning(f"Very high coupon rates detected: Baseline={baseline_coupon_rate}%, Stress={stress_coupon_rate}%")
+        # Initial values
+        remaining_principal = df["principal_amount"].sum()
+        current_date = pd.Timestamp(structure.start_date)
+        remaining_cashflows = []
+        defaulted_amounts = []  # List of defaulted amounts
+        delinquent_amounts = []  # List of delinquent amounts
+
+        # Process cash flows in date order
+        for _, row in df.sort_values("installment_date").iterrows():
+            installment_date = pd.Timestamp(row["installment_date"])
+            days_diff = (installment_date - current_date).days
             
-            # Fall back to original structure calculation with modified cash flows
-            try:
-                logger.info("Trying alternative calculation method for more reasonable rates")
-                
-                # Calculate original coupon rate first
-                original_result = calculate_tranche_results(
-                    df, start_date,
-                    structure.a_maturities, structure.a_base_rates, structure.a_spreads, structure.a_reinvest_rates,
-                    original_a_nominals, structure.b_maturity, structure.b_base_rate, structure.b_spread,
-                    structure.b_reinvest_rate, original_b_nominal, structure.ops_expenses
-                )
-                
-                original_coupon_rate = original_result.get('effective_coupon_rate', 0)
-                
-                # Estimate impact factor from cash flow reduction
-                principal_reduction_factor = max(0.01, total_modeled_principal / total_original_principal)
-                impact_factor = 1 - ((1 - principal_reduction_factor) * 0.7) # 70% impact from principal reduction
-                
-                # Apply impact to original rate
-                baseline_coupon_rate = original_coupon_rate
-                stress_coupon_rate = original_coupon_rate * impact_factor
-                
-                logger.info(f"Using estimated rates: Original={original_coupon_rate}%, Baseline={baseline_coupon_rate}%, Stress={stress_coupon_rate}%")
-            except Exception as e:
-                logger.warning(f"Alternative calculation failed: {str(e)}. Using normalization instead.")
-                # If that fails, normalize the rates
-                baseline_coupon_rate, stress_coupon_rate = normalize_coupon_rates(baseline_coupon_rate, stress_coupon_rate)
+            # 1. Calculate NPL impact - loss of principal and interest
+            # Instead of direct calculation, we calculate a cumulative probability
+            cumulative_npl_prob = 1 - (1 - daily_npl_rate) ** days_diff
+            npl_impact = remaining_principal * cumulative_npl_prob
+            
+            # NPL effect on principal and interest (proportional by default)
+            remaining_after_npl = remaining_principal - npl_impact
+            
+            # Ratio of remaining to what should be
+            scaling_factor = remaining_after_npl / remaining_principal if remaining_principal > 0 else 0
+            principal_after_npl = row["principal_amount"] * scaling_factor
+            interest_after_npl = row["interest_amount"] * scaling_factor
+            
+            # 2. Calculate delinquency effect
+            # Based on principal after NPL
+            cumulative_delinq_prob = 1 - (1 - daily_delinquency_rate) ** days_diff
+            delinquency_amount = remaining_after_npl * cumulative_delinq_prob
+            
+            # Principal remaining after NPL and delinquency
+            remaining_after_delinq = remaining_after_npl - delinquency_amount
+            
+            # 3. Calculate prepayment effect
+            # Based on principal after NPL and delinquency
+            cumulative_prepay_prob = 1 - (1 - daily_prepayment_rate) ** days_diff
+            prepayment_amount = remaining_after_delinq * cumulative_prepay_prob
+            
+            # Normal principal payment + prepayment
+            scheduled_principal = principal_after_npl * (1 - cumulative_delinq_prob)
+            actual_principal = scheduled_principal + prepayment_amount
+            
+            # 4. Calculate interest effects
+            # a. Delinquency interest effect (typically with penalty interest)
+            delinquency_ratio = delinquency_amount / remaining_after_npl if remaining_after_npl > 0 else 0
+            delinquency_interest = interest_after_npl * delinquency_ratio * 1.5  # 1.5x penalty interest
+            
+            # b. Prepayment interest loss
+            prepayment_interest_loss = 0
+            if row["principal_amount"] > 0:
+                interest_rate = row["interest_amount"] / row["principal_amount"]
+                # Lost interest on prepaid amount (assume average half period)
+                prepayment_interest_loss = prepayment_amount * interest_rate * 0.5  
+            
+            # Net interest
+            actual_interest = (interest_after_npl * (1 - delinquency_ratio)) - prepayment_interest_loss + delinquency_interest
+            
+            # 5. Recovery calculations
+            # Recovery for defaults and delinquencies after specific lag
+            default_recovery = 0
+            delinquency_recovery = 0
+            
+            # Calculate recovery from previous defaults based on recovery lag
+            recovery_date = installment_date - timedelta(days=recovery_lag_days)
+            for def_amount in defaulted_amounts:
+                if def_amount["date"] <= recovery_date:
+                    default_recovery += def_amount["amount"] * recovery_rate
+                    def_amount["processed"] = True
+            
+            # Calculate recovery from previous delinquencies 
+            for del_amount in delinquent_amounts:
+                if del_amount["date"] <= recovery_date:
+                    # Part of delinquency becomes default
+                    default_portion = del_amount["amount"] * delinquency_to_default_rate
+                    # Remaining part is either recovered or continues delinquent
+                    recovery_portion = (del_amount["amount"] - default_portion) * delinquency_recovery_rate
+                    
+                    # Add recovery amount
+                    delinquency_recovery += recovery_portion
+                    
+                    # Add default portion to defaults list
+                    defaulted_amounts.append({
+                        "date": del_amount["date"] + timedelta(days=30),  # Default after 30 days
+                        "amount": default_portion,
+                        "processed": False
+                    })
+                    
+                    del_amount["processed"] = True
+            
+            # Remove processed amounts from lists
+            defaulted_amounts = [d for d in defaulted_amounts if not d.get("processed", False)]
+            delinquent_amounts = [d for d in delinquent_amounts if not d.get("processed", False)]
+            
+            # Add new default amount to list
+            defaulted_amounts.append({
+                "date": installment_date,
+                "amount": npl_impact,
+                "processed": False
+            })
+            
+            # Add new delinquency amount to list
+            delinquent_amounts.append({
+                "date": installment_date,
+                "amount": delinquency_amount,
+                "processed": False
+            })
+            
+            # 6. Calculate total actual cash flow
+            actual_cashflow = actual_principal + actual_interest + default_recovery + delinquency_recovery
+            
+            # 7. Calculate reinvestment
+            reinvest_amount = 0
+            
+            # Calculate reinvestment for all tranches (base + shift)
+            for i, cf in enumerate(remaining_cashflows):
+                cf_date = cf["date"]
+                days_between = (installment_date - cf_date).days
+                if days_between > 0:
+                    # Tranche specific reinvest rate
+                    base_reinvest_rate = 0
+                    
+                    # Find appropriate tranche
+                    if i < len(structure.a_tranches):
+                        # Class A tranche-specific rate
+                        base_reinvest_rate = structure.a_tranches[i].reinvest_rate / 100
+                    else:
+                        # Class B rate
+                        base_reinvest_rate = structure.b_tranche.reinvest_rate / 100
+                    
+                    # Apply shift
+                    actual_reinvest_rate = max(0, base_reinvest_rate + reinvest_shift)
+                    
+                    # Calculate reinvestment return (simple interest)
+                    reinvest_return = cf["amount"] * actual_reinvest_rate * days_between / 365
+                    reinvest_amount += reinvest_return
+            
+            # 8. Update remaining principal
+            remaining_principal -= actual_principal
+            
+            # 9. Add results
+            result_df = pd.concat([result_df, pd.DataFrame({
+                "installment_date": [installment_date],
+                "original_principal": [row["principal_amount"]],
+                "original_interest": [row["interest_amount"]],
+                "original_cashflow": [row["cash_flow"]],
+                "npl_impact": [npl_impact],
+                "delinquency_amount": [delinquency_amount],
+                "actual_principal": [actual_principal],
+                "actual_interest": [actual_interest],
+                "prepayment": [prepayment_amount],
+                "default_recovery": [default_recovery],
+                "delinquency_recovery": [delinquency_recovery],
+                "actual_cashflow": [actual_cashflow],
+                "reinvest_amount": [reinvest_amount],
+                "total_actual_cashflow": [actual_cashflow + reinvest_amount],
+                "remaining_principal": [remaining_principal]
+            })], ignore_index=True)
+            
+            # 10. Remember cash flow for next period reinvestment
+            remaining_cashflows.append({
+                "date": installment_date,
+                "amount": actual_cashflow
+            })
+            
+            current_date = installment_date
         
-        # Calculate difference after normalization
-        coupon_rate_diff = stress_coupon_rate - baseline_coupon_rate
+        return result_df
+
+# =========================================================================
+# Class A Calculator
+# =========================================================================
+
+class ClassACalculator:
+    """
+    Class for calculating Class A payments
+    """
+    
+    @staticmethod
+    def calculate_interest_rate(base_rate: float, spread: float, days: int) -> float:
+        """
+        Calculates annual interest yield using simple interest formula
+        """
+        annual_rate = base_rate + spread  # %
+        return annual_rate * (days / 365) / 100
+    
+    @staticmethod
+    def calculate_class_a_payments(structure: ABSStructure) -> pd.DataFrame:
+        """
+        Calculates payments for all Class A tranches
+        """
+        start_date = pd.Timestamp(structure.start_date)
+        results = []
         
-        # Create response object
-        response = {
-            'baseline': {
-                'class_b_coupon_rate': round(baseline_coupon_rate, 4),
-                'min_buffer_actual': round(baseline_buffer, 4),
-                'class_b_coupon': round(baseline_coupon, 4),
-                'original_rate': round(original_baseline_rate, 4) if original_baseline_rate != baseline_coupon_rate else None
-            },
-            'stress_test': {
-                'class_b_coupon_rate': round(stress_coupon_rate, 4),
-                'min_buffer_actual': round(stress_buffer, 4),
-                'class_b_coupon': round(stress_coupon, 4),
-                'npl_rate': npl_rate,
-                'prepayment_rate': prepayment_rate,
-                'reinvestment_shift': reinvestment_shift,
-                'original_rate': round(original_stress_rate, 4) if original_stress_rate != stress_coupon_rate else None,
-                # Cash flow model metrics
-                'recovery_rate': recovery_rate,
-                'delinquency_rate': delinquency_rate,
-                'total_default_pct': round(total_default_pct, 2),
-                'total_loss_pct': round(total_loss_pct, 2),
-                'total_delinquency_pct': round(total_delinquency_pct, 2),
-                'total_cashflow_reduction_pct': round(total_cf_reduction, 2),
-                'principal_reduction_pct': round((1 - total_modeled_principal / total_original_principal) * 100 if total_original_principal > 0 else 0, 2)
-            },
-            'difference': {
-                'class_b_coupon_rate': round(coupon_rate_diff, 4),
-                'min_buffer_actual': round(stress_buffer - baseline_buffer, 4),
-                'class_b_coupon': round(stress_coupon - baseline_coupon, 4)
-            },
-            'cash_flow_model': {
-                'total_original_principal': round(total_original_principal, 2),
-                'total_modeled_principal': round(total_modeled_principal, 2),
-                'total_default': round(total_default, 2),
-                'total_delinquency': round(total_delinquency, 2),
-                'total_loss': round(total_loss, 2),
-                'total_recovery': round(modeled_df["default_recovery"].sum() + modeled_df["delinquency_recovery"].sum(), 2)
-            }
-        }
+        for i, tranche in enumerate(structure.a_tranches):
+            maturity_date = start_date + pd.Timedelta(days=tranche.maturity_days)
+            
+            # Calculate interest rate
+            interest_rate = ClassACalculator.calculate_interest_rate(
+                tranche.base_rate, tranche.spread, tranche.maturity_days
+            )
+            
+            # Calculate interest amount
+            interest_amount = tranche.nominal * interest_rate
+            
+            # Add results
+            results.append({
+                "tranche_index": i,
+                "tranche_name": f"Class A-{i+1}",
+                "maturity_days": tranche.maturity_days,
+                "maturity_date": maturity_date,
+                "nominal": tranche.nominal,
+                "interest_rate": interest_rate * 100,  # As %
+                "interest_amount": interest_amount,
+                "total_payment": tranche.nominal + interest_amount
+            })
         
-        # Log results
-        logger.info("Enhanced stress test completed successfully")
-        logger.info(f"Baseline rate: {response['baseline']['class_b_coupon_rate']}%, " +
-                   f"Stress rate: {response['stress_test']['class_b_coupon_rate']}%")
-        logger.info(f"Difference: {response['difference']['class_b_coupon_rate']}%")
-        logger.info(f"Total loss: {total_loss_pct}% of principal, Cash flow reduction: {total_cf_reduction}%")
+        return pd.DataFrame(results)
+
+# =========================================================================
+# Main Stress Testing Functions
+# =========================================================================
+
+def perform_stress_test(original_cashflows: pd.DataFrame, request: StressTestRequest) -> StressTestResponse:
+    """
+    Performs stress test and returns results
+    """
+    try:
+        logger.info(f"Starting stress test: {request.scenario.name}")
+        
+        # 1. Prepare cash flow DataFrame
+        df = CashFlowModeler.prepare_cashflow_df(original_cashflows)
+        
+        # 2. Calculate Class A payments
+        class_a_payments = ClassACalculator.calculate_class_a_payments(request.structure)
+        total_class_a_payments = class_a_payments["total_payment"].sum()
+        
+        # 3. Calculate original Class B coupon rate
+        original_total_cashflow = df["cash_flow"].sum()
+        original_class_b_available = original_total_cashflow - total_class_a_payments
+        
+        # Subtract operational expenses if any
+        if request.structure.ops_expenses > 0:
+            original_class_b_available -= request.structure.ops_expenses
+        
+        # Calculate coupon rate (annualized)
+        b_tranche = request.structure.b_tranche
+        b_maturity_years = b_tranche.maturity_days / 365
+        original_class_b_rate = (original_class_b_available / b_tranche.nominal) / b_maturity_years * 100
+        
+        # 4. Model stressed cash flows
+        modeled_cashflows = CashFlowModeler.model_cashflows(df, request.structure, request.scenario)
+        
+        # 5. Calculate stressed Class B coupon rate
+        modeled_total_cashflow = modeled_cashflows["total_actual_cashflow"].sum()
+        stressed_class_b_available = modeled_total_cashflow - total_class_a_payments
+        
+        # Subtract operational expenses if any
+        if request.structure.ops_expenses > 0:
+            stressed_class_b_available -= request.structure.ops_expenses
+        
+        # Must be at least 0 (no negative payment)
+        stressed_class_b_available = max(0, stressed_class_b_available)
+        
+        # Calculate coupon rate (annualized)
+        stressed_class_b_rate = (stressed_class_b_available / b_tranche.nominal) / b_maturity_years * 100
+        
+        # 6. Prepare results
+        cashflow_reduction_pct = ((original_total_cashflow - modeled_total_cashflow) / original_total_cashflow) * 100 if original_total_cashflow > 0 else 0
+        
+        # Metrics
+        total_npl_impact = modeled_cashflows["npl_impact"].sum()
+        total_prepayment = modeled_cashflows["prepayment"].sum()
+        total_reinvestment = modeled_cashflows["reinvest_amount"].sum()
+        
+        logger.info(f"Stress test completed: {request.scenario.name}")
+        logger.info(f"Original Class B rate: {original_class_b_rate:.2f}%, Stressed: {stressed_class_b_rate:.2f}%")
+        logger.info(f"Cash flow reduction: {cashflow_reduction_pct:.2f}%")
+        
+        # Create response
+        response = StressTestResponse(
+            original_class_b_rate=original_class_b_rate,
+            stressed_class_b_rate=stressed_class_b_rate,
+            difference=stressed_class_b_rate - original_class_b_rate,
+            cashflow_reduction_pct=cashflow_reduction_pct,
+            total_npl_impact=total_npl_impact,
+            total_prepayment=total_prepayment,
+            total_reinvestment=total_reinvestment,
+            modeled_cashflows=modeled_cashflows.to_dict('records')
+        )
         
         return response
         
     except Exception as e:
-        # Log detailed error
-        logger.error(f"Unexpected error during enhanced stress test: {str(e)}")
-        logger.debug(traceback.format_exc())
+        logger.error(f"Stress test error: {str(e)}")
+        logger.exception(e)
+        raise ValueError(f"Stress test calculation failed: {str(e)}")
+
+def perform_enhanced_stress_test(original_cashflows: pd.DataFrame, request) -> dict:
+    """
+    Handles enhanced stress test requests with additional parameters.
+    
+    This function converts the API request model to the internal model
+    and executes the stress test with enhanced scenario parameters.
+    
+    Args:
+        original_cashflows: DataFrame containing cash flow data
+        request: Enhanced stress test request from the API
+        
+    Returns:
+        Dictionary containing baseline, stress test, and difference results
+    """
+    try:
+        logger.info(f"Starting enhanced stress test: {request.scenario.name}")
+        
+        # Convert from API request model to internal model
+        structure = ABSStructure(
+            start_date=request.structure.start_date.strftime("%Y-%m-%d"),
+            a_tranches=[
+                ClassATranche(
+                    maturity_days=request.structure.a_maturities[i],
+                    base_rate=request.structure.a_base_rates[i],
+                    spread=request.structure.a_spreads[i],
+                    reinvest_rate=request.structure.a_reinvest_rates[i],
+                    nominal=request.structure.a_nominals[i]
+                ) for i in range(len(request.structure.a_maturities))
+            ],
+            b_tranche=ClassBTranche(
+                maturity_days=request.structure.b_maturity,
+                base_rate=request.structure.b_base_rate,
+                spread=request.structure.b_spread,
+                reinvest_rate=request.structure.b_reinvest_rate,
+                nominal=request.structure.b_nominal
+            ),
+            ops_expenses=request.structure.ops_expenses
+        )
+        
+        # Create baseline scenario (no stress factors)
+        baseline_scenario = StressScenario(
+            name="Baseline",
+            npl_rate=0.0,
+            prepayment_rate=0.0,
+            reinvestment_shift=0.0,
+            recovery_rate=request.scenario.recovery_rate,
+            recovery_lag=request.scenario.recovery_lag,
+            delinquency_rate=0.0,
+            delinquency_recovery_rate=request.scenario.delinquency_recovery_rate,
+            delinquency_to_default_rate=request.scenario.delinquency_to_default_rate,
+            repeat_delinquency_factor=request.scenario.repeat_delinquency_factor
+        )
+        
+        # Create stress scenario with all enhanced parameters
+        stress_scenario = StressScenario(
+            name=request.scenario.name,
+            npl_rate=request.scenario.npl_rate,
+            prepayment_rate=request.scenario.prepayment_rate,
+            reinvestment_shift=request.scenario.reinvestment_shift,
+            recovery_rate=request.scenario.recovery_rate,
+            recovery_lag=request.scenario.recovery_lag,
+            delinquency_rate=request.scenario.delinquency_rate,
+            delinquency_recovery_rate=request.scenario.delinquency_recovery_rate,
+            delinquency_to_default_rate=request.scenario.delinquency_to_default_rate,
+            repeat_delinquency_factor=request.scenario.repeat_delinquency_factor
+        )
+        
+        # Calculate baseline results
+        baseline_request = StressTestRequest(structure=structure, scenario=baseline_scenario)
+        baseline_results = perform_stress_test(original_cashflows, baseline_request)
+        
+        # Calculate stress test results
+        stress_request = StressTestRequest(structure=structure, scenario=stress_scenario)
+        stress_results = perform_stress_test(original_cashflows, stress_request)
+        
+        # Prepare API response
+        response = {
+            "baseline": {
+                "class_b_coupon_rate": baseline_results.original_class_b_rate,
+                "total_cashflow": sum(cf["original_cashflow"] for cf in baseline_results.modeled_cashflows)
+            },
+            "stress_test": {
+                "class_b_coupon_rate": stress_results.stressed_class_b_rate,
+                "total_cashflow": sum(cf["total_actual_cashflow"] for cf in stress_results.modeled_cashflows),
+                "total_npl_impact": stress_results.total_npl_impact,
+                "total_prepayment": stress_results.total_prepayment,
+                "total_reinvestment": stress_results.total_reinvestment
+            },
+            "difference": {
+                "class_b_coupon_rate": stress_results.difference,
+                "cashflow_reduction_pct": stress_results.cashflow_reduction_pct
+            },
+            "cashflows": {
+                "baseline": baseline_results.modeled_cashflows[:10],  # Return only first 10 cashflows for brevity
+                "stress": stress_results.modeled_cashflows[:10]
+            }
+        }
+        
+        logger.info(f"Enhanced stress test completed: {request.scenario.name}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Enhanced stress test error: {str(e)}")
+        logger.exception(e)
         raise ValueError(f"Enhanced stress test calculation failed: {str(e)}")
 
 ======================================================================

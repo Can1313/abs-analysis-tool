@@ -12,7 +12,7 @@ import React, {
 const DataContext = createContext();
 export const useData = () => useContext(DataContext);
 
-/* localStorage parse – "undefined" vb. hataları engeller */
+/* localStorage parse – prevents "undefined" errors */
 const safeParse = (key, fallback) => {
   try {
     const raw = localStorage.getItem(key);
@@ -44,7 +44,7 @@ const DEFAULT_SETTINGS = {
       base_rate: 0,
       spread: 0,
       reinvest_rate: 25.5,
-      /* nominal boş – optimizasyon gelince dolacak */
+      /* nominal empty – will be filled when optimization comes */
     }
   },
   new: {
@@ -68,6 +68,34 @@ const DEFAULT_SETTINGS = {
       // For new default settings, Class B percentage should be 10%
       class_b_percent: 10 // Will be used to calculate nominal dynamically
     }
+  }
+};
+
+/* Default stress test scenarios */
+const DEFAULT_STRESS_SCENARIOS = {
+  base: {
+    name: "Base",
+    npl_rate: 1.5,
+    prepayment_rate: 30,
+    reinvestment_shift: 0
+  },
+  moderate: {
+    name: "Moderate",
+    npl_rate: 3,
+    prepayment_rate: 15,
+    reinvestment_shift: -3
+  },
+  severe: {
+    name: "Severe",
+    npl_rate: 5,
+    prepayment_rate: 10,
+    reinvestment_shift: -5
+  },
+  extreme: {
+    name: "Extreme",
+    npl_rate: 7,
+    prepayment_rate: 5,
+    reinvestment_shift: -10
   }
 };
 
@@ -113,6 +141,19 @@ export const DataProvider = ({ children }) => {
     population_size: 50,
     num_generations: 40,
   });
+
+  /* ---------------- Stress Test state ------------------ */
+  const [stressTestResults, setStressTestResults] = useState(() =>
+    safeParse('stressTestResults', null)
+  );
+  
+  const [stressScenarios, setStressScenarios] = useState(() =>
+    safeParse('stressScenarios', DEFAULT_STRESS_SCENARIOS)
+  );
+  
+  const [stressTestHistory, setStressTestHistory] = useState(() =>
+    safeParse('stressTestHistory', [])
+  );
 
   /* -------------- originals for <Reset> -------------- */
   const [origA, setOrigA] = useState(null);
@@ -191,6 +232,9 @@ export const DataProvider = ({ children }) => {
   const setPrevCalcLS  = wrapLocal(setPreviousCalc, 'previousCalculationResults');
   const setSavedResLS  = wrapLocal(setSavedResults, 'savedResults');
   const setMultiResLS  = wrapLocal(setMultiResults, 'multipleComparisonResults');
+  const setStressResLS = wrapLocal(setStressTestResults, 'stressTestResults');
+  const setStressScenLS = wrapLocal(setStressScenarios, 'stressScenarios');
+  const setStressHistLS = wrapLocal(setStressTestHistory, 'stressTestHistory');
 
   /* ---------------------- helpers -------------------- */
   const saveResult = (result, name, methodType) => {
@@ -205,6 +249,26 @@ export const DataProvider = ({ children }) => {
     setSavedResLS([...savedResults, stamped]);
     return true;
   };
+  
+  const saveStressTestResult = (result, scenarioName, structureId) => {
+    if (!result) return false;
+    const stamped = {
+      ...result,
+      id: Date.now().toString(),
+      scenarioName: scenarioName,
+      structureId: structureId,
+      timestamp: new Date().toISOString(),
+    };
+    setStressHistLS([...stressTestHistory, stamped]);
+    return true;
+  };
+  
+  const deleteStressTestResult = (id) => 
+    setStressHistLS(stressTestHistory.filter(r => r.id !== id));
+  
+  const clearStressTestHistory = () => 
+    setStressHistLS([]);
+    
   const deleteSavedResult  = (id) => setSavedResLS(savedResults.filter(r => r.id !== id));
   const clearSavedResults  = () => setSavedResLS([]);
   const clearComparisonData = () => setMultiResLS([]);
@@ -269,8 +333,54 @@ export const DataProvider = ({ children }) => {
       operational_expenses: generalSettings.operational_expenses,
       min_buffer: generalSettings.min_buffer,
     },
-    selected_default_model: selectedDefaults // Added this line to pass the selected model
+    selected_default_model: selectedDefaults
   });
+
+  const createStressTestRequest = (structure, scenario) => {
+    // Get structure details
+    const structureDetails = typeof structure === 'string' ? 
+      savedResults.find(r => r.id === structure) : structure;
+      
+    if (!structureDetails) {
+      throw new Error("Structure not found");
+    }
+    
+    // Format structure for API
+    const formattedStructure = {
+      start_date: structureDetails.start_date ||
+                 (structureDetails.general_settings?.start_date instanceof Date ? 
+                  structureDetails.general_settings.start_date.toISOString().split('T')[0] :
+                  structureDetails.general_settings?.start_date),
+      a_maturities: [],
+      a_base_rates: [],
+      a_spreads: [],
+      a_reinvest_rates: [],
+      a_nominals: [],
+      b_maturity: structureDetails.tranche_b?.maturity_days || 180,
+      b_base_rate: structureDetails.tranche_b?.base_rate || 0,
+      b_spread: structureDetails.tranche_b?.spread || 0,
+      b_reinvest_rate: structureDetails.tranche_b?.reinvest_rate || 0,
+      b_nominal: structureDetails.tranche_b?.nominal || 0,
+      ops_expenses: Number(structureDetails.general_settings?.operational_expenses || 0)
+    };
+    
+    // Properly extract Class A tranches data
+    if (Array.isArray(structureDetails.tranches_a)) {
+      structureDetails.tranches_a.forEach(tranche => {
+        formattedStructure.a_maturities.push(Number(tranche.maturity_days));
+        formattedStructure.a_base_rates.push(Number(tranche.base_rate));
+        formattedStructure.a_spreads.push(Number(tranche.spread));
+        formattedStructure.a_reinvest_rates.push(Number(tranche.reinvest_rate));
+        formattedStructure.a_nominals.push(Number(tranche.nominal));
+      });
+    }
+    
+    // Return complete request
+    return {
+      structure: formattedStructure,
+      scenario: scenario
+    };
+  };
 
   /* ---------------- context value ------------------- */
   const value = {
@@ -300,6 +410,17 @@ export const DataProvider = ({ children }) => {
     /* optimization settings */
     optimizationSettings,
     setOptimizationSettings,
+    
+    /* stress test settings */
+    stressTestResults,
+    setStressTestResults: setStressResLS,
+    stressScenarios,
+    setStressScenarios: setStressScenLS,
+    stressTestHistory,
+    setStressTestHistory: setStressHistLS,
+    saveStressTestResult,
+    deleteStressTestResult,
+    clearStressTestHistory,
 
     /* results */
     calculationResults,
@@ -324,6 +445,7 @@ export const DataProvider = ({ children }) => {
     clearData,
     createCalculationRequest,
     createOptimizationRequest,
+    createStressTestRequest,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
