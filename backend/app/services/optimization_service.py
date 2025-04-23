@@ -1,7 +1,3 @@
-"""
-Optimization service for ABS structure analysis - Yeniden Düzenlenmiş.
-Ortak hesaplama mantığını tranche_utils.py'den kullanarak uyumlu hale getirilmiş.
-"""
 import time
 import pandas as pd
 import numpy as np
@@ -293,7 +289,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     selected_default_model = getattr(optimization_settings, "selected_default_model", "previous")
     
     # Use the new Class B percentage targeting parameters 
-    target_class_b_percent = getattr(optimization_settings, "min_class_b_percent", 15.0)
+    target_class_b_percent = getattr(optimization_settings, "min_class_b_percent", 5.0)  # Default to 5% instead of 15%
     class_b_percent_deviation = getattr(optimization_settings, "class_b_percent_deviation", 1.0)
     target_class_b_coupon_rate = optimization_settings.target_class_b_coupon_rate
     additional_days = optimization_settings.additional_days_for_class_b
@@ -310,7 +306,7 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
                                message=f"Selected strategies: {', '.join(selected_strategies)}")
     
     # Set maximum allowed difference for coupon rate - tightened for better matching
-    max_allowed_diff = 0.5  # Maximum 0.5% difference (reduced from 1.0%)
+    max_allowed_diff = 1.0  # Relaxed to 1.0% difference for better chances of finding solutions
     
     optimization_progress.update(step=5, 
                                message=f"Target coupon rate: {target_class_b_coupon_rate}%, Target Class B: {target_class_b_percent}±{class_b_percent_deviation}%")
@@ -321,31 +317,31 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     
     # Get original parameters for Class A based on selected default model
     if selected_default_model == "new":
-        # New model parameters (April 16, 2025)
-        original_maturities_A = [59, 94, 150, 189, 275]
-        original_base_rates_A = [45.5, 45.5, 45.5, 45.5, 45.5]
-        original_reinvest_rates_A = [41.0, 38.5, 35.0, 33.5, 31.5]
+        # Updated NEW model parameters (April 28, 2025)
+        original_maturities_A = [155]
+        original_base_rates_A = [50.75]
+        original_reinvest_rates_A = [42.0]
         
         # Class B values for new model
-        class_b_maturity_orig = 346
+        class_b_maturity_orig = 155
         class_b_base_rate_orig = 0.0
-        class_b_reinvest_rate_orig = 30.0
+        class_b_reinvest_rate_orig = 42.0
         
         # Calculate total nominal amount for new model
-        total_a_nominal = 3169600000  # Sum of all Class A tranches in new model
+        total_a_nominal = 250_200_000
     else:
-        # Previous model parameters (February 13, 2025)
-        original_maturities_A = [61, 120, 182, 274]
-        original_base_rates_A = [45.6, 44.5, 43.3, 42.5]
-        original_reinvest_rates_A = [40.0, 37.25, 32.5, 30.0]
+        # Updated PREVIOUS model parameters (April 28, 2025)
+        original_maturities_A = [88, 150]
+        original_base_rates_A = [51.0, 50.5]
+        original_reinvest_rates_A = [46.0, 42.0]
         
         # Class B values for previous model
-        class_b_maturity_orig = 300
+        class_b_maturity_orig = 155
         class_b_base_rate_orig = 0.0
-        class_b_reinvest_rate_orig = 25.5
+        class_b_reinvest_rate_orig = 42.0
         
         # Calculate total nominal amount for previous model
-        total_a_nominal = 1765000000  # Original sum from previous model
+        total_a_nominal = 85_000_000 + 158_300_000  # Sum of the two tranches
     
     optimization_progress.update(step=10, 
                                message="Creating rate lookup tables and preparing data...")
@@ -410,6 +406,101 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     # Fix: Ensure class_b_maturity is at least 1
     # Calculate Class B maturity as Last Cash Flow Day + Additional Days
     class_b_maturity = max(1, min(365, last_cash_flow_day + additional_days))
+    
+    # Create fallback solution in case no valid solution is found
+    # This matches the default settings provided
+    if selected_default_model == "new":
+        fallback_maturities = original_maturities_A
+        fallback_rates = original_base_rates_A
+        fallback_reinvest = original_reinvest_rates_A
+        fallback_nominals = [total_a_nominal]  # Single tranche with full nominal
+        fallback_b_maturity = class_b_maturity_orig
+        fallback_b_rate = class_b_base_rate_orig
+        fallback_b_reinvest = class_b_reinvest_rate_orig
+        fallback_strategy = "equal"
+        
+        # Calculate B nominal for 5% of total
+        fallback_a_total = sum(fallback_nominals)
+        fallback_b_nominal = (fallback_a_total * 0.05) / 0.95  # 5% of total = 5.26% of A
+        fallback_b_nominal = round(fallback_b_nominal / 1000) * 1000
+    else:
+        # Previous model
+        fallback_maturities = original_maturities_A
+        fallback_rates = original_base_rates_A
+        fallback_reinvest = original_reinvest_rates_A
+        fallback_nominals = [85_000_000, 158_300_000]  # The two tranches with their nominals
+        fallback_b_maturity = class_b_maturity_orig
+        fallback_b_rate = class_b_base_rate_orig
+        fallback_b_reinvest = class_b_reinvest_rate_orig
+        fallback_strategy = "equal"
+        
+        # Calculate B nominal for 5% of total
+        fallback_a_total = sum(fallback_nominals)
+        fallback_b_nominal = (fallback_a_total * 0.05) / 0.95  # 5% of total = 5.26% of A
+        fallback_b_nominal = round(fallback_b_nominal / 1000) * 1000
+
+    # Initialize fallback result calculation
+    try:
+        # Try to evaluate the fallback solution
+        fallback_result = calculate_tranche_results(
+            df_temp, start_date,
+            fallback_maturities, fallback_rates, [0.0] * len(fallback_maturities), 
+            fallback_reinvest, fallback_nominals,
+            fallback_b_maturity, fallback_b_rate, 0.0, fallback_b_reinvest, fallback_b_nominal,
+            ops_expenses
+        )
+        
+        # Store the fallback parameters and results for later use if needed
+        fallback_params = {
+            'num_a_tranches': len(fallback_maturities),
+            'a_maturity_days': fallback_maturities,
+            'a_base_rates': fallback_rates,
+            'a_reinvest_rates': fallback_reinvest,
+            'a_nominal_amounts': fallback_nominals,
+            'b_maturity_days': [fallback_b_maturity],
+            'b_base_rates': [fallback_b_rate],
+            'b_reinvest_rates': [fallback_b_reinvest],
+            'b_nominal': [fallback_b_nominal],
+            'strategy': fallback_strategy,
+            'last_cash_flow_day': last_cash_flow_day,
+            'added_days': additional_days,
+            'class_b_percent': (fallback_b_nominal / (fallback_a_total + fallback_b_nominal)) * 100,
+            'direct_coupon_rate': fallback_result['direct_coupon_rate'],
+            'effective_coupon_rate': fallback_result['effective_coupon_rate']
+        }
+        
+        fallback_results = {
+            'class_a_principal': fallback_result['class_a_principal'],
+            'class_b_principal': fallback_result['class_b_principal'],
+            'class_a_interest': fallback_result['class_a_interest'],
+            'class_b_coupon': fallback_result['class_b_coupon'],
+            'class_a_total': fallback_result['class_a_total'],
+            'class_b_total': fallback_result['class_b_total'],
+            'min_buffer_actual': fallback_result['min_buffer_actual'],
+            'total_principal': fallback_result['class_a_principal'] + fallback_result['class_b_principal'],
+            'class_b_coupon_rate': fallback_result['effective_coupon_rate'],
+            'direct_coupon_rate': fallback_result['direct_coupon_rate'],
+            'target_class_b_coupon_rate': target_class_b_coupon_rate,
+            'coupon_rate_diff': abs(fallback_result['effective_coupon_rate'] - target_class_b_coupon_rate),
+            'class_b_percent': (fallback_b_nominal / (fallback_a_total + fallback_b_nominal)) * 100,
+            'target_class_b_percent': target_class_b_percent,
+            'class_b_percent_diff': abs((fallback_b_nominal / (fallback_a_total + fallback_b_nominal)) * 100 - target_class_b_percent),
+            'class_b_base_rate': fallback_b_rate,
+            'num_a_tranches': len(fallback_maturities)
+        }
+        
+        # Store fallback as a valid solution for the strategy
+        best_params_by_strategy[fallback_strategy] = fallback_params
+        best_results_by_strategy[fallback_strategy] = fallback_results
+        
+        optimization_progress.update(
+            message=f"Created fallback solution with {fallback_strategy} strategy: " +
+                   f"coupon_rate={fallback_result['effective_coupon_rate']:.2f}%, " +
+                   f"Class B={fallback_params['class_b_percent']:.2f}%"
+        )
+    except Exception as e:
+        logger.error(f"Error creating fallback solution: {str(e)}")
+        # Continue without a fallback solution
     
     # Loop through Class A tranche counts
     for num_a_tranches_idx, num_a_tranches in enumerate(num_a_tranches_options):
@@ -717,30 +808,41 @@ def perform_optimization(df: pd.DataFrame, general_settings: GeneralSettings, op
     valid_strategies = {k: v for k, v in best_results_by_strategy.items() if v is not None}
     
     if not valid_strategies:
-        # No valid solution found
-        optimization_progress.update(
-            step=90,
-            message="No valid configuration found. Try adjusting optimization parameters."
-        )
-        raise ValueError("No valid configuration found. Try adjusting optimization parameters.")
-    
-    # Improved strategy selection with balanced weighting between coupon rate and Class B percentage
-    # Find best overall strategy prioritizing both objectives
-    best_overall_strategy = min(
-        valid_strategies.items(),
-        key=lambda x: (
-            # First sort by normalized combined objective 
-            (x[1]['coupon_rate_diff'] / target_class_b_coupon_rate * 0.6) + 
-            (x[1]['class_b_percent_diff'] / target_class_b_percent * 0.4),
-            # Then by negative principal (higher principal is better)
-            -x[1]['total_principal']
-        )
-    )[0]
-    
-    # Get best parameters and results
-    best_strategy = best_overall_strategy
-    best_params = best_params_by_strategy[best_strategy]
-    best_results = best_results_by_strategy[best_strategy]
+        # No valid solution found - use the fallback solution if available
+        if fallback_strategy in best_params_by_strategy and best_params_by_strategy[fallback_strategy] is not None:
+            optimization_progress.update(
+                step=90,
+                message="No optimal configuration found. Using fallback default configuration."
+            )
+            
+            best_strategy = fallback_strategy
+            best_params = best_params_by_strategy[best_strategy]
+            best_results = best_results_by_strategy[best_strategy]
+        else:
+            # If no fallback solution either, raise error
+            optimization_progress.update(
+                step=90,
+                message="No valid configuration found. Try adjusting optimization parameters."
+            )
+            raise ValueError("No valid configuration found. Try adjusting optimization parameters.")
+    else:
+        # Improved strategy selection with balanced weighting between coupon rate and Class B percentage
+        # Find best overall strategy prioritizing both objectives
+        best_overall_strategy = min(
+            valid_strategies.items(),
+            key=lambda x: (
+                # First sort by normalized combined objective 
+                (x[1]['coupon_rate_diff'] / target_class_b_coupon_rate * 0.6) + 
+                (x[1]['class_b_percent_diff'] / target_class_b_percent * 0.4),
+                # Then by negative principal (higher principal is better)
+                -x[1]['total_principal']
+            )
+        )[0]
+        
+        # Get best parameters and results
+        best_strategy = best_overall_strategy
+        best_params = best_params_by_strategy[best_strategy]
+        best_results = best_results_by_strategy[best_strategy]
     
     optimization_progress.update(
         step=95,
@@ -814,7 +916,7 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         selected_default_model = getattr(optimization_settings, "selected_default_model", "previous")
         
         # Use the new Class B percentage targeting parameters
-        target_class_b_percent = getattr(optimization_settings, "min_class_b_percent", 15.0)
+        target_class_b_percent = getattr(optimization_settings, "min_class_b_percent", 5.0)  # Default to 5% instead of 15%
         
         # Use the tighter class_b_percent_deviation value (default 1.0)
         class_b_percent_deviation = getattr(optimization_settings, "class_b_percent_deviation", 1.0)
@@ -848,35 +950,35 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
         
         # Get original parameters for Class A based on selected default model
         if selected_default_model == "new":
-            # New model parameters (April 16, 2025)
-            original_maturities_A = [59, 94, 150, 189, 275]
-            original_base_rates_A = [45.5, 45.5, 45.5, 45.5, 45.5]
-            original_reinvest_rates_A = [41.0, 38.5, 35.0, 33.5, 31.5]
+            # Updated NEW model parameters (April 28, 2025)
+            original_maturities_A = [155]
+            original_base_rates_A = [50.75]
+            original_reinvest_rates_A = [42.0]
             
             # Class B values for new model
             class_b_base_rate_orig = 0.0
-            class_b_reinvest_rate_orig = 30.0
+            class_b_reinvest_rate_orig = 42.0
             
             # Calculate total nominal amount for new model
-            total_a_nominal = 3169600000  # Sum of all Class A tranches in new model
+            total_a_nominal = 250_200_000
             
             # Fixed number of tranches for new model
-            default_num_a_tranches = 5  # New model has 5 tranches
+            default_num_a_tranches = 1  # New model has 1 tranche
         else:
-            # Previous model parameters (February 13, 2025)
-            original_maturities_A = [61, 120, 182, 274]
-            original_base_rates_A = [45.6, 44.5, 43.3, 42.5]
-            original_reinvest_rates_A = [40.0, 37.25, 32.5, 30.0]
+            # Updated PREVIOUS model parameters (April 28, 2025)
+            original_maturities_A = [88, 150]
+            original_base_rates_A = [51.0, 50.5]
+            original_reinvest_rates_A = [46.0, 42.0]
             
             # Class B values for previous model
             class_b_base_rate_orig = 0.0
-            class_b_reinvest_rate_orig = 25.5
+            class_b_reinvest_rate_orig = 42.0
             
             # Calculate total nominal amount for previous model
-            total_a_nominal = 1765000000  # Original sum from previous model
+            total_a_nominal = 85_000_000 + 158_300_000  # Sum of the two tranches
             
             # Fixed number of tranches for previous model
-            default_num_a_tranches = 4  # Previous model has 4 tranches
+            default_num_a_tranches = 2  # Previous model has 2 tranches
         
         # Create rate lookup tables for Class A
         maturity_to_base_rate_A = dict(zip(original_maturities_A, original_base_rates_A))
@@ -1204,10 +1306,10 @@ def perform_genetic_optimization(df: pd.DataFrame, general_settings: GeneralSett
                         # Different mutation for different positions
                         if mutation_idx == 0:
                             # First maturity
-                            child_maturities[0] = random.randint(min_maturity, min(child_maturities[1] - min_gap, min_maturity + 60))
+                            child_maturities[0] = random.randint(min_maturity, min(child_maturities[1] - min_gap if num_a_tranches > 1 else max_maturity, min_maturity + 60))
                         elif mutation_idx == num_a_tranches - 1:
                             # Last maturity
-                            child_maturities[-1] = random.randint(child_maturities[-2] + min_gap, max_maturity)
+                            child_maturities[-1] = random.randint(child_maturities[-2] + min_gap if num_a_tranches > 1 else min_maturity, max_maturity)
                         else:
                             # Middle maturity
                             min_val = child_maturities[mutation_idx-1] + min_gap

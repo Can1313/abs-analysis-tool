@@ -13,6 +13,7 @@ import StressTestingPage from "./pages/StressTestingPage";
 import { DataProvider } from "./contexts/DataContext";
 import ComparisonPage from "./pages/ComparisonPage";
 import ReceivablesAnalysis from "./pages/ReceivablesAnalysis";
+import ReportsPage from "./pages/ReportsPage"; // Import the new ReportsPage
 
 // Create a dark navy theme
 const theme = createTheme({
@@ -169,8 +170,8 @@ const theme = createTheme({
             width: 8,
           },
           "&::-webkit-scrollbar-thumb, & *::-webkit-scrollbar-thumb": {
-            borderRadius: 8,
             backgroundColor: "#6b6b6b",
+            borderRadius: 8,
             minHeight: 24,
           },
           "&::-webkit-scrollbar-thumb:focus, & *::-webkit-scrollbar-thumb:focus": {
@@ -218,6 +219,7 @@ function App() {
               <Route path="/comparison" element={<ComparisonPage />} />
               <Route path="/stress-testing" element={<StressTestingPage />} />
               <Route path="/receivables-analysis" element={<ReceivablesAnalysis />} />
+              <Route path="/reports" element={<ReportsPage />} /> {/* Add the new route */}
             </Routes>
             <Footer />
           </AppLayout>

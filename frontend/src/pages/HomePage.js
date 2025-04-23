@@ -21,7 +21,6 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import CompareIcon from '@mui/icons-material/Compare';
-import NewReleasesIcon from '@mui/icons-material/NewReleases';
 import RestoreIcon from '@mui/icons-material/Restore';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import BusinessIcon from '@mui/icons-material/Business';
@@ -34,34 +33,19 @@ const HomePage = () => {
   const { cashFlowData, selectedDefaults, setSelectedDefaults } = useData();
   const theme = useTheme();
 
-  // Define the default settings info
-  const defaultSettingsInfo = {
-    previous: {
-      label: "Standard Model",
-      description: "February 13, 2025 start date with 4 senior tranches (61-274 days)",
-      icon: <RestoreIcon sx={{ color: theme.palette.primary.main }} />,
-      color: theme.palette.primary.main,
-      details: [
-        { label: "Start Date", value: "13 February 2025" },
-        { label: "Senior Tranches", value: "4" },
-        { label: "Senior Maturity Range", value: "61-274 days" },
-        { label: "Subordinated Maturity", value: "300 days" },
-        { label: "Subordinated Percentage", value: "Default calculation" },
-      ]
-    },
-    new: {
-      label: "Enhanced Model",
-      description: "April 16, 2025 start date with 5 senior tranches (59-275 days)",
-      icon: <NewReleasesIcon sx={{ color: theme.palette.secondary.main }} />,
-      color: theme.palette.secondary.main,
-      details: [
-        { label: "Start Date", value: "16 April 2025" },
-        { label: "Senior Tranches", value: "5" },
-        { label: "Senior Maturity Range", value: "59-275 days" },
-        { label: "Subordinated Maturity", value: "346 days" },
-        { label: "Subordinated Percentage", value: "Fixed 10% of total", highlight: true },
-      ]
-    }
+  // Define just one default settings info
+  const modelInfo = {
+    label: "Standard Model",
+    description: "February 13, 2025 start date with 4 senior tranches (61-274 days)",
+    icon: <RestoreIcon sx={{ color: theme.palette.primary.main }} />,
+    color: theme.palette.primary.main,
+    details: [
+      { label: "Start Date", value: "13 February 2025" },
+      { label: "Senior Tranches", value: "4" },
+      { label: "Senior Maturity Range", value: "61-274 days" },
+      { label: "Subordinated Maturity", value: "300 days" },
+      { label: "Subordinated Percentage", value: "Default calculation" },
+    ]
   };
 
   return (
@@ -145,7 +129,7 @@ const HomePage = () => {
 
         {cashFlowData && (
           <>
-            {/* Default Settings Selection */}
+            {/* Single Securitization Model */}
             <Grid item xs={12}>
               <Paper
                 elevation={2}
@@ -158,113 +142,104 @@ const HomePage = () => {
                 }}
               >
                 <Typography variant="h5" gutterBottom fontWeight="medium" sx={{ mb: 3, color: theme.palette.info.main }}>
-                  Securitization Structure Models
+                  Securitization Structure Model
                 </Typography>
                 
                 <Typography variant="body1" paragraph sx={{ color: 'text.secondary' }}>
-                  Choose from our predefined securitization structure models to begin your analysis.
-                  Each model contains pre-configured tranches optimized for different receivables profiles.
+                  Our pre-configured securitization structure model is optimized for your receivables profile.
                 </Typography>
                 
-                <Grid container spacing={3}>
-                  {Object.entries(defaultSettingsInfo).map(([key, info]) => (
-                    <Grid item xs={12} md={6} key={key}>
-                      <Card 
-                        elevation={2} 
-                        sx={{
-                          height: '100%',
-                          borderRadius: 2,
-                          transition: 'all 0.3s',
-                          border: `1px solid ${alpha(info.color, selectedDefaults === key ? 0.6 : 0.2)}`,
-                          backgroundColor: alpha(info.color, selectedDefaults === key ? 0.05 : 0.02),
-                          '&:hover': {
-                            boxShadow: `0 8px 20px ${alpha(info.color, 0.2)}`,
-                            transform: 'translateY(-4px)',
-                          }
-                        }}
-                        onClick={() => setSelectedDefaults(key)}
-                      >
-                        <CardContent sx={{ p: 3 }}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {info.icon}
-                              <Typography variant="h6" fontWeight="medium" color={info.color}>
-                                {info.label}
-                              </Typography>
-                            </Box>
-                            {selectedDefaults === key && (
-                              <Chip 
-                                label="Selected" 
-                                size="small" 
-                                color="primary" 
-                                sx={{ 
-                                  backgroundColor: info.color,
-                                  fontWeight: 'medium'
-                                }} 
-                              />
-                            )}
-                          </Box>
-                          
-                          <Typography variant="body2" color="text.secondary" paragraph>
-                            {info.description}
-                          </Typography>
-                          
-                          <Divider sx={{ my: 2 }} />
-                          
-                          <Grid container spacing={1}>
-                            {info.details.map((detail, index) => (
-                              <Grid item xs={6} key={index}>
-                                <Box>
-                                  <Typography variant="caption" color="text.secondary">
-                                    {detail.label}
-                                  </Typography>
-                                  <Typography 
-                                    variant="body2" 
-                                    fontWeight="medium"
-                                    color={detail.highlight ? info.color : "inherit"}
-                                    sx={detail.highlight ? {
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      '&::before': {
-                                        content: '""',
-                                        display: 'inline-block',
-                                        width: 8,
-                                        height: 8,
-                                        bgcolor: info.color,
-                                        borderRadius: '50%',
-                                        mr: 1
-                                      }
-                                    } : {}}
-                                  >
-                                    {detail.value}
-                                  </Typography>
-                                </Box>
-                              </Grid>
-                            ))}
-                          </Grid>
-                          
-                          <Box sx={{ mt: 3, textAlign: 'center' }}>
-                            <Button
-                              variant={selectedDefaults === key ? "contained" : "outlined"}
-                              color={selectedDefaults === key ? "primary" : "secondary"}
-                              component={Link}
-                              to="/calculation"
-                              size="medium"
-                              endIcon={<ArrowForwardIcon />}
-                              sx={{ 
-                                borderRadius: 2,
-                                borderColor: info.color,
-                                backgroundColor: selectedDefaults === key ? info.color : 'transparent',
-                              }}
+                <Card 
+                  elevation={2} 
+                  sx={{
+                    maxWidth: '600px',
+                    mx: 'auto',
+                    borderRadius: 2,
+                    transition: 'all 0.3s',
+                    border: `1px solid ${alpha(modelInfo.color, 0.6)}`,
+                    backgroundColor: alpha(modelInfo.color, 0.05),
+                    '&:hover': {
+                      boxShadow: `0 8px 20px ${alpha(modelInfo.color, 0.2)}`,
+                      transform: 'translateY(-4px)',
+                    }
+                  }}
+                >
+                  <CardContent sx={{ p: 3 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {modelInfo.icon}
+                        <Typography variant="h6" fontWeight="medium" color={modelInfo.color}>
+                          {modelInfo.label}
+                        </Typography>
+                      </Box>
+                      <Chip 
+                        label="Selected" 
+                        size="small" 
+                        color="primary" 
+                        sx={{ 
+                          backgroundColor: modelInfo.color,
+                          fontWeight: 'medium'
+                        }} 
+                      />
+                    </Box>
+                    
+                    <Typography variant="body2" color="text.secondary" paragraph>
+                      {modelInfo.description}
+                    </Typography>
+                    
+                    <Divider sx={{ my: 2 }} />
+                    
+                    <Grid container spacing={1}>
+                      {modelInfo.details.map((detail, index) => (
+                        <Grid item xs={6} key={index}>
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">
+                              {detail.label}
+                            </Typography>
+                            <Typography 
+                              variant="body2" 
+                              fontWeight="medium"
+                              color={detail.highlight ? modelInfo.color : "inherit"}
+                              sx={detail.highlight ? {
+                                display: 'flex',
+                                alignItems: 'center',
+                                '&::before': {
+                                  content: '""',
+                                  display: 'inline-block',
+                                  width: 8,
+                                  height: 8,
+                                  bgcolor: modelInfo.color,
+                                  borderRadius: '50%',
+                                  mr: 1
+                                }
+                              } : {}}
                             >
-                              {selectedDefaults === key ? "Continue with Selection" : "Use This Model"}
-                            </Button>
+                              {detail.value}
+                            </Typography>
                           </Box>
-                        </CardContent>
-                      </Card>
+                        </Grid>
+                      ))}
                     </Grid>
-                  ))}
-                </Grid>
+                    
+                    <Box sx={{ mt: 3, textAlign: 'center' }}>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        component={Link}
+                        to="/calculation"
+                        size="medium"
+                        endIcon={<ArrowForwardIcon />}
+                        sx={{ 
+                          borderRadius: 2,
+                          borderColor: modelInfo.color,
+                          backgroundColor: modelInfo.color,
+                        }}
+                      >
+                        Continue with Model
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
               </Paper>
             </Grid>
 

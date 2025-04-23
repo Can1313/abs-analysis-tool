@@ -58,11 +58,11 @@ def perform_calculation(df: pd.DataFrame,
     a_nominals = [round(t.nominal / 1_000) * 1_000 for t in request.tranches_a]
 
     # ---------------------------- TRANCHE B -------------------------------- #
-    # ① nominal: optimize geldiyse kullan, yoksa %10.178 kuralı
+    # ① nominal: optimize geldiyse kullan, yoksa %5 kuralı
     if request.tranche_b.nominal and request.tranche_b.nominal > 0:
         b_nominal = request.tranche_b.nominal
     else:
-        percent_b = 10.17811704
+        percent_b = 5
         total_a = sum(a_nominals)
         b_nominal = (total_a * percent_b) / (100 - percent_b)
         b_nominal = round(b_nominal / 1_000) * 1_000

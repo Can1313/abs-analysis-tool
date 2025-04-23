@@ -29,44 +29,39 @@ const safeParse = (key, fallback) => {
 const DEFAULT_SETTINGS = {
   previous: {
     generalSettings: {
-      start_date: new Date(2025, 1, 13),
-      operational_expenses: 7_928_640,
+      start_date: new Date(2025, 3, 28),
+      operational_expenses: 3_355_345,
       min_buffer: 5,
     },
     tranchesA: [
-      { maturity_days: 61, base_rate: 45.6, spread: 0, reinvest_rate: 40, nominal: 480_000_000 },
-      { maturity_days: 120, base_rate: 44.5, spread: 0, reinvest_rate: 37.25, nominal: 460_000_000 },
-      { maturity_days: 182, base_rate: 43.3, spread: 0, reinvest_rate: 32.5, nominal: 425_000_000 },
-      { maturity_days: 274, base_rate: 42.5, spread: 0, reinvest_rate: 30, nominal: 400_000_000 },
+      { maturity_days: 88, base_rate: 51, spread: 0, reinvest_rate: 46, nominal: 85_000_000 },
+      { maturity_days: 150, base_rate: 50.5, spread: 0, reinvest_rate: 42, nominal: 158_300_000 },
     ],
     trancheB: {
-      maturity_days: 300,
+      maturity_days: 155,
       base_rate: 0,
       spread: 0,
-      reinvest_rate: 25.5,
+      reinvest_rate: 42,
       /* nominal empty – will be filled when optimization comes */
+      class_b_percent: 5
     }
   },
   new: {
     generalSettings: {
-      start_date: new Date(2025, 3, 16), // April 16, 2025
-      operational_expenses: 10_000_000,
+      start_date: new Date(2025, 3, 28), // April 16, 2025
+      operational_expenses: 3_355_345,
       min_buffer: 5,
     },
     tranchesA: [
-      { maturity_days: 59, base_rate: 45.5, spread: 0, reinvest_rate: 41.0, nominal: 980_000_000 },
-      { maturity_days: 94, base_rate: 45.5, spread: 0, reinvest_rate: 38.5, nominal: 600_000_000 },
-      { maturity_days: 150, base_rate: 45.5, spread: 0, reinvest_rate: 35.0, nominal: 590_000_000 },
-      { maturity_days: 189, base_rate: 45.5, spread: 0, reinvest_rate: 33.5, nominal: 420_000_000 },
-      { maturity_days: 275, base_rate: 45.5, spread: 0, reinvest_rate: 31.5, nominal: 579_600_000 },
+      { maturity_days: 155, base_rate: 50.75, spread: 0, reinvest_rate: 42.0, nominal: 250_200_000 },
     ],
     trancheB: {
-      maturity_days: 346,
+      maturity_days: 155,
       base_rate: 0,
       spread: 0,
-      reinvest_rate: 30.0,
-      // For new default settings, Class B percentage should be 10%
-      class_b_percent: 10 // Will be used to calculate nominal dynamically
+      reinvest_rate: 42.0,
+      // For new default settings, Class B percentage should be 5%
+      class_b_percent: 5 // Will be used to calculate nominal dynamically
     }
   }
 };
@@ -133,11 +128,11 @@ export const DataProvider = ({ children }) => {
   const [optimizationSettings, setOptimizationSettings] = useState({
     optimization_method: 'classic',
     a_tranches_range: [2, 6],
-    maturity_range: [32, 365],
-    maturity_step: 10,
-    min_class_b_percent: 10,
-    target_class_b_coupon_rate: 30,
-    additional_days_for_class_b: 10,
+    maturity_range: [32, 180],
+    maturity_step: 5,
+    min_class_b_percent: 5,
+    target_class_b_coupon_rate: 50,
+    additional_days_for_class_b: 3,
     population_size: 50,
     num_generations: 40,
   });

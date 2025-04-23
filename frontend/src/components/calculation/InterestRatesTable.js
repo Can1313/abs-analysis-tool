@@ -11,10 +11,53 @@ import {
   TableHead, 
   TableRow,
   alpha,
-  Chip
+  Chip,
+  Grid,
+  Divider,
+  useTheme
 } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer
+} from 'recharts';
+
+// Custom tooltip component for charts with enhanced styling
+const CustomTooltip = ({ active, payload, label, formatter }) => {
+  const theme = useTheme();
+  if (active && payload && payload.length) {
+    return (
+      <Paper
+        sx={{
+          p: 1.5,
+          boxShadow: theme.shadows[3],
+          borderRadius: theme.shape.borderRadius,
+          border: "none",
+          minWidth: 180,
+          maxWidth: 280,
+        }}
+      >
+        <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600 }}>{label}</Typography>
+        {payload.map((entry, index) => (
+          <Box key={`item-${index}`} sx={{ color: entry.color, display: 'flex', justifyContent: 'space-between', my: 0.5 }}>
+            <Typography variant="body2" sx={{ mr: 2 }}>
+              {entry.name}:
+            </Typography>
+            <Typography variant="body2" fontWeight="medium">
+              {formatter ? formatter(entry.value) : entry.value}
+            </Typography>
+          </Box>
+        ))}
+      </Paper>
+    );
+  }
+  return null;
+};
 
 const InterestRatesTable = ({ results }) => {
   const theme = useTheme();
@@ -25,25 +68,41 @@ const InterestRatesTable = ({ results }) => {
     return `${parseFloat(value).toFixed(2)}%`;
   };
 
-  // Prepare data for rates chart
-  const chartData = results.interest_rate_conversions
+  // Format value for charts (returns number)
+  const getNumericValue = (value) => {
+    if (value === '-' || value === undefined || value === null) return 0;
+    return parseFloat(value);
+  };
+
+  // Prepare data for analysis
+  const classAData = results.interest_rate_conversions
     .filter(rate => rate.Tranche.includes('Class A'))
     .map(rate => ({
       name: rate.Tranche,
-      rate: rate['Simple Annual Interest (%)'] === '-' ? 0 : rate['Simple Annual Interest (%)'],
-    }))
-    .concat(
-      results.interest_rate_conversions
-        .filter(rate => rate.Tranche.includes('Class B'))
-        .map(rate => ({
-          name: rate.Tranche,
-          rate: rate['Effective Coupon Rate (%)'] === '-' ? 0 : rate['Effective Coupon Rate (%)'],
-        }))
-    );
-
+      rate: getNumericValue(rate['Simple Annual Interest (%)']),
+      maturity: rate['Maturity Days'],
+      class: 'A'
+    }));
+    
+  const classBData = results.interest_rate_conversions
+    .filter(rate => rate.Tranche.includes('Class B'))
+    .map(rate => ({
+      name: rate.Tranche,
+      rate: getNumericValue(rate['Effective Coupon Rate (%)']),
+      directRate: getNumericValue(rate['Coupon Rate (%)']),
+      maturity: rate['Maturity Days'],
+      class: 'B'
+    }));
+  
+  
+  // Color helper function
+  const getClassColor = (classType, variant = 'main') => {
+    return classType === 'A' ? theme.palette.primary[variant] : theme.palette.secondary[variant];
+  };
+  
   return (
     <Box>
-      {/* Class B Coupon Information */}
+      {/* Class B Coupon Information with enhanced styling */}
       <Paper 
         elevation={0}
         sx={{ 
@@ -58,10 +117,14 @@ const InterestRatesTable = ({ results }) => {
           Class B Coupon Information
         </Typography>
         
+        <Typography variant="body2" color="text.secondary" gutterBottom sx={{ mb: 2 }}>
+          Detailed breakdown of coupon rates for Class B tranches, showing direct rates and effective rates after calculations
+        </Typography>
+        
         <TableContainer sx={{ 
           backgroundColor: 'background.paper', 
-          borderRadius: 1,
-          boxShadow: `0 1px 3px ${alpha('#000', 0.08)}`
+          borderRadius: theme.shape.borderRadius,
+          boxShadow: theme.shadows[1]
         }}>
           <Table>
             <TableHead>
@@ -117,8 +180,13 @@ const InterestRatesTable = ({ results }) => {
                         }}
                       />
                     </TableCell>
-                    <TableCell align="center" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                      {`Maturity: ${rate['Maturity Days']} days`}
+                    <TableCell align="center">
+                      <Typography variant="body2" color="text.secondary">
+                        {`${rate['Maturity Days']} days`}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {rate['Maturity Date'] || 'Date not specified'}
+                      </Typography>
                     </TableCell>
                   </TableRow>
                 ))
@@ -126,20 +194,9 @@ const InterestRatesTable = ({ results }) => {
             </TableBody>
           </Table>
         </TableContainer>
-
-        {/* Debug information in development mode */}
-        {process.env.NODE_ENV === 'development' && (
-          <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-            <Typography variant="caption">Debug Information:</Typography>
-            <pre style={{ fontSize: '0.7rem', overflowX: 'auto' }}>
-              {JSON.stringify(results.interest_rate_conversions
-                .filter(rate => rate.Tranche.includes('Class B')), null, 2)}
-            </pre>
-          </Box>
-        )}
       </Paper>
       
-      {/* Interest Rates Chart */}
+      {/* Interest Rate Analysis with detailed view */}
       <Paper 
         elevation={0}
         sx={{ 
@@ -149,59 +206,90 @@ const InterestRatesTable = ({ results }) => {
           borderRadius: 2
         }}
       >
-        <Typography variant="h6" gutterBottom fontWeight="medium">
-          Interest Rates by Tranche
-        </Typography>
-        
-        <Box sx={{ height: 400, mt: 3 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={chartData}
-              margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke={alpha('#000', 0.07)} />
-              <XAxis dataKey="name" />
-              <YAxis unit="%" />
-              <Tooltip 
-                formatter={(value) => `${value.toFixed(2)}%`}
-                contentStyle={{
-                  borderRadius: 8,
-                  border: 'none',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-                }}
-              />
-              <Legend />
-              <Bar 
-                dataKey="rate" 
-                name="Rate" 
-                fill={theme.palette.primary.main}
-                radius={[4, 4, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="h6" gutterBottom fontWeight="medium">
+            Interest Rate Analysis
+          </Typography>
+          
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Comprehensive breakdown showing all interest rate details and conversion calculations
+          </Typography>
         </Box>
-      </Paper>
-      
-      {/* Interest Rate Conversions Table */}
-      <Paper 
-        elevation={0}
-        sx={{ 
-          p: 3,
-          border: `1px solid ${alpha(theme.palette.text.primary, 0.1)}`,
-          borderRadius: 2
-        }}
-      >
-        <Typography variant="h6" gutterBottom fontWeight="medium">
-          Interest Rate Conversions
-        </Typography>
+        
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={12} md={6}>
+            <Paper 
+              elevation={0} 
+              sx={{ 
+                p: 2, 
+                bgcolor: alpha(theme.palette.primary.main, 0.03),
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                borderRadius: 1
+              }}
+            >
+              <Typography variant="subtitle2" color="primary.main" gutterBottom>
+                Class A Interest Rates
+              </Typography>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Class A tranches use simple annual interest rates based on the maturity period.
+              </Typography>
+              <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {classAData.map((item, idx) => (
+                  <Chip 
+                    key={idx}
+                    label={`${item.name}: ${item.rate.toFixed(2)}%`}
+                    size="small"
+                    sx={{ 
+                      bgcolor: alpha(theme.palette.primary.main, 0.1),
+                      color: theme.palette.primary.main
+                    }}
+                  />
+                ))}
+              </Box>
+            </Paper>
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <Paper 
+              elevation={0} 
+              sx={{ 
+                p: 2, 
+                bgcolor: alpha(theme.palette.secondary.main, 0.03),
+                border: `1px solid ${alpha(theme.palette.secondary.main, 0.1)}`,
+                borderRadius: 1
+              }}
+            >
+              <Typography variant="subtitle2" color="secondary.main" gutterBottom>
+                Class B Coupon Rates
+              </Typography>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Class B tranches have an effective coupon rate which is calculated based on multiple factors.
+              </Typography>
+              <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {classBData.map((item, idx) => (
+                  <Chip 
+                    key={idx}
+                    label={`${item.name}: ${item.rate.toFixed(2)}%`}
+                    size="small"
+                    sx={{ 
+                      bgcolor: alpha(theme.palette.secondary.main, 0.1),
+                      color: theme.palette.secondary.main
+                    }}
+                  />
+                ))}
+              </Box>
+            </Paper>
+          </Grid>
+        </Grid>
+        
+        <Divider sx={{ mb: 3 }} />
         
         <TableContainer sx={{ 
-          maxHeight: 440, 
-          mt: 2,
-          borderRadius: 1,
-          boxShadow: `0 1px 3px ${alpha('#000', 0.08)}`
+          maxHeight: 440,
+          borderRadius: theme.shape.borderRadius,
+          boxShadow: theme.shadows[1]
         }}>
-          <Table stickyHeader>
+          <Table stickyHeader size="small">
             <TableHead>
               <TableRow>
                 <TableCell sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.primary.main, 0.04) }}>Tranche</TableCell>
@@ -252,14 +340,47 @@ const InterestRatesTable = ({ results }) => {
                   <TableCell>{formatValue(rate['Compound Interest for Period (%)'])}</TableCell>
                   <TableCell>{formatValue(rate['Reinvest Simple Annual (%)'])}</TableCell>
                   <TableCell>{formatValue(rate['Reinvest O/N Compound (%)'])}</TableCell>
-                  <TableCell>{formatValue(rate['Coupon Rate (%)'])}</TableCell>
-                  <TableCell>{formatValue(rate['Effective Coupon Rate (%)'])}</TableCell>
+                  <TableCell>
+                    {rate.Tranche.includes('Class B') ? (
+                      <Chip 
+                        size="small" 
+                        label={formatValue(rate['Coupon Rate (%)'])}
+                        sx={{ 
+                          bgcolor: alpha(theme.palette.secondary.main, 0.1),
+                          color: theme.palette.secondary.main,
+                          fontWeight: 500,
+                          fontSize: '0.7rem'
+                        }}
+                      />
+                    ) : (
+                      formatValue(rate['Coupon Rate (%)'])
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {rate.Tranche.includes('Class B') ? (
+                      <Chip 
+                        size="small" 
+                        label={formatValue(rate['Effective Coupon Rate (%)'])}
+                        sx={{ 
+                          bgcolor: alpha(theme.palette.info.main, 0.1),
+                          color: theme.palette.info.main,
+                          fontWeight: 500,
+                          fontSize: '0.7rem'
+                        }}
+                      />
+                    ) : (
+                      formatValue(rate['Effective Coupon Rate (%)'])
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </TableContainer>
       </Paper>
+      
+      {/* Only in development mode */}
+      {/* Debug section removed as requested */}
     </Box>
   );
 };
