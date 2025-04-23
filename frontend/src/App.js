@@ -4,7 +4,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 
-import TopBar from "./components/TopBar";
+import AppLayout from "./components/AppLayout";
 import Footer from "./components/Footer";
 import HomePage from "./pages/HomePage";
 import CalculationPage from "./pages/CalculationPage";
@@ -12,7 +12,7 @@ import OptimizationPage from "./pages/OptimizationPage";
 import StressTestingPage from "./pages/StressTestingPage";
 import { DataProvider } from "./contexts/DataContext";
 import ComparisonPage from "./pages/ComparisonPage";
-import ReceivablesAnalysis from "./pages/ReceivablesAnalysis"; // Eklenen import
+import ReceivablesAnalysis from "./pages/ReceivablesAnalysis";
 
 // Create a dark navy theme
 const theme = createTheme({
@@ -185,6 +185,22 @@ const theme = createTheme({
         },
       },
     },
+    MuiDrawer: {
+      styleOverrides: {
+        paper: {
+          backgroundImage: 'none',
+        },
+      },
+    },
+    MuiListItemButton: {
+      styleOverrides: {
+        root: {
+          '&.Mui-selected': {
+            color: '#4e7bea',
+          },
+        },
+      },
+    },
   },
 });
 
@@ -194,16 +210,17 @@ function App() {
       <CssBaseline />
       <DataProvider>
         <Router>
-          <TopBar />
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/calculation" element={<CalculationPage />} />
-            <Route path="/optimization" element={<OptimizationPage />} />
-            <Route path="/comparison" element={<ComparisonPage />} />
-            <Route path="/stress-testing" element={<StressTestingPage />} />
-            <Route path="/receivables-analysis" element={<ReceivablesAnalysis />} />
-          </Routes>
-          <Footer />
+          <AppLayout>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/calculation" element={<CalculationPage />} />
+              <Route path="/optimization" element={<OptimizationPage />} />
+              <Route path="/comparison" element={<ComparisonPage />} />
+              <Route path="/stress-testing" element={<StressTestingPage />} />
+              <Route path="/receivables-analysis" element={<ReceivablesAnalysis />} />
+            </Routes>
+            <Footer />
+          </AppLayout>
         </Router>
       </DataProvider>
     </ThemeProvider>
