@@ -12,6 +12,7 @@ import OptimizationPage from "./pages/OptimizationPage";
 import StressTestingPage from "./pages/StressTestingPage";
 import { DataProvider } from "./contexts/DataContext";
 import ComparisonPage from "./pages/ComparisonPage";
+import ReceivablesAnalysis from "./pages/ReceivablesAnalysis"; // Eklenen import
 
 // Create a dark navy theme
 const theme = createTheme({
@@ -200,6 +201,7 @@ function App() {
             <Route path="/optimization" element={<OptimizationPage />} />
             <Route path="/comparison" element={<ComparisonPage />} />
             <Route path="/stress-testing" element={<StressTestingPage />} />
+            <Route path="/receivables-analysis" element={<ReceivablesAnalysis />} />
           </Routes>
           <Footer />
         </Router>

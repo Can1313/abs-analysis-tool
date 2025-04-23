@@ -13,10 +13,16 @@ import {
   IconButton,
   Tooltip,
   Divider,
+  Grid,
+  Chip,
+  alpha,
+  useTheme
 } from '@mui/material';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import CompareIcon from '@mui/icons-material/Compare';
 import ReplayIcon from '@mui/icons-material/Replay';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 import { useData } from '../contexts/DataContext';
 import { calculateResults } from '../services/apiService';
@@ -33,6 +39,7 @@ import { useNavigate } from 'react-router-dom';
 
 const CalculationPage = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
   const {
     cashFlowData,
     calculationResults,
@@ -171,7 +178,7 @@ const CalculationPage = () => {
       <Container>
         <Box sx={{ mt: 4, textAlign: 'center' }}>
           <Typography variant="h5" color="error">
-            Please upload cash‑flow data first
+            Please upload receivables data first
           </Typography>
         </Box>
       </Container>
@@ -193,43 +200,60 @@ const CalculationPage = () => {
       </Snackbar>
 
       {/* Header */}
-      <Box
+      <Paper
+        elevation={2}
         sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          p: 3,
           mb: 3,
+          borderRadius: 2,
+          border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+          backgroundColor: alpha(theme.palette.primary.main, 0.03)
         }}
       >
-        <Typography variant="h4">ABS Calculation</Typography>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <ReceiptLongIcon sx={{ fontSize: 28, color: theme.palette.primary.main, mr: 2 }} />
+            <Typography variant="h4" fontWeight="medium">Receivables Analysis</Typography>
+          </Box>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          {calculationResults && previousCalculationResults && (
-            <Button
-              variant="outlined"
-              color="primary"
-              onClick={goToComparison}
-              startIcon={<CompareIcon />}
-            >
-              View Comparisons
-            </Button>
-          )}
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            {calculationResults && previousCalculationResults && (
+              <Button
+                variant="outlined"
+                color="primary"
+                onClick={goToComparison}
+                startIcon={<CompareIcon />}
+              >
+                View Comparisons
+              </Button>
+            )}
 
-          <Tooltip title="Reset to original values">
-            <IconButton color="primary" onClick={handleReset} size="small">
-              <ReplayIcon />
-            </IconButton>
-          </Tooltip>
+            <Tooltip title="Reset to original values">
+              <IconButton color="primary" onClick={handleReset} size="small">
+                <ReplayIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Box>
-      </Box>
+        
+        <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
+          Configure and analyze your receivables securitization structure to maximize returns while maintaining adequate credit enhancement.
+        </Typography>
+      </Paper>
 
-      {error && <Alert severity="error">{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
       {/* Tabs */}
       <Paper sx={{ mb: 4 }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={tabValue} onChange={handleTabChange}>
-            <Tab label="Input Parameters" />
+            <Tab label="Structure Parameters" />
             <Tab label="Results" disabled={!calculationResults} />
             <Tab label="Interest Rates" disabled={!calculationResults} />
           </Tabs>
@@ -245,8 +269,39 @@ const CalculationPage = () => {
               <TrancheAForm />
               <TrancheBForm />
               
-              {/* Add the ClassBCouponAdjuster component */}
-              {calculationResults && <ClassBCouponAdjuster />}
+              {/* Add the ClassBCouponAdjuster component - renamed to Subordinated Yield Adjuster in UI */}
+              {calculationResults && (
+                <Paper 
+                  sx={{ 
+                    p: 3, 
+                    mb: 3,
+                    border: `1px solid ${alpha(theme.palette.secondary.main, 0.2)}`,
+                    backgroundColor: alpha(theme.palette.secondary.main, 0.03),
+                    borderRadius: 2
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Typography variant="h6" color="secondary.main" fontWeight="medium">
+                        Subordinated Yield Adjuster
+                      </Typography>
+                      <Tooltip title="Fine-tune the nominal amount to achieve your target yield for subordinated tranche" sx={{ ml: 1 }}>
+                        <InfoOutlinedIcon fontSize="small" color="secondary" />
+                      </Tooltip>
+                    </Box>
+                    
+                    {/* Current rate indicator chip */}
+                    <Chip 
+                      label={`Current: ${calculationResults.class_b_coupon_rate?.toFixed(2) || '0.00'}%`} 
+                      color="secondary" 
+                      variant="outlined"
+                      size="small"
+                    />
+                  </Box>
+                  
+                  <ClassBCouponAdjuster />
+                </Paper>
+              )}
 
               <Divider sx={{ my: 3 }} />
 

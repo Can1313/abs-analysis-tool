@@ -1,4 +1,4 @@
-// frontend/src/components/TopBar.js
+// src/components/TopBar.js
 import React from 'react';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { 
@@ -16,13 +16,14 @@ import HomeIcon from '@mui/icons-material/Home';
 import CompareIcon from '@mui/icons-material/Compare';
 import BusinessIcon from '@mui/icons-material/Business';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { alpha } from '@mui/material/styles';
 
 const TopBar = () => {
   const location = useLocation();
   const theme = useTheme();
   
-  // Menu items with updated professional names
+  // Menu items with receivables-focused terminology
   const menuItems = [
     {
       path: '/',
@@ -31,7 +32,7 @@ const TopBar = () => {
     },
     {
       path: '/calculation',
-      label: 'Structure Analysis',
+      label: 'Receivables Analysis',
       icon: <CalculateIcon />
     },
     {
@@ -47,6 +48,11 @@ const TopBar = () => {
     {
       path: '/stress-testing',
       label: 'Stress Testing',
+      icon: <AssessmentIcon />
+    },
+    {
+      path: '/receivables-analysis',
+      label: 'Receivables Analysis',
       icon: <AssessmentIcon />
     }
   ];
@@ -69,7 +75,7 @@ const TopBar = () => {
               flexGrow: 1,
             }}
           >
-            <BusinessIcon 
+            <ReceiptLongIcon 
               sx={{ 
                 fontSize: 28, 
                 color: theme.palette.primary.main,
@@ -87,7 +93,7 @@ const TopBar = () => {
                 letterSpacing: 0.5,
               }}
             >
-              Advanced ABS Design
+              Receivables Securitization Platform
             </Typography>
           </Box>
           

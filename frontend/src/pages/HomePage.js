@@ -1,4 +1,4 @@
-// frontend/src/pages/HomePage.js
+// src/pages/HomePage.js
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { 
@@ -19,10 +19,14 @@ import CalculateIcon from '@mui/icons-material/Calculate';
 import OptimizeIcon from '@mui/icons-material/Speed';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import BusinessIcon from '@mui/icons-material/Business';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import CompareIcon from '@mui/icons-material/Compare';
 import NewReleasesIcon from '@mui/icons-material/NewReleases';
 import RestoreIcon from '@mui/icons-material/Restore';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import BusinessIcon from '@mui/icons-material/Business';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import { useData } from '../contexts/DataContext';
 import FileUploader from '../components/FileUploader';
 
@@ -33,29 +37,29 @@ const HomePage = () => {
   // Define the default settings info
   const defaultSettingsInfo = {
     previous: {
-      label: "Previous Model",
-      description: "February 13, 2025 start date with 4 Class A tranches (61-274 days)",
+      label: "Standard Model",
+      description: "February 13, 2025 start date with 4 senior tranches (61-274 days)",
       icon: <RestoreIcon sx={{ color: theme.palette.primary.main }} />,
       color: theme.palette.primary.main,
       details: [
         { label: "Start Date", value: "13 February 2025" },
-        { label: "Class A Tranches", value: "4" },
-        { label: "Class A Maturity Range", value: "61-274 days" },
-        { label: "Class B Maturity", value: "300 days" },
-        { label: "Class B Percentage", value: "Default calculation" },
+        { label: "Senior Tranches", value: "4" },
+        { label: "Senior Maturity Range", value: "61-274 days" },
+        { label: "Subordinated Maturity", value: "300 days" },
+        { label: "Subordinated Percentage", value: "Default calculation" },
       ]
     },
     new: {
-      label: "New Model",
-      description: "April 16, 2025 start date with 5 Class A tranches (59-275 days)",
+      label: "Enhanced Model",
+      description: "April 16, 2025 start date with 5 senior tranches (59-275 days)",
       icon: <NewReleasesIcon sx={{ color: theme.palette.secondary.main }} />,
       color: theme.palette.secondary.main,
       details: [
         { label: "Start Date", value: "16 April 2025" },
-        { label: "Class A Tranches", value: "5" },
-        { label: "Class A Maturity Range", value: "59-275 days" },
-        { label: "Class B Maturity", value: "346 days" },
-        { label: "Class B Percentage", value: "Fixed 10% of total", highlight: true },
+        { label: "Senior Tranches", value: "5" },
+        { label: "Senior Maturity Range", value: "59-275 days" },
+        { label: "Subordinated Maturity", value: "346 days" },
+        { label: "Subordinated Percentage", value: "Fixed 10% of total", highlight: true },
       ]
     }
   };
@@ -74,12 +78,12 @@ const HomePage = () => {
           boxShadow: `0 8px 24px ${alpha(theme.palette.primary.dark, 0.4)}`,
         }}
       >
-        <BusinessIcon sx={{ fontSize: 56, mb: 2, color: alpha('#fff', 0.9) }} />
+        <ReceiptLongIcon sx={{ fontSize: 56, mb: 2, color: alpha('#fff', 0.9) }} />
         <Typography variant="h3" component="h1" gutterBottom fontWeight="500">
-          Advanced ABS Design
+          Receivables Securitization Platform
         </Typography>
         <Typography variant="h6" sx={{ mb: 3, fontWeight: 400, opacity: 0.9 }}>
-          Professional cash flow analysis and optimization for asset-backed securities
+          Professional cash flow analysis and optimization for commercial receivables securitization
         </Typography>
         <Divider sx={{ 
           width: '100px', 
@@ -88,9 +92,33 @@ const HomePage = () => {
           borderColor: 'rgba(255,255,255,0.25)' 
         }} />
         <Typography variant="body1" sx={{ maxWidth: '800px', mx: 'auto', opacity: 0.9 }}>
-          Upload your Excel data file to begin analyzing your cash flows, 
-          calculate securitization structures, and optimize your tranches for maximum returns.
+          Upload your receivables data to analyze cash flows, 
+          calculate securitization structures, and optimize your tranches for maximum returns and risk protection.
         </Typography>
+        
+        {/* Key Features Badge Section */}
+        <Box sx={{ mt: 4, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 2 }}>
+          <Chip 
+            icon={<BusinessIcon />} 
+            label="Commercial Receivables" 
+            sx={{ bgcolor: alpha('#fff', 0.15), color: '#fff', fontWeight: 500, px: 1 }}
+          />
+          <Chip 
+            icon={<AccountBalanceIcon />} 
+            label="Securitization" 
+            sx={{ bgcolor: alpha('#fff', 0.15), color: '#fff', fontWeight: 500, px: 1 }}
+          />
+          <Chip 
+            icon={<PaymentsIcon />} 
+            label="Cash Flow Analytics" 
+            sx={{ bgcolor: alpha('#fff', 0.15), color: '#fff', fontWeight: 500, px: 1 }}
+          />
+          <Chip 
+            icon={<AssignmentIcon />} 
+            label="Risk Management" 
+            sx={{ bgcolor: alpha('#fff', 0.15), color: '#fff', fontWeight: 500, px: 1 }}
+          />
+        </Box>
       </Box>
 
       <Grid container spacing={4}>
@@ -109,7 +137,7 @@ const HomePage = () => {
             }}
           >
             <Typography variant="h5" gutterBottom fontWeight="medium" sx={{ mb: 3 }}>
-              Upload Your Cash Flow Data
+              Upload Your Receivables Data
             </Typography>
             <FileUploader />
           </Paper>
@@ -130,12 +158,12 @@ const HomePage = () => {
                 }}
               >
                 <Typography variant="h5" gutterBottom fontWeight="medium" sx={{ mb: 3, color: theme.palette.info.main }}>
-                  Available Default Settings
+                  Securitization Structure Models
                 </Typography>
                 
                 <Typography variant="body1" paragraph sx={{ color: 'text.secondary' }}>
-                  Choose from our available default setting profiles to start your calculations.
-                  Each profile contains pre-configured tranches with optimized parameters for different scenarios.
+                  Choose from our predefined securitization structure models to begin your analysis.
+                  Each model contains pre-configured tranches optimized for different receivables profiles.
                 </Typography>
                 
                 <Grid container spacing={3}>
@@ -229,7 +257,7 @@ const HomePage = () => {
                                 backgroundColor: selectedDefaults === key ? info.color : 'transparent',
                               }}
                             >
-                              {selectedDefaults === key ? "Continue with Selection" : "Use This Configuration"}
+                              {selectedDefaults === key ? "Continue with Selection" : "Use This Model"}
                             </Button>
                           </Box>
                         </CardContent>
@@ -274,14 +302,14 @@ const HomePage = () => {
                     <CalculateIcon sx={{ fontSize: 30, color: theme.palette.common.white }} />
                   </Box>
                   <Typography variant="h5" fontWeight="medium" color="primary.main">
-                    Calculate Results
+                    Receivables Analysis
                   </Typography>
                 </Box>
                 
                 <Typography paragraph sx={{ color: 'text.secondary', mb: 3 }}>
                   Configure tranche parameters and calculate detailed results for your
-                  ABS structure. Analyze cash flows, interest rates, and buffer ratios to
-                  ensure your securitization meets all requirements.
+                  receivables-backed securitization. Analyze cash flows, interest rates, and buffer ratios 
+                  to ensure your structure meets all requirements.
                 </Typography>
                 
                 <Box sx={{ mt: 'auto', textAlign: 'center' }}>
@@ -306,7 +334,7 @@ const HomePage = () => {
                       }
                     }}
                   >
-                    Start Calculation
+                    Analyze Receivables
                   </Button>
                 </Box>
               </Paper>
@@ -346,12 +374,12 @@ const HomePage = () => {
                     <OptimizeIcon sx={{ fontSize: 30, color: theme.palette.common.white }} />
                   </Box>
                   <Typography variant="h5" fontWeight="medium" color="secondary.main">
-                    Optimize Structure
+                    Portfolio Optimizer
                   </Typography>
                 </Box>
                 
                 <Typography paragraph sx={{ color: 'text.secondary', mb: 3 }}>
-                  Find the optimal ABS structure to maximize total principal
+                  Optimize your receivables securitization structure to maximize returns
                   while maintaining minimum buffer requirements. Our advanced optimization
                   algorithms explore multiple strategies to find the best tranche configuration.
                 </Typography>
@@ -378,7 +406,7 @@ const HomePage = () => {
                       }
                     }}
                   >
-                    Run Optimization
+                    Optimize Portfolio
                   </Button>
                 </Box>
               </Paper>
@@ -420,13 +448,13 @@ const HomePage = () => {
                         <CompareIcon sx={{ fontSize: 30, color: theme.palette.common.white }} />
                       </Box>
                       <Typography variant="h5" fontWeight="medium" color="info.main">
-                        Compare Results
+                        Compare Structures
                       </Typography>
                     </Box>
                     
                     <Typography paragraph sx={{ color: 'text.secondary' }}>
                       Compare different optimization strategies and manual configurations side by side. 
-                      Analyze the differences in principal distribution, interest rates, and buffer ratios 
+                      Analyze differences in receivables distribution, interest rates, and buffer ratios 
                       to make informed decisions about your securitization structure.
                     </Typography>
                   </Grid>

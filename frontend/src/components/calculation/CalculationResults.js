@@ -12,12 +12,13 @@ import {
   TableRow,
   Divider,
   Chip,
-  alpha
+  alpha,
+  useTheme
 } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 
 const CalculationResults = ({ results }) => {
   const theme = useTheme();
@@ -43,8 +44,8 @@ const CalculationResults = ({ results }) => {
   
   // Format currency values
   const formatCurrency = (value) => {
-    if (value === undefined || value === null) return "₺0.00";
-    return new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(value);
+    if (value === undefined || value === null) return "$0.00";
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
   };
   
   // Format percentage values with null check
@@ -54,19 +55,19 @@ const CalculationResults = ({ results }) => {
   };
 
   // Extract color values from theme
-  const classAColor = theme.palette.primary.main;
-  const classBColor = theme.palette.secondary.main;
+  const seniorColor = theme.palette.primary.main;
+  const subordinatedColor = theme.palette.secondary.main;
   
   // Prepare data for tranche comparison chart
   const chartData = [
     {
-      name: "Class A",
+      name: "Senior",
       principal: results.class_a_principal || 0,
       interest: results.class_a_interest || 0,
       total: results.class_a_total || 0,
     },
     {
-      name: "Class B",
+      name: "Subordinated",
       principal: results.class_b_principal || 0,
       coupon: results.class_b_coupon || 0,
       total: results.class_b_total || 0,
@@ -74,9 +75,9 @@ const CalculationResults = ({ results }) => {
   ];
 
   // Calculate totals with null checks
-  const totalClassA = results.class_a_total || 0;
-  const totalClassB = results.class_b_total || 0;
-  const totalAll = totalClassA + totalClassB;
+  const totalSenior = results.class_a_total || 0;
+  const totalSubordinated = results.class_b_total || 0;
+  const totalAll = totalSenior + totalSubordinated;
   
   // Check if minimum buffer requirement is met
   const minBufferTarget = 5.0;
@@ -94,9 +95,12 @@ const CalculationResults = ({ results }) => {
           backgroundColor: alpha(theme.palette.primary.main, 0.03)
         }}
       >
-        <Typography variant="h6" color="primary.main" gutterBottom fontWeight="medium">
-          Calculation Results Summary
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <ReceiptLongIcon sx={{ fontSize: 24, color: theme.palette.primary.main, mr: 1.5 }} />
+          <Typography variant="h6" color="primary.main" gutterBottom fontWeight="medium">
+            Securitization Results Summary
+          </Typography>
+        </Box>
         
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 3, mt: 2 }}>
           <Box sx={{ 
@@ -113,12 +117,12 @@ const CalculationResults = ({ results }) => {
               <Table size="small">
                 <TableBody>
                   <TableRow>
-                    <TableCell sx={{ pl: 0, borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>Class A Total</TableCell>
-                    <TableCell align="right" sx={{ borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>{formatCurrency(totalClassA)}</TableCell>
+                    <TableCell sx={{ pl: 0, borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>Senior Total</TableCell>
+                    <TableCell align="right" sx={{ borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>{formatCurrency(totalSenior)}</TableCell>
                     <TableCell align="right" sx={{ borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>
                       <Chip 
                         size="small" 
-                        label={formatPercent(totalAll > 0 ? (totalClassA / totalAll * 100) : 0)}
+                        label={formatPercent(totalAll > 0 ? (totalSenior / totalAll * 100) : 0)}
                         sx={{ 
                           bgcolor: alpha(theme.palette.primary.main, 0.1),
                           color: theme.palette.primary.main,
@@ -129,12 +133,12 @@ const CalculationResults = ({ results }) => {
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell sx={{ pl: 0, borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>Class B Total</TableCell>
-                    <TableCell align="right" sx={{ borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>{formatCurrency(totalClassB)}</TableCell>
+                    <TableCell sx={{ pl: 0, borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>Subordinated Total</TableCell>
+                    <TableCell align="right" sx={{ borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>{formatCurrency(totalSubordinated)}</TableCell>
                     <TableCell align="right" sx={{ borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>
                       <Chip 
                         size="small" 
-                        label={formatPercent(totalAll > 0 ? (totalClassB / totalAll * 100) : 0)}
+                        label={formatPercent(totalAll > 0 ? (totalSubordinated / totalAll * 100) : 0)}
                         sx={{ 
                           bgcolor: alpha(theme.palette.secondary.main, 0.1),
                           color: theme.palette.secondary.main,
@@ -172,7 +176,7 @@ const CalculationResults = ({ results }) => {
             borderRadius: 1,
             boxShadow: `0 1px 3px ${alpha('#000', 0.08)}`
           }}>
-            <Typography variant="subtitle1" gutterBottom color="text.secondary">
+            <Typography variant="subtitle1" gutterBottom color="text.secondary" fontWeight="medium">
               Principal and Interest
             </Typography>
             <TableContainer sx={{ mt: 1 }}>
@@ -188,11 +192,11 @@ const CalculationResults = ({ results }) => {
                             width: 10, 
                             height: 10, 
                             borderRadius: '50%', 
-                            bgcolor: classAColor,
+                            bgcolor: seniorColor,
                             mr: 1 
                           }} 
                         />
-                        Class A
+                        Senior
                       </Box>
                     </TableCell>
                     <TableCell align="right" sx={{ borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>{formatCurrency(results.class_a_principal)}</TableCell>
@@ -208,11 +212,11 @@ const CalculationResults = ({ results }) => {
                             width: 10, 
                             height: 10, 
                             borderRadius: '50%', 
-                            bgcolor: classBColor,
+                            bgcolor: subordinatedColor,
                             mr: 1 
                           }} 
                         />
-                        Class B
+                        Subordinated
                       </Box>
                     </TableCell>
                     <TableCell align="right" sx={{ borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>{formatCurrency(results.class_b_principal)}</TableCell>
@@ -245,7 +249,7 @@ const CalculationResults = ({ results }) => {
         }}>
           <Box>
             <Typography variant="body2" color="text.secondary" fontWeight={500}>
-              Minimum Buffer Requirement
+              Minimum Credit Enhancement Requirement
             </Typography>
             <Typography variant="h6" sx={{ mt: 0.5 }}>
               {formatPercent(minBufferTarget)}
@@ -254,7 +258,7 @@ const CalculationResults = ({ results }) => {
           
           <Box>
             <Typography variant="body2" color="text.secondary" fontWeight={500}>
-              Actual Minimum Buffer (Class A)
+              Actual Credit Enhancement (Senior)
             </Typography>
             <Typography variant="h6" color={isBufferMet ? "success.main" : "error.main"} sx={{ mt: 0.5 }}>
               {formatPercent(results.min_buffer_actual)}
@@ -305,13 +309,13 @@ const CalculationResults = ({ results }) => {
           <Table>
             <TableBody>
               <TableRow>
-                <TableCell sx={{ pl: 2, borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>Total Principal Paid to Bank:</TableCell>
+                <TableCell sx={{ pl: 2, borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>Total Principal Paid to Originator:</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 600, pr: 2, borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>
                   {formatCurrency(results.total_principal_paid)}
                 </TableCell>
               </TableRow>
               <TableRow>
-                <TableCell sx={{ pl: 2, borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>Total Loan Principal:</TableCell>
+                <TableCell sx={{ pl: 2, borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>Total Receivables Principal:</TableCell>
                 <TableCell align="right" sx={{ pr: 2, borderBottom: `1px solid ${alpha('#000', 0.08)}` }}>
                   {formatCurrency(results.total_loan_principal)}
                 </TableCell>
@@ -384,7 +388,7 @@ const CalculationResults = ({ results }) => {
               />
               <Bar 
                 dataKey="coupon" 
-                name="Coupon" 
+                name="Yield" 
                 stackId="a" 
                 fill={theme.palette.secondary.main}
                 radius={[4, 4, 0, 0]}
@@ -421,9 +425,9 @@ const CalculationResults = ({ results }) => {
                   <TableCell sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.primary.main, 0.04) }}>Maturity Days</TableCell>
                   <TableCell sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.primary.main, 0.04) }}>Maturity Date</TableCell>
                   <TableCell sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.primary.main, 0.04) }}>Principal</TableCell>
-                  <TableCell sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.primary.main, 0.04) }}>Interest / Coupon</TableCell>
+                  <TableCell sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.primary.main, 0.04) }}>Interest / Yield</TableCell>
                   <TableCell sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.primary.main, 0.04) }}>Total Payment</TableCell>
-                  <TableCell sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.primary.main, 0.04) }}>Buffer Ratio (%)</TableCell>
+                  <TableCell sx={{ fontWeight: 600, backgroundColor: alpha(theme.palette.primary.main, 0.04) }}>Credit Enhancement (%)</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -450,11 +454,11 @@ const CalculationResults = ({ results }) => {
                             width: 10, 
                             height: 10, 
                             borderRadius: '50%', 
-                            bgcolor: tranche["Is Class A"] ? classAColor : classBColor,
+                            bgcolor: tranche["Is Class A"] ? seniorColor : subordinatedColor,
                             mr: 1 
                           }} 
                         />
-                        {tranche["Tranche"]}
+                        {tranche["Tranche"].replace("Class A", "Senior ").replace("Class B", "Subordinated ")}
                       </Box>
                     </TableCell>
                     <TableCell>{tranche["Maturity Days"]}</TableCell>
