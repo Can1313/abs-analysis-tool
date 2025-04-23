@@ -9627,9 +9627,6 @@ const ComparisonPage = () => {
     standardResults: null
   });
 
-  // Add debugging console.log for dialog state
-  console.log("Dialog state:", { selectDialogOpen, deleteDialogOpen });
-
   // Handle tab change
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -9683,22 +9680,13 @@ const ComparisonPage = () => {
     );
   };
 
-  // Dialog handlers - Fixed to ensure proper state updates
-  const handleOpenSelectDialog = () => {
-    console.log("Opening select dialog");
-    setSelectDialogOpen(true);
-  };
-  
-  const handleCloseSelectDialog = () => {
-    console.log("Closing select dialog");
-    setSelectDialogOpen(false);
-  };
-  
+  // Dialog handlers
+  const handleOpenSelectDialog = () => setSelectDialogOpen(true);
+  const handleCloseSelectDialog = () => setSelectDialogOpen(false);
   const handleDeleteDialogOpen = (resultId) => {
     setResultToDelete(resultId);
     setDeleteDialogOpen(true);
   };
-  
   const handleDeleteDialogClose = () => {
     setDeleteDialogOpen(false);
     setResultToDelete(null);
@@ -9706,7 +9694,6 @@ const ComparisonPage = () => {
 
   // Handle result selection
   const handleSelectResult = (resultId) => {
-    console.log("Selecting result:", resultId);
     setSelectedResults(prev => {
       if (prev.includes(resultId)) {
         return prev.filter(id => id !== resultId);
@@ -9722,7 +9709,6 @@ const ComparisonPage = () => {
 
   // Confirm result selection
   const handleConfirmSelection = () => {
-    console.log("Confirming selection");
     setSelectDialogOpen(false);
     processSelectedResults();
   };
@@ -9731,15 +9717,12 @@ const ComparisonPage = () => {
   const processSelectedResults = () => {
     if (selectedResults.length === 0) return;
     
-    console.log("Processing selected results:", selectedResults);
     setLoading(true);
     
     // Filter the saved results based on selection
     const selectedResultsData = savedResults.filter(result => 
       selectedResults.includes(result.id)
     );
-    
-    console.log("Selected results data:", selectedResultsData);
     
     // Create an empty result object structure
     const processedData = {
@@ -9794,16 +9777,7 @@ const ComparisonPage = () => {
   useEffect(() => {
     setLoading(true);
     
-    // Check if savedResults exists and has data
-    if (!savedResults || savedResults.length === 0) {
-      console.log("No saved results available");
-      setLoading(false);
-      return;
-    }
-    
-    console.log("Initial savedResults:", savedResults);
-    
-    try {
+    if (savedResults && savedResults.length > 0) {
       // Auto-select one of each type (manual, genetic, grid) initially
       const initialSelectedIds = [];
       
@@ -9822,14 +9796,10 @@ const ComparisonPage = () => {
         initialSelectedIds.push(savedResults[0].id);
       }
       
-      console.log("Initial selected IDs:", initialSelectedIds);
-      
       // Process these initial selections
       const initialSelectedData = savedResults.filter(result => 
         initialSelectedIds.includes(result.id)
       );
-      
-      console.log("Initial selected data:", initialSelectedData);
       
       // Set the selected results state
       setSelectedResults(initialSelectedIds);
@@ -9851,8 +9821,6 @@ const ComparisonPage = () => {
       if (standardResultData) processedData.standardResults = {...standardResultData};
       
       setComparisonData(processedData);
-    } catch (error) {
-      console.error("Error processing initial data:", error);
     }
     
     setLoading(false);
@@ -9920,7 +9888,7 @@ const ComparisonPage = () => {
         
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
-            variant="contained" // Changed from outlined to contained for better visibility
+            variant="outlined"
             color="primary"
             onClick={handleOpenSelectDialog}
             sx={{ borderRadius: 2 }}
@@ -9983,10 +9951,6 @@ const ComparisonPage = () => {
   // Get active comparison results
   const comparisonResults = getComparisonResults();
   
-  // Check if savedResults exists
-  const hasSavedResults = Array.isArray(savedResults) && savedResults.length > 0;
-  console.log("Has saved results:", hasSavedResults, "Count:", savedResults?.length);
-  
   // Prepare chart data
   const barChartData = comparisonResults.map(item => ({
     name: item.label,
@@ -10039,7 +10003,7 @@ const ComparisonPage = () => {
   }
 
   // No saved results state
-  if (!hasSavedResults) {
+  if (!savedResults || savedResults.length === 0) {
     return (
       <ThemeProvider theme={theme}>
         <CssBaseline />
@@ -11054,7 +11018,7 @@ const ComparisonPage = () => {
           </Grid>
         </TabPanel>
         
-        {/* Select Results Dialog - Fixed to ensure it's visible */}
+        {/* Select Results Dialog */}
         <Dialog 
           open={selectDialogOpen} 
           onClose={handleCloseSelectDialog} 
@@ -11063,143 +11027,126 @@ const ComparisonPage = () => {
           PaperProps={{
             sx: {
               bgcolor: 'background.paper',
-              borderRadius: 2,
-              zIndex: 9999, // Added higher z-index to ensure visibility
+              borderRadius: 2
             }
           }}
         >
-          <DialogTitle>
-            <Typography variant="h6">Select Results to Compare</Typography>
-          </DialogTitle>
+          <DialogTitle>Select Results to Compare</DialogTitle>
           <DialogContent>
-            <DialogContentText sx={{ mb: 2 }}>
+            <DialogContentText>
               Select up to 3 results to compare. Choose results of different types (Manual, Genetic, and Grid Algorithm) for the best comparison.
             </DialogContentText>
             <List sx={{ mt: 2 }}>
-              {Array.isArray(savedResults) && savedResults.length > 0 ? (
-                savedResults.map((result) => (
-                  <ListItem 
-                    key={result.id} 
-                    dense
-                    disablePadding
-                    sx={{ 
-                      cursor: 'pointer',
-                      p: 1,
-                      mb: 1,
-                      border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-                      '&:hover': {
-                        backgroundColor: alpha(theme.palette.primary.main, 0.05)
-                      },
-                      backgroundColor: selectedResults.includes(result.id) 
-                        ? alpha(theme.palette.primary.main, 0.1) 
-                        : 'transparent',
-                      borderRadius: 1
-                    }}
-                  >
-                    <Box 
-                      width="100%" 
-                      display="flex" 
-                      alignItems="center"
-                      onClick={() => handleSelectResult(result.id)}
-                      padding={1}
-                    >
-                      <Checkbox
-                        edge="start"
-                        checked={selectedResults.includes(result.id)}
-                        tabIndex={-1}
-                        disableRipple
+              {savedResults.map((result) => (
+                <ListItem 
+                  key={result.id} 
+                  dense
+                  onClick={() => handleSelectResult(result.id)}
+                  sx={{ 
+                    cursor: 'pointer',
+                    p: 1,
+                    mb: 1,
+                    '&:hover': {
+                      backgroundColor: alpha(theme.palette.primary.main, 0.05)
+                    },
+                    backgroundColor: selectedResults.includes(result.id) 
+                    ? alpha(theme.palette.primary.main, 0.1) 
+                    : 'transparent',
+                  borderRadius: 1
+                }}
+              >
+                <Checkbox
+                  edge="start"
+                  checked={selectedResults.includes(result.id)}
+                  tabIndex={-1}
+                  disableRipple
+                  color={
+                    result.methodType === 'manual' ? 'error' :
+                    result.methodType === 'genetic' ? 'success' : 'primary'
+                  }
+                />
+                <ListItemText 
+                  primary={
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Typography variant="body1">{result.savedName}</Typography>
+                      <Chip 
+                        label={
+                          result.methodType === 'manual' ? 'Manual' : 
+                          result.methodType === 'genetic' ? 'Genetic' : 'Grid Algorithm'
+                        }
+                        size="small"
                         color={
                           result.methodType === 'manual' ? 'error' :
                           result.methodType === 'genetic' ? 'success' : 'primary'
                         }
+                        sx={{ ml: 2, fontWeight: 500 }}
                       />
-                      <ListItemText 
-                        primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Typography variant="body1">{result.savedName}</Typography>
-                            <Chip 
-                              label={
-                                result.methodType === 'manual' ? 'Manual' : 
-                                result.methodType === 'genetic' ? 'Genetic' : 'Grid Algorithm'
-                              }
-                              size="small"
-                              color={
-                                result.methodType === 'manual' ? 'error' :
-                                result.methodType === 'genetic' ? 'success' : 'primary'
-                              }
-                              sx={{ ml: 2, fontWeight: 500 }}
-                            />
-                          </Box>
-                        }
-                        secondary={new Date(result.timestamp).toLocaleString()}
-                      />
-                      <IconButton 
-                        edge="end" 
-                        aria-label="delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteDialogOpen(result.id);
-                        }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
                     </Box>
-                  </ListItem>
-                ))
-              ) : (
-                <Typography color="text.secondary">
-                  No saved results found. Please save some calculation results first.
-                </Typography>
-              )}
-            </List>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3 }}>
-            <Button onClick={handleCloseSelectDialog} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
-            <Button 
-              onClick={handleConfirmSelection} 
-              color="primary"
-              variant="contained"
-              disabled={selectedResults.length === 0}
-              sx={{ borderRadius: 2 }}
-            >
-              Compare Selected ({selectedResults.length})
-            </Button>
-          </DialogActions>
-        </Dialog>
+                  }
+                  secondary={new Date(result.timestamp).toLocaleString()}
+                />
+                <ListItemSecondaryAction>
+                  <IconButton 
+                    edge="end" 
+                    aria-label="delete"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteDialogOpen(result.id);
+                    }}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </ListItemSecondaryAction>
+              </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button onClick={handleCloseSelectDialog} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+          <Button 
+            onClick={handleConfirmSelection} 
+            color="primary"
+            variant="contained"
+            disabled={selectedResults.length === 0}
+            sx={{ borderRadius: 2 }}
+          >
+            Compare Selected ({selectedResults.length})
+          </Button>
+        </DialogActions>
+      </Dialog>
       
-        {/* Delete Confirmation Dialog */}
-        <Dialog
-          open={deleteDialogOpen}
-          onClose={handleDeleteDialogClose}
-          PaperProps={{
-            sx: {
-              bgcolor: 'background.paper',
-              borderRadius: 2,
-              zIndex: 9999 // Added higher z-index to ensure visibility
-            }
-          }}
-        >
-          <DialogTitle>Delete Saved Result</DialogTitle>
-          <DialogContent>
-            <DialogContentText>
-              Are you sure you want to delete this saved result? This action cannot be undone.
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3 }}>
-            <Button onClick={handleDeleteDialogClose} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
-            <Button 
-              onClick={handleDeleteConfirm} 
-              color="error" 
-              variant="contained"
-              sx={{ borderRadius: 2 }}
-            >
-              Delete
-            </Button>
-          </DialogActions>
-        </Dialog>
-      </Container>
-    </ThemeProvider>
-  );
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteDialogClose}
+        PaperProps={{
+          sx: {
+            bgcolor: 'background.paper',
+            borderRadius: 2
+          }
+        }}
+      >
+        <DialogTitle>Delete Saved Result</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this saved result? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button onClick={handleDeleteDialogClose} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            sx={{ borderRadius: 2 }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Container>
+  </ThemeProvider>
+);
 };
 
 export default ComparisonPage;
