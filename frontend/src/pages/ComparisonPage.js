@@ -18,7 +18,6 @@ import {
   Chip,
   Divider,
   alpha,
-  useTheme,
   Button,
   IconButton,
   Tooltip,
@@ -127,6 +126,27 @@ const darkTheme = createTheme({
   },
 });
 
+// Define colors for different result types
+const resultTypeColors = {
+  manual: '#3f6ad8', // Blue
+  genetic: '#3ac47d', // Green
+  standard: '#794c8a', // Purple
+};
+
+// Define icons for different result types
+const getResultIcon = (methodType) => {
+  switch (methodType) {
+    case 'manual':
+      return <TuneIcon />;
+    case 'genetic':
+      return <ScienceIcon />;
+    case 'standard':
+      return <SettingsIcon />;
+    default:
+      return <TuneIcon />;
+  }
+};
+
 // TabPanel component
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -163,11 +183,7 @@ const ComparisonPage = () => {
   const [selectDialogOpen, setSelectDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [resultToDelete, setResultToDelete] = useState(null);
-  const [comparisonData, setComparisonData] = useState({
-    manualResults: null,
-    geneticResults: null,
-    standardResults: null
-  });
+  const [comparisonResults, setComparisonResults] = useState([]);
 
   // Handle tab change
   const handleTabChange = (event, newValue) => {
@@ -222,20 +238,36 @@ const ComparisonPage = () => {
     );
   };
 
-  // Dialog handlers
-  const handleOpenSelectDialog = () => setSelectDialogOpen(true);
-  const handleCloseSelectDialog = () => setSelectDialogOpen(false);
-  const handleDeleteDialogOpen = (resultId) => {
+  // Dialog handlers with logging for debugging
+  const handleOpenSelectDialog = () => {
+    console.log("Opening select dialog");
+    setSelectDialogOpen(true);
+  };
+  
+  const handleCloseSelectDialog = () => {
+    console.log("Closing select dialog");
+    setSelectDialogOpen(false);
+  };
+  
+  const handleDeleteDialogOpen = (resultId, e) => {
+    // Prevent event propagation if event exists (for buttons inside clickable areas)
+    if (e) {
+      e.stopPropagation();
+    }
+    console.log("Opening delete dialog for:", resultId);
     setResultToDelete(resultId);
     setDeleteDialogOpen(true);
   };
+  
   const handleDeleteDialogClose = () => {
+    console.log("Closing delete dialog");
     setDeleteDialogOpen(false);
     setResultToDelete(null);
   };
 
   // Handle result selection
   const handleSelectResult = (resultId) => {
+    console.log("Selecting/deselecting result:", resultId);
     setSelectedResults(prev => {
       if (prev.includes(resultId)) {
         return prev.filter(id => id !== resultId);
@@ -251,52 +283,82 @@ const ComparisonPage = () => {
 
   // Confirm result selection
   const handleConfirmSelection = () => {
+    console.log("Confirming selection:", selectedResults);
     setSelectDialogOpen(false);
     processSelectedResults();
   };
 
-  // Process the selected results
+  // Process the selected results - now supports multiple results of the same type
   const processSelectedResults = () => {
     if (selectedResults.length === 0) return;
     
     setLoading(true);
+    console.log("Processing selected results:", selectedResults);
     
     // Filter the saved results based on selection
     const selectedResultsData = savedResults.filter(result => 
       selectedResults.includes(result.id)
     );
     
-    // Create an empty result object structure
-    const processedData = {
-      manualResults: null,
-      geneticResults: null,
-      standardResults: null
-    };
-    
-    // Process each selected result and assign to the appropriate category
-    selectedResultsData.forEach(result => {      
-      if (result.methodType === 'manual') {
-        processedData.manualResults = {...result};
-      } else if (result.methodType === 'genetic') {
-        processedData.geneticResults = {...result};
-      } else if (result.methodType === 'standard') {
-        processedData.standardResults = {...result};
-      }
+    // Calculate and add interest rates for each result
+    const processedResults = selectedResultsData.map(result => {
+      // Calculate interest rates if not already available
+      const classARate = result.class_a_rate || 
+        (result.class_a_interest && result.class_a_principal ? 
+          (result.class_a_interest / result.class_a_principal) * 100 : 0);
+          
+      const classBRate = result.class_b_rate || 
+        (result.class_b_coupon && result.class_b_principal ? 
+          (result.class_b_coupon / result.class_b_principal) * 100 : 0);
+      
+      // Create a processed result with interest rates included
+      const processedResult = {
+        ...result,
+        class_a_rate: classARate,
+        class_b_rate: classBRate
+      };
+      
+      return {
+        id: processedResult.id,
+        label: processedResult.savedName || getResultTypeName(processedResult.methodType),
+        result: processedResult,
+        method: processedResult.methodType,
+        color: resultTypeColors[processedResult.methodType] || theme.palette.primary.main,
+        icon: getResultIcon(processedResult.methodType)
+      };
     });
     
-    // Update the comparison data state
-    setComparisonData(processedData);
+    // Update the comparison results state
+    setComparisonResults(processedResults);
     setLoading(false);
+  };
+
+  // Get a friendly name for the result type
+  const getResultTypeName = (methodType) => {
+    switch (methodType) {
+      case 'manual':
+        return 'Manual Calculation';
+      case 'genetic':
+        return 'Genetic Algorithm';
+      case 'standard':
+        return 'Grid Algorithm';
+      default:
+        return 'Calculation';
+    }
   };
 
   // Handle delete confirmation
   const handleDeleteConfirm = () => {
     if (resultToDelete) {
+      console.log("Deleting result:", resultToDelete);
       deleteSavedResult(resultToDelete);
       
       // Remove from selected results if present
       if (selectedResults.includes(resultToDelete)) {
         setSelectedResults(prev => prev.filter(id => id !== resultToDelete));
+        
+        // Also remove from comparison results if present
+        setComparisonResults(prev => prev.filter(item => item.id !== resultToDelete));
       }
       
       setDeleteDialogOpen(false);
@@ -306,118 +368,56 @@ const ComparisonPage = () => {
 
   // Reset all comparison data
   const handleResetComparison = () => {
+    console.log("Resetting all comparison data");
     clearSavedResults();
     setSelectedResults([]);
-    setComparisonData({
-      manualResults: null,
-      geneticResults: null,
-      standardResults: null
-    });
+    setComparisonResults([]);
   };
   
   // Initialize selected results when component mounts
   useEffect(() => {
     setLoading(true);
+    console.log("Component mounted or savedResults changed");
     
     if (savedResults && savedResults.length > 0) {
-      // Auto-select one of each type (manual, genetic, grid) initially
-      const initialSelectedIds = [];
+      // Auto-select up to three results initially
+      const initialSelectedIds = savedResults
+        .slice(0, Math.min(3, savedResults.length))
+        .map(result => result.id);
       
-      // Try to find one of each type
-      const manualResult = savedResults.find(r => r.methodType === 'manual');
-      const geneticResult = savedResults.find(r => r.methodType === 'genetic');
-      const standardResult = savedResults.find(r => r.methodType === 'standard');
+      console.log("Initial selection IDs:", initialSelectedIds);
       
-      // Add each result's ID to our initial selection if found
-      if (manualResult) initialSelectedIds.push(manualResult.id);
-      if (geneticResult) initialSelectedIds.push(geneticResult.id);
-      if (standardResult) initialSelectedIds.push(standardResult.id);
-      
-      // If we haven't selected anything yet, just take the first result
-      if (initialSelectedIds.length === 0 && savedResults.length > 0) {
-        initialSelectedIds.push(savedResults[0].id);
-      }
+      // Set the selected results state
+      setSelectedResults(initialSelectedIds);
       
       // Process these initial selections
       const initialSelectedData = savedResults.filter(result => 
         initialSelectedIds.includes(result.id)
       );
       
-      // Set the selected results state
-      setSelectedResults(initialSelectedIds);
+      // Map the data to the format needed for comparison
+      const processedResults = initialSelectedData.map(result => ({
+        id: result.id,
+        label: result.savedName || getResultTypeName(result.methodType),
+        result: result,
+        method: result.methodType,
+        color: resultTypeColors[result.methodType] || theme.palette.primary.main,
+        icon: getResultIcon(result.methodType)
+      }));
       
-      // Explicitly create a new object for each result type to avoid reference issues
-      const processedData = {
-        manualResults: null,
-        geneticResults: null,
-        standardResults: null
-      };
-      
-      // Assign each result type manually with spread operator to create a copy
-      const manualResultData = initialSelectedData.find(r => r.methodType === 'manual');
-      const geneticResultData = initialSelectedData.find(r => r.methodType === 'genetic');
-      const standardResultData = initialSelectedData.find(r => r.methodType === 'standard');
-      
-      if (manualResultData) processedData.manualResults = {...manualResultData};
-      if (geneticResultData) processedData.geneticResults = {...geneticResultData};
-      if (standardResultData) processedData.standardResults = {...standardResultData};
-      
-      setComparisonData(processedData);
+      // Update the comparison results state
+      setComparisonResults(processedResults);
     }
     
     setLoading(false);
   }, [savedResults]);
 
-  // Get all valid results as an array
-  const getComparisonResults = () => {
-    const results = [];
-    
-    if (comparisonData.manualResults) {
-      results.push({
-        id: comparisonData.manualResults.id,
-        label: 'Manual Calculation',
-        result: comparisonData.manualResults,
-        isOptimized: false,
-        method: 'manual',
-        color: theme.palette.error.main,
-        icon: <TuneIcon />
-      });
-    }
-    
-    if (comparisonData.geneticResults) {
-      results.push({
-        id: comparisonData.geneticResults.id,
-        label: 'Genetic Algorithm',
-        result: comparisonData.geneticResults,
-        isOptimized: true,
-        method: 'genetic',
-        color: theme.palette.success.main,
-        icon: <ScienceIcon />
-      });
-    }
-    
-    if (comparisonData.standardResults) {
-      results.push({
-        id: comparisonData.standardResults.id,
-        label: 'Grid Algorithm',
-        result: comparisonData.standardResults,
-        isOptimized: true,
-        method: 'standard',
-        color: theme.palette.primary.main,
-        icon: <SettingsIcon />
-      });
-    }
-    
-    return results;
-  };
-
   // Check if we have at least two results to compare
   const hasEnoughData = () => {
-    const results = getComparisonResults();
-    return results.length >= 2;
+    return comparisonResults.length >= 2;
   };
 
-  // Add the header with buttons
+  // Header with buttons
   const ComparisonHeader = () => {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
@@ -484,14 +484,6 @@ const ComparisonPage = () => {
     }
     return null;
   };
-
-  // Identify which results we have
-  const hasManual = comparisonData.manualResults !== null;
-  const hasGenetic = comparisonData.geneticResults !== null;
-  const hasStandard = comparisonData.standardResults !== null;
-  
-  // Get active comparison results
-  const comparisonResults = getComparisonResults();
   
   // Prepare chart data
   const barChartData = comparisonResults.map(item => ({
@@ -523,9 +515,10 @@ const ComparisonPage = () => {
   const financingData = comparisonResults.map(item => ({
     name: item.label,
     financingCost: Math.abs(item.result.financing_cost || 0),
-    isProfit: (item.result.financing_cost || 0) > 0,
     principalPaid: item.result.total_principal_paid || 0,
     loanPrincipal: item.result.total_loan_principal || 0,
+    institutionPayment: item.result.institution_payment || 0,
+    totalReceivable: item.result.total_receivable || 0,
     color: item.color
   }));
 
@@ -649,9 +642,9 @@ const ComparisonPage = () => {
                         <TableCell>
                           <Chip 
                             label={result.methodType === 'manual' ? 'Manual' : 
-                                   result.methodType === 'genetic' ? 'Genetic' : 'Grid Algorithm'} 
+                                  result.methodType === 'genetic' ? 'Genetic' : 'Grid Algorithm'} 
                             color={result.methodType === 'manual' ? 'error' :
-                                   result.methodType === 'genetic' ? 'success' : 'primary'}
+                                  result.methodType === 'genetic' ? 'success' : 'primary'}
                             size="small"
                             sx={{ fontWeight: 500 }}
                           />
@@ -664,6 +657,7 @@ const ComparisonPage = () => {
                             color="error" 
                             size="small"
                             onClick={() => handleDeleteDialogOpen(result.id)}
+                            aria-label={`Delete ${result.savedName}`}
                           >
                             <DeleteIcon fontSize="small" />
                           </IconButton>
@@ -707,9 +701,10 @@ const ComparisonPage = () => {
               <Grid item xs={12} md={4} key={index}>
                 <Card elevation={2} sx={{ 
                   height: '100%', 
-                  backgroundColor: alpha(item.color, 0.1), 
+                  background: `linear-gradient(135deg, ${alpha(item.color, 0.05)} 0%, ${alpha(item.color, 0.15)} 100%)`, 
                   border: `1px solid ${alpha(item.color, 0.2)}`,
-                  borderRadius: 2
+                  borderRadius: 2,
+                  boxShadow: `0 4px 12px ${alpha(item.color, 0.15)}`
                 }}>
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -724,31 +719,30 @@ const ComparisonPage = () => {
                     <Divider sx={{ mb: 2, opacity: 0.2 }} />
                     
                     <Box>
-                      <Typography variant="body2" color="text.secondary">Total Structure Size</Typography>
+                      <Typography variant="body2" color="text.secondary">Tranche Distribution</Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', my: 0.5 }}>
+                        <Typography variant="body2">Class A: {formatCurrency(item.result.class_a_total || 0)}</Typography>
+                        <Typography variant="body2">Class B: {formatCurrency(item.result.class_b_total || 0)}</Typography>
+                      </Box>
+                    </Box>
+                    
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="body2" color="text.secondary">Total Receivable</Typography>
                       <Typography variant="h6" sx={{ my: 0.5 }}>
-                        {formatCurrency((item.result.class_a_total || 0) + (item.result.class_b_total || 0))}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Class A: {formatCurrency(item.result.class_a_total || 0)}, 
-                        Class B: {formatCurrency(item.result.class_b_total || 0)}
+                        {formatCurrency(item.result.total_loan_principal || 0)}
                       </Typography>
                     </Box>
                     
                     <Box sx={{ mt: 2 }}>
-                      <Typography variant="body2" color="text.secondary">Minimum Buffer</Typography>
-                      <Typography variant="h6" color={
-                        (item.result.min_buffer_actual || 0) >= 5.0 ? 'success.main' : 'error.main'
-                      } sx={{ my: 0.5 }}>
-                        {formatPercent(item.result.min_buffer_actual || 0)}
+                      <Typography variant="body2" color="text.secondary">Payment to Institution</Typography>
+                      <Typography variant="h6" sx={{ my: 0.5 }}>
+                        {formatCurrency(item.result.total_principal_paid || 0)}
                       </Typography>
                     </Box>
                     
                     <Box sx={{ mt: 2 }}>
-                      <Typography variant="body2" color="text.secondary">Financing Result</Typography>
-                      <Typography variant="h6" color={
-                        (item.result.financing_cost || 0) > 0 ? 'success.main' : 'error.main'
-                      } sx={{ my: 0.5 }}>
-                        {(item.result.financing_cost || 0) > 0 ? "Profit: " : "Loss: "}
+                      <Typography variant="body2" color="text.secondary">Financing Cost</Typography>
+                      <Typography variant="h6" sx={{ my: 0.5, color: theme.palette.info.main }}>
                         {formatCurrency(Math.abs(item.result.financing_cost || 0))}
                       </Typography>
                     </Box>
@@ -810,7 +804,7 @@ const ComparisonPage = () => {
                     Total Structure Comparison
                   </Typography>
                   <Tooltip title="Shows the distribution of Class A and Class B in each calculation approach">
-                    <IconButton size="small">
+                    <IconButton size="small" aria-label="Information about Total Structure Comparison">
                       <InfoOutlinedIcon fontSize="small" color="info" />
                     </IconButton>
                   </Tooltip>
@@ -926,7 +920,7 @@ const ComparisonPage = () => {
                     Principal and Interest Distribution
                   </Typography>
                   <Tooltip title="Detailed breakdown of principal and interest components for each class">
-                    <IconButton size="small">
+                    <IconButton size="small" aria-label="Information about Principal and Interest Distribution">
                       <InfoOutlinedIcon fontSize="small" color="info" />
                     </IconButton>
                   </Tooltip>
@@ -994,21 +988,16 @@ const ComparisonPage = () => {
                             {item.label}
                           </TableCell>
                         ))}
-                        {hasManual && hasGenetic && (
-                          <TableCell align="right">
-                            Manual vs. Genetic
-                          </TableCell>
-                        )}
-                        {hasManual && hasStandard && (
-                          <TableCell align="right">
-                            Manual vs. Grid Algorithm
-                          </TableCell>
-                        )}
-                        {hasGenetic && hasStandard && (
-                          <TableCell align="right">
-                            Genetic vs. Grid Algorithm
-                          </TableCell>
-                        )}
+                        {/* Dynamic comparison columns for each result pair */}
+                        {comparisonResults.length >= 2 && 
+                          Array.from({ length: comparisonResults.length - 1 }).map((_, i) => 
+                            Array.from({ length: comparisonResults.length - i - 1 }).map((_, j) => (
+                              <TableCell key={`comparison-${i}-${j}`} align="right">
+                                {comparisonResults[i].label} vs. {comparisonResults[i + j + 1].label}
+                              </TableCell>
+                            ))
+                          ).flat()
+                        }
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -1019,31 +1008,21 @@ const ComparisonPage = () => {
                             {formatCurrency(item.result.class_a_principal || 0)}
                           </TableCell>
                         ))}
-                        {hasManual && hasGenetic && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.geneticResults.class_a_principal,
-                              comparisonData.manualResults.class_a_principal
-                            ))}
-                          </TableCell>
-                        )}
-                        {hasManual && hasStandard && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.standardResults.class_a_principal,
-                              comparisonData.manualResults.class_a_principal
-                            ))}
-                          </TableCell>
-                        )}
-                        {hasGenetic && hasStandard && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.standardResults.class_a_principal,
-                              comparisonData.geneticResults.class_a_principal
-                            ))}
-                          </TableCell>
-                        )}
+                        {/* Dynamic comparison values */}
+                        {comparisonResults.length >= 2 && 
+                          Array.from({ length: comparisonResults.length - 1 }).map((_, i) => 
+                            Array.from({ length: comparisonResults.length - i - 1 }).map((_, j) => (
+                              <TableCell key={`comparison-value-${i}-${j}`} align="right">
+                                {formatDifference(calculateDifference(
+                                  comparisonResults[i + j + 1].result.class_a_principal,
+                                  comparisonResults[i].result.class_a_principal
+                                ))}
+                              </TableCell>
+                            ))
+                          ).flat()
+                        }
                       </TableRow>
+                      
                       <TableRow hover>
                         <TableCell>Class A Interest</TableCell>
                         {comparisonResults.map((item, index) => (
@@ -1051,31 +1030,21 @@ const ComparisonPage = () => {
                             {formatCurrency(item.result.class_a_interest || 0)}
                           </TableCell>
                         ))}
-                        {hasManual && hasGenetic && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.geneticResults.class_a_interest,
-                              comparisonData.manualResults.class_a_interest
-                            ))}
-                          </TableCell>
-                        )}
-                        {hasManual && hasStandard && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.standardResults.class_a_interest,
-                              comparisonData.manualResults.class_a_interest
-                            ))}
-                          </TableCell>
-                        )}
-                        {hasGenetic && hasStandard && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.standardResults.class_a_interest,
-                              comparisonData.geneticResults.class_a_interest
-                            ))}
-                          </TableCell>
-                        )}
+                        {/* Dynamic comparison values */}
+                        {comparisonResults.length >= 2 && 
+                          Array.from({ length: comparisonResults.length - 1 }).map((_, i) => 
+                            Array.from({ length: comparisonResults.length - i - 1 }).map((_, j) => (
+                              <TableCell key={`comparison-value-${i}-${j}`} align="right">
+                                {formatDifference(calculateDifference(
+                                  comparisonResults[i + j + 1].result.class_a_interest,
+                                  comparisonResults[i].result.class_a_interest
+                                ))}
+                              </TableCell>
+                            ))
+                          ).flat()
+                        }
                       </TableRow>
+                      
                       <TableRow hover>
                         <TableCell>Class B Principal</TableCell>
                         {comparisonResults.map((item, index) => (
@@ -1083,31 +1052,21 @@ const ComparisonPage = () => {
                             {formatCurrency(item.result.class_b_principal || 0)}
                           </TableCell>
                         ))}
-                        {hasManual && hasGenetic && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.geneticResults.class_b_principal,
-                              comparisonData.manualResults.class_b_principal
-                            ))}
-                          </TableCell>
-                        )}
-                        {hasManual && hasStandard && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.standardResults.class_b_principal,
-                              comparisonData.manualResults.class_b_principal
-                            ))}
-                          </TableCell>
-                        )}
-                        {hasGenetic && hasStandard && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.standardResults.class_b_principal,
-                              comparisonData.geneticResults.class_b_principal
-                            ))}
-                          </TableCell>
-                        )}
+                        {/* Dynamic comparison values */}
+                        {comparisonResults.length >= 2 && 
+                          Array.from({ length: comparisonResults.length - 1 }).map((_, i) => 
+                            Array.from({ length: comparisonResults.length - i - 1 }).map((_, j) => (
+                              <TableCell key={`comparison-value-${i}-${j}`} align="right">
+                                {formatDifference(calculateDifference(
+                                  comparisonResults[i + j + 1].result.class_b_principal,
+                                  comparisonResults[i].result.class_b_principal
+                                ))}
+                              </TableCell>
+                            ))
+                          ).flat()
+                        }
                       </TableRow>
+                      
                       <TableRow hover>
                         <TableCell>Class B Coupon</TableCell>
                         {comparisonResults.map((item, index) => (
@@ -1115,31 +1074,21 @@ const ComparisonPage = () => {
                             {formatCurrency(item.result.class_b_coupon || 0)}
                           </TableCell>
                         ))}
-                        {hasManual && hasGenetic && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.geneticResults.class_b_coupon,
-                              comparisonData.manualResults.class_b_coupon
-                            ))}
-                          </TableCell>
-                        )}
-                        {hasManual && hasStandard && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.standardResults.class_b_coupon,
-                              comparisonData.manualResults.class_b_coupon
-                            ))}
-                          </TableCell>
-                        )}
-                        {hasGenetic && hasStandard && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.standardResults.class_b_coupon,
-                              comparisonData.geneticResults.class_b_coupon
-                            ))}
-                          </TableCell>
-                        )}
+                        {/* Dynamic comparison values */}
+                        {comparisonResults.length >= 2 && 
+                          Array.from({ length: comparisonResults.length - 1 }).map((_, i) => 
+                            Array.from({ length: comparisonResults.length - i - 1 }).map((_, j) => (
+                              <TableCell key={`comparison-value-${i}-${j}`} align="right">
+                                {formatDifference(calculateDifference(
+                                  comparisonResults[i + j + 1].result.class_b_coupon,
+                                  comparisonResults[i].result.class_b_coupon
+                                ))}
+                              </TableCell>
+                            ))
+                          ).flat()
+                        }
                       </TableRow>
+                      
                       <TableRow sx={{ "& td": { fontWeight: 'medium', backgroundColor: alpha(theme.palette.primary.main, 0.1) } }}>
                         <TableCell>Total</TableCell>
                         {comparisonResults.map((item, index) => (
@@ -1149,30 +1098,21 @@ const ComparisonPage = () => {
                             )}
                           </TableCell>
                         ))}
-                        {hasManual && hasGenetic && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              (comparisonData.geneticResults.class_a_total || 0) + (comparisonData.geneticResults.class_b_total || 0),
-                              (comparisonData.manualResults.class_a_total || 0) + (comparisonData.manualResults.class_b_total || 0)
-                            ))}
-                          </TableCell>
-                        )}
-                        {hasManual && hasStandard && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              (comparisonData.standardResults.class_a_total || 0) + (comparisonData.standardResults.class_b_total || 0),
-                              (comparisonData.manualResults.class_a_total || 0) + (comparisonData.manualResults.class_b_total || 0)
-                            ))}
-                          </TableCell>
-                        )}
-                        {hasGenetic && hasStandard && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              (comparisonData.standardResults.class_a_total || 0) + (comparisonData.standardResults.class_b_total || 0),
-                              (comparisonData.geneticResults.class_a_total || 0) + (comparisonData.geneticResults.class_b_total || 0)
-                            ))}
-                          </TableCell>
-                        )}
+                        {/* Dynamic comparison values for totals */}
+                        {comparisonResults.length >= 2 && 
+                          Array.from({ length: comparisonResults.length - 1 }).map((_, i) => 
+                            Array.from({ length: comparisonResults.length - i - 1 }).map((_, j) => (
+                              <TableCell key={`comparison-value-total-${i}-${j}`} align="right">
+                                {formatDifference(calculateDifference(
+                                  (comparisonResults[i + j + 1].result.class_a_total || 0) + 
+                                    (comparisonResults[i + j + 1].result.class_b_total || 0),
+                                  (comparisonResults[i].result.class_a_total || 0) + 
+                                    (comparisonResults[i].result.class_b_total || 0)
+                                ))}
+                              </TableCell>
+                            ))
+                          ).flat()
+                        }
                       </TableRow>
                     </TableBody>
                   </Table>
@@ -1198,10 +1138,10 @@ const ComparisonPage = () => {
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
                   <Typography variant="h6" color="info.main" fontWeight="medium">
-                    Financing Comparison
+                    Financial Analysis
                   </Typography>
-                  <Tooltip title="Compares principal and interest payments alongside financing outcomes">
-                    <IconButton size="small">
+                  <Tooltip title="Compares principal and interest payments alongside financing metrics">
+                    <IconButton size="small" aria-label="Information about Financial Analysis">
                       <InfoOutlinedIcon fontSize="small" color="info" />
                     </IconButton>
                   </Tooltip>
@@ -1273,16 +1213,11 @@ const ComparisonPage = () => {
                           />
                           <Bar 
                             dataKey="financingCost" 
-                            name="Financing Result" 
+                            name="Financing Cost" 
                             radius={[4, 4, 0, 0]}
-                          >
-                            {financingData.map((entry, index) => (
-                              <Cell 
-                                key={`cell-${index}`} 
-                                fill={entry.isProfit ? theme.palette.success.main : theme.palette.error.main}
-                              />
-                            ))}
-                          </Bar>
+                            fill={theme.palette.info.main}
+                          />
+                        
                         </BarChart>
                       </ResponsiveContainer>
                     </Box>
@@ -1308,104 +1243,43 @@ const ComparisonPage = () => {
                             {item.label}
                           </TableCell>
                         ))}
-                        {hasManual && hasGenetic && (
-                          <TableCell align="right">
-                            Genetic Gain
-                          </TableCell>
-                        )}
-                        {hasManual && hasStandard && (
-                          <TableCell align="right">
-                            Grid Algorithm Gain
-                          </TableCell>
-                        )}
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       <TableRow hover>
-                        <TableCell>Total Principal Paid</TableCell>
+                        <TableCell>Institution Payment</TableCell>
                         {comparisonResults.map((item, index) => (
                           <TableCell key={index} align="right">
                             {formatCurrency(item.result.total_principal_paid || 0)}
                           </TableCell>
                         ))}
-                        {hasManual && hasGenetic && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.geneticResults.total_principal_paid,
-                              comparisonData.manualResults.total_principal_paid
-                            ))}
-                          </TableCell>
-                        )}
-                        {hasManual && hasStandard && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.standardResults.total_principal_paid,
-                              comparisonData.manualResults.total_principal_paid
-                            ))}
-                          </TableCell>
-                        )}
                       </TableRow>
+                      
                       <TableRow hover>
-                        <TableCell>Total Loan Principal</TableCell>
+                        <TableCell>Total Receivable</TableCell>
                         {comparisonResults.map((item, index) => (
                           <TableCell key={index} align="right">
                             {formatCurrency(item.result.total_loan_principal || 0)}
                           </TableCell>
                         ))}
-                        {hasManual && hasGenetic && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.geneticResults.total_loan_principal,
-                              comparisonData.manualResults.total_loan_principal
-                            ))}
-                          </TableCell>
-                        )}
-                        {hasManual && hasStandard && (
-                          <TableCell align="right">
-                            {formatDifference(calculateDifference(
-                              comparisonData.standardResults.total_loan_principal,
-                              comparisonData.manualResults.total_loan_principal
-                            ))}
-                          </TableCell>
-                        )}
                       </TableRow>
+                      
                       <TableRow sx={{ 
                         "& td": { 
                           fontWeight: 'medium', 
                           backgroundColor: alpha(theme.palette.info.main, 0.1) 
                         } 
                       }}>
-                        <TableCell>Financing Result</TableCell>
+                        <TableCell>Financing Cost</TableCell>
                         {comparisonResults.map((item, index) => (
                           <TableCell 
                             key={index} 
                             align="right"
-                            sx={{ 
-                              color: (item.result.financing_cost || 0) > 0 
-                                ? 'success.main' 
-                                : 'error.main' 
-                            }}
+                            sx={{ color: theme.palette.info.main }}
                           >
-                            {(item.result.financing_cost || 0) > 0 ? "Profit: " : "Loss: "}
                             {formatCurrency(Math.abs(item.result.financing_cost || 0))}
                           </TableCell>
                         ))}
-                        {hasManual && hasGenetic && (
-                          <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                            {formatCurrency(Math.abs(
-                              (comparisonData.geneticResults.financing_cost || 0) - 
-                              (comparisonData.manualResults.financing_cost || 0)
-                            ))}
-                          </TableCell>
-                        )}
-                        {hasManual && hasStandard && (
-                          <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                            {formatCurrency(Math.abs(
-                              (comparisonData.standardResults.financing_cost || 0) - 
-                              (comparisonData.manualResults.financing_cost || 0)
-                            ))}
-                          </TableCell>
-                        )}
                       </TableRow>
                     </TableBody>
                   </Table>
@@ -1430,11 +1304,11 @@ const ComparisonPage = () => {
                 }}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-                  <Typography variant="h6" color="success.main" fontWeight="medium">
-                    Buffer Analysis
+                  <Typography variant="h6" color="primary.main" fontWeight="medium">
+                    Tranche Performance Analysis
                   </Typography>
                   <Tooltip title="Analyzes the minimum buffer values across tranches">
-                    <IconButton size="small">
+                    <IconButton size="small" aria-label="Information about Buffer Analysis">
                       <InfoOutlinedIcon fontSize="small" color="info" />
                     </IconButton>
                   </Tooltip>
@@ -1445,7 +1319,7 @@ const ComparisonPage = () => {
                     severity="info" 
                     sx={{ mb: 2, bgcolor: alpha(theme.palette.info.main, 0.1) }}
                   >
-                    Minimum buffer requirement is 5.0%. Values below this threshold may cause cash flow issues.
+                    This analysis provides a detailed breakdown of tranche performance across different calculation methods.
                   </Alert>
                 </Box>
                 
@@ -1471,18 +1345,16 @@ const ComparisonPage = () => {
                       />
                       <ReferenceLine 
                         y={5} 
-                        label={{ value: "Min Requirement", fill: theme.palette.text.secondary }}
-                        stroke={theme.palette.error.main} 
+                        label={{ value: "Optimal Level", fill: theme.palette.text.secondary }}
+                        stroke={theme.palette.info.main} 
                         strokeDasharray="3 3" 
                       />
-                      <Bar dataKey="minBuffer" name="Minimum Buffer" radius={[4, 4, 0, 0]}>
-                        {bufferData.map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
-                            fill={entry.minBuffer >= 5.0 ? theme.palette.success.main : theme.palette.error.main} 
-                          />
-                        ))}
-                      </Bar>
+                      <Bar 
+                        dataKey="minBuffer" 
+                        name="Buffer Ratio" 
+                        radius={[4, 4, 0, 0]} 
+                        fill={theme.palette.primary.main}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </Box>
@@ -1490,7 +1362,7 @@ const ComparisonPage = () => {
                 <Divider sx={{ my: 4 }} />
                 
                 <Typography variant="h6" gutterBottom fontWeight="medium">
-                  Tranche-Level Buffer Details
+                  Tranche-Level Details
                 </Typography>
                 
                 {comparisonResults.map((resultItem, resultIndex) => (
@@ -1514,37 +1386,62 @@ const ComparisonPage = () => {
                       {resultItem.label}
                     </Typography>
                     
+                    <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                      {/* Interest rate information is now displayed in the tranche table */}
+                    </Box>
+                    
                     {resultItem.result.tranche_results ? (
                       <TableContainer sx={{ mb: 2 }}>
                         <Table size="small">
                           <TableHead>
                             <TableRow>
-                              <TableCell>Tranche</TableCell>
-                              <TableCell align="right">Maturity (Days)</TableCell>
-                              <TableCell align="right">Total Payment</TableCell>
-                              <TableCell align="right">Buffer Ratio (%)</TableCell>
-                              <TableCell align="right">Status</TableCell>
+                              <TableCell sx={{ fontWeight: 600 }}>Tranche</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 600 }}>Maturity (Days)</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 600 }}>Total Payment</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 600 }}>Principal</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 600 }}>Interest/Yield</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 600 }}>Annual Rate (%)</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 600 }}>Buffer Ratio (%)</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
                             {resultItem.result.tranche_results
-                              .filter(tranche => tranche["Is Class A"])
-                              .map((tranche, index) => (
-                                <TableRow key={index} hover>
-                                  <TableCell>{tranche["Tranche"]}</TableCell>
-                                  <TableCell align="right">{tranche["Maturity Days"]}</TableCell>
-                                  <TableCell align="right">{formatCurrency(tranche["Total Payment"])}</TableCell>
-                                  <TableCell align="right">{formatPercent(tranche["Buffer Cash Flow Ratio (%)"])}</TableCell>
-                                  <TableCell align="right">
-                                    <Chip 
-                                      size="small" 
-                                      label={tranche["Buffer Cash Flow Ratio (%)"] >= 5.0 ? "Valid" : "Low"} 
-                                      color={tranche["Buffer Cash Flow Ratio (%)"] >= 5.0 ? "success" : "error"} 
-                                      sx={{ fontWeight: 500 }}
-                                    />
-                                  </TableCell>
-                                </TableRow>
-                              ))}
+                              .map((tranche, index) => {
+                                // Calculate annual interest rate for each tranche
+                                const principal = tranche["Principal"] || 0;
+                                const interestOrCoupon = tranche["Is Class A"] 
+                                  ? (tranche["Interest"] || 0) 
+                                  : (tranche["Coupon Payment"] || 0);
+                                const maturityDays = tranche["Maturity Days"] || 365;
+                                
+                                // Calculate annual rate
+                                const annualRate = principal > 0 
+                                  ? (interestOrCoupon / principal) * (365 / maturityDays) * 100 
+                                  : 0;
+                                  
+                                return (
+                                  <TableRow key={index} hover>
+                                    <TableCell>
+                                      {tranche["Tranche"].replace("Class A", "Senior ").replace("Class B", "Subordinated ")}
+                                    </TableCell>
+                                    <TableCell align="right">{tranche["Maturity Days"]}</TableCell>
+                                    <TableCell align="right">{formatCurrency(tranche["Total Payment"])}</TableCell>
+                                    <TableCell align="right">{formatCurrency(principal)}</TableCell>
+                                    <TableCell align="right">{formatCurrency(interestOrCoupon)}</TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: 'medium', color: 'info.main' }}>
+                                      {formatPercent(annualRate)}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      <Chip 
+                                        size="small" 
+                                        label={formatPercent(tranche["Buffer Cash Flow Ratio (%)"])}
+                                        color={tranche["Buffer Cash Flow Ratio (%)"] >= 5.0 ? "info" : "primary"} 
+                                        sx={{ fontWeight: 500 }}
+                                      />
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
                           </TableBody>
                         </Table>
                       </TableContainer>
@@ -1576,7 +1473,7 @@ const ComparisonPage = () => {
           <DialogTitle>Select Results to Compare</DialogTitle>
           <DialogContent>
             <DialogContentText>
-              Select up to 3 results to compare. Choose results of different types (Manual, Genetic, and Grid Algorithm) for the best comparison.
+              Select up to 3 results to compare. You can compare any combination of results, including multiple results of the same type.
             </DialogContentText>
             <List sx={{ mt: 2 }}>
               {savedResults.map((result) => (
@@ -1606,8 +1503,12 @@ const ComparisonPage = () => {
                     result.methodType === 'manual' ? 'error' :
                     result.methodType === 'genetic' ? 'success' : 'primary'
                   }
+                  inputProps={{
+                    'aria-labelledby': `checkbox-list-label-${result.id}`
+                  }}
                 />
                 <ListItemText 
+                  id={`checkbox-list-label-${result.id}`}
                   primary={
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <Typography variant="body1">{result.savedName}</Typography>
@@ -1630,10 +1531,10 @@ const ComparisonPage = () => {
                 <ListItemSecondaryAction>
                   <IconButton 
                     edge="end" 
-                    aria-label="delete"
+                    aria-label={`Delete ${result.savedName}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDeleteDialogOpen(result.id);
+                      handleDeleteDialogOpen(result.id, e);
                     }}
                   >
                     <DeleteIcon />

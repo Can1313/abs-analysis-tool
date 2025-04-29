@@ -1,4 +1,4 @@
-// frontend/src/components/calculation/TrancheAForm.js
+// src/components/calculation/TrancheAForm.js
 import React from 'react';
 import { 
   Box, 
@@ -11,14 +11,19 @@ import {
   TableHead, 
   TableRow,
   TextField,
-  IconButton
+  IconButton,
+  Tooltip,
+  alpha,
+  useTheme
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useData } from '../../contexts/DataContext';
 
 const TrancheAForm = () => {
   const { tranchesA, setTranchesA } = useData();
+  const theme = useTheme();
 
   const handleChange = (index, field, value) => {
     const newTranches = [...tranchesA];
@@ -44,11 +49,22 @@ const TrancheAForm = () => {
   };
 
   return (
-    <Paper sx={{ p: 3, mb: 3 }}>
+    <Paper sx={{ 
+      p: 3, 
+      mb: 3,
+      border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+      backgroundColor: alpha(theme.palette.primary.main, 0.03),
+      borderRadius: 2
+    }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6">
-          Class A Tranches
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Typography variant="h6" color="primary.main" fontWeight="medium">
+            Senior Tranches
+          </Typography>
+          <Tooltip title="Configure senior tranches of the receivables securitization. Senior tranches have higher payment priority and lower risk." sx={{ ml: 1 }}>
+            <InfoOutlinedIcon fontSize="small" color="primary" />
+          </Tooltip>
+        </Box>
         <IconButton 
           color="primary" 
           onClick={handleAddTranche}
@@ -57,6 +73,10 @@ const TrancheAForm = () => {
           <AddIcon />
         </IconButton>
       </Box>
+      
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Define the characteristics of each senior tranche including maturity, interest rates, and principal amounts.
+      </Typography>
       
       <TableContainer>
         <Table>
@@ -67,14 +87,14 @@ const TrancheAForm = () => {
               <TableCell>Base Rate (%)</TableCell>
               <TableCell>Spread (bps)</TableCell>
               <TableCell>Reinvest Rate (%)</TableCell>
-              <TableCell>Nominal (₺)</TableCell>
+              <TableCell>Nominal ($)</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {tranchesA.map((tranche, index) => (
               <TableRow key={index}>
-                <TableCell>{`A${index + 1}`}</TableCell>
+                <TableCell>{`Senior ${index + 1}`}</TableCell>
                 <TableCell>
                   <TextField
                     type="number"

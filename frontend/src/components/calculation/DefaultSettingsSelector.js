@@ -28,25 +28,25 @@ const DefaultSettingsSelector = () => {
 
   const settingsInfo = {
     previous: {
-      label: "Previous Model",
-      description: "February 13, 2025 start date, 4 Class A tranches",
+      label: "Option A",
+      description: "April 28, 2025 start date, 2 Class A tranches",
       icon: <RestoreIcon />,
       details: {
-        startDate: "13 February 2025",
-        classA: "4 tranches (61-274 days)",
-        trancheB: "300 days maturity",
+        startDate: "28 April 2025",
+        classA: "2 tranches (88-150 days)",
+        trancheB: "155 days maturity",
         classBPercentage: "Default calculation"
       },
     },
     new: {
-      label: "New Model",
-      description: "April 16, 2025 start date, 5 Class A tranches",
+      label: "Option B",
+      description: "April 28, 2025 start date, 2 Class A tranches",
       icon: <NewReleasesIcon />,
       details: {
-        startDate: "16 April 2025",
-        classA: "5 tranches (59-275 days)",
-        trancheB: "346 days maturity",
-        classBPercentage: "Fixed 10% of total"
+        startDate: "28 April 2025",
+        classA: "1 tranches (150 days)",
+        trancheB: "155 days maturity",
+        classBPercentage: "Fixed 5% of total"
       },
     },
   };

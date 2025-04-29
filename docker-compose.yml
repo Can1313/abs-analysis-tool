@@ -1,3 +1,6 @@
+# docker-compose.yml
+version: '3'
+
 services:
   backend:
     build: ./backend
@@ -9,15 +12,16 @@ services:
       - ENVIRONMENT=development
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  frontend:
-    build: 
-      context: ./frontend
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000/api
-    depends_on:
-      - backend
+  # Frontend service is commented out since we'll run it locally
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - ./frontend:/app
+  #     - /app/node_modules
+  #   environment:
+  #     - REACT_APP_API_URL=http://localhost:8000/api
+  #   depends_on:
+  #     - backend

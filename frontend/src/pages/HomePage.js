@@ -1,4 +1,4 @@
-// frontend/src/pages/HomePage.js
+// src/pages/HomePage.js
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { 
@@ -19,10 +19,13 @@ import CalculateIcon from '@mui/icons-material/Calculate';
 import OptimizeIcon from '@mui/icons-material/Speed';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import BusinessIcon from '@mui/icons-material/Business';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import CompareIcon from '@mui/icons-material/Compare';
-import NewReleasesIcon from '@mui/icons-material/NewReleases';
 import RestoreIcon from '@mui/icons-material/Restore';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import BusinessIcon from '@mui/icons-material/Business';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import { useData } from '../contexts/DataContext';
 import FileUploader from '../components/FileUploader';
 
@@ -30,34 +33,19 @@ const HomePage = () => {
   const { cashFlowData, selectedDefaults, setSelectedDefaults } = useData();
   const theme = useTheme();
 
-  // Define the default settings info
-  const defaultSettingsInfo = {
-    previous: {
-      label: "Previous Model",
-      description: "February 13, 2025 start date with 4 Class A tranches (61-274 days)",
-      icon: <RestoreIcon sx={{ color: theme.palette.primary.main }} />,
-      color: theme.palette.primary.main,
-      details: [
-        { label: "Start Date", value: "13 February 2025" },
-        { label: "Class A Tranches", value: "4" },
-        { label: "Class A Maturity Range", value: "61-274 days" },
-        { label: "Class B Maturity", value: "300 days" },
-        { label: "Class B Percentage", value: "Default calculation" },
-      ]
-    },
-    new: {
-      label: "New Model",
-      description: "April 16, 2025 start date with 5 Class A tranches (59-275 days)",
-      icon: <NewReleasesIcon sx={{ color: theme.palette.secondary.main }} />,
-      color: theme.palette.secondary.main,
-      details: [
-        { label: "Start Date", value: "16 April 2025" },
-        { label: "Class A Tranches", value: "5" },
-        { label: "Class A Maturity Range", value: "59-275 days" },
-        { label: "Class B Maturity", value: "346 days" },
-        { label: "Class B Percentage", value: "Fixed 10% of total", highlight: true },
-      ]
-    }
+  // Define just one default settings info
+  const modelInfo = {
+    label: "Standard Model",
+    description: "February 13, 2025 start date with 4 senior tranches (61-274 days)",
+    icon: <RestoreIcon sx={{ color: theme.palette.primary.main }} />,
+    color: theme.palette.primary.main,
+    details: [
+      { label: "Start Date", value: "13 February 2025" },
+      { label: "Senior Tranches", value: "4" },
+      { label: "Senior Maturity Range", value: "61-274 days" },
+      { label: "Subordinated Maturity", value: "300 days" },
+      { label: "Subordinated Percentage", value: "Default calculation" },
+    ]
   };
 
   return (
@@ -74,12 +62,12 @@ const HomePage = () => {
           boxShadow: `0 8px 24px ${alpha(theme.palette.primary.dark, 0.4)}`,
         }}
       >
-        <BusinessIcon sx={{ fontSize: 56, mb: 2, color: alpha('#fff', 0.9) }} />
+        <ReceiptLongIcon sx={{ fontSize: 56, mb: 2, color: alpha('#fff', 0.9) }} />
         <Typography variant="h3" component="h1" gutterBottom fontWeight="500">
-          Advanced ABS Design
+          Receivables Securitization Platform
         </Typography>
         <Typography variant="h6" sx={{ mb: 3, fontWeight: 400, opacity: 0.9 }}>
-          Professional cash flow analysis and optimization for asset-backed securities
+          Professional cash flow analysis and optimization for commercial receivables securitization
         </Typography>
         <Divider sx={{ 
           width: '100px', 
@@ -88,9 +76,33 @@ const HomePage = () => {
           borderColor: 'rgba(255,255,255,0.25)' 
         }} />
         <Typography variant="body1" sx={{ maxWidth: '800px', mx: 'auto', opacity: 0.9 }}>
-          Upload your Excel data file to begin analyzing your cash flows, 
-          calculate securitization structures, and optimize your tranches for maximum returns.
+          Upload your receivables data to analyze cash flows, 
+          calculate securitization structures, and optimize your tranches for maximum returns and risk protection.
         </Typography>
+        
+        {/* Key Features Badge Section */}
+        <Box sx={{ mt: 4, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 2 }}>
+          <Chip 
+            icon={<BusinessIcon />} 
+            label="Commercial Receivables" 
+            sx={{ bgcolor: alpha('#fff', 0.15), color: '#fff', fontWeight: 500, px: 1 }}
+          />
+          <Chip 
+            icon={<AccountBalanceIcon />} 
+            label="Securitization" 
+            sx={{ bgcolor: alpha('#fff', 0.15), color: '#fff', fontWeight: 500, px: 1 }}
+          />
+          <Chip 
+            icon={<PaymentsIcon />} 
+            label="Cash Flow Analytics" 
+            sx={{ bgcolor: alpha('#fff', 0.15), color: '#fff', fontWeight: 500, px: 1 }}
+          />
+          <Chip 
+            icon={<AssignmentIcon />} 
+            label="Risk Management" 
+            sx={{ bgcolor: alpha('#fff', 0.15), color: '#fff', fontWeight: 500, px: 1 }}
+          />
+        </Box>
       </Box>
 
       <Grid container spacing={4}>
@@ -109,7 +121,7 @@ const HomePage = () => {
             }}
           >
             <Typography variant="h5" gutterBottom fontWeight="medium" sx={{ mb: 3 }}>
-              Upload Your Cash Flow Data
+              Upload Your Receivables Data
             </Typography>
             <FileUploader />
           </Paper>
@@ -117,7 +129,7 @@ const HomePage = () => {
 
         {cashFlowData && (
           <>
-            {/* Default Settings Selection */}
+            {/* Single Securitization Model */}
             <Grid item xs={12}>
               <Paper
                 elevation={2}
@@ -130,113 +142,104 @@ const HomePage = () => {
                 }}
               >
                 <Typography variant="h5" gutterBottom fontWeight="medium" sx={{ mb: 3, color: theme.palette.info.main }}>
-                  Available Default Settings
+                  Securitization Structure Model
                 </Typography>
                 
                 <Typography variant="body1" paragraph sx={{ color: 'text.secondary' }}>
-                  Choose from our available default setting profiles to start your calculations.
-                  Each profile contains pre-configured tranches with optimized parameters for different scenarios.
+                  Our pre-configured securitization structure model is optimized for your receivables profile.
                 </Typography>
                 
-                <Grid container spacing={3}>
-                  {Object.entries(defaultSettingsInfo).map(([key, info]) => (
-                    <Grid item xs={12} md={6} key={key}>
-                      <Card 
-                        elevation={2} 
-                        sx={{
-                          height: '100%',
-                          borderRadius: 2,
-                          transition: 'all 0.3s',
-                          border: `1px solid ${alpha(info.color, selectedDefaults === key ? 0.6 : 0.2)}`,
-                          backgroundColor: alpha(info.color, selectedDefaults === key ? 0.05 : 0.02),
-                          '&:hover': {
-                            boxShadow: `0 8px 20px ${alpha(info.color, 0.2)}`,
-                            transform: 'translateY(-4px)',
-                          }
-                        }}
-                        onClick={() => setSelectedDefaults(key)}
-                      >
-                        <CardContent sx={{ p: 3 }}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {info.icon}
-                              <Typography variant="h6" fontWeight="medium" color={info.color}>
-                                {info.label}
-                              </Typography>
-                            </Box>
-                            {selectedDefaults === key && (
-                              <Chip 
-                                label="Selected" 
-                                size="small" 
-                                color="primary" 
-                                sx={{ 
-                                  backgroundColor: info.color,
-                                  fontWeight: 'medium'
-                                }} 
-                              />
-                            )}
-                          </Box>
-                          
-                          <Typography variant="body2" color="text.secondary" paragraph>
-                            {info.description}
-                          </Typography>
-                          
-                          <Divider sx={{ my: 2 }} />
-                          
-                          <Grid container spacing={1}>
-                            {info.details.map((detail, index) => (
-                              <Grid item xs={6} key={index}>
-                                <Box>
-                                  <Typography variant="caption" color="text.secondary">
-                                    {detail.label}
-                                  </Typography>
-                                  <Typography 
-                                    variant="body2" 
-                                    fontWeight="medium"
-                                    color={detail.highlight ? info.color : "inherit"}
-                                    sx={detail.highlight ? {
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      '&::before': {
-                                        content: '""',
-                                        display: 'inline-block',
-                                        width: 8,
-                                        height: 8,
-                                        bgcolor: info.color,
-                                        borderRadius: '50%',
-                                        mr: 1
-                                      }
-                                    } : {}}
-                                  >
-                                    {detail.value}
-                                  </Typography>
-                                </Box>
-                              </Grid>
-                            ))}
-                          </Grid>
-                          
-                          <Box sx={{ mt: 3, textAlign: 'center' }}>
-                            <Button
-                              variant={selectedDefaults === key ? "contained" : "outlined"}
-                              color={selectedDefaults === key ? "primary" : "secondary"}
-                              component={Link}
-                              to="/calculation"
-                              size="medium"
-                              endIcon={<ArrowForwardIcon />}
-                              sx={{ 
-                                borderRadius: 2,
-                                borderColor: info.color,
-                                backgroundColor: selectedDefaults === key ? info.color : 'transparent',
-                              }}
+                <Card 
+                  elevation={2} 
+                  sx={{
+                    maxWidth: '600px',
+                    mx: 'auto',
+                    borderRadius: 2,
+                    transition: 'all 0.3s',
+                    border: `1px solid ${alpha(modelInfo.color, 0.6)}`,
+                    backgroundColor: alpha(modelInfo.color, 0.05),
+                    '&:hover': {
+                      boxShadow: `0 8px 20px ${alpha(modelInfo.color, 0.2)}`,
+                      transform: 'translateY(-4px)',
+                    }
+                  }}
+                >
+                  <CardContent sx={{ p: 3 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {modelInfo.icon}
+                        <Typography variant="h6" fontWeight="medium" color={modelInfo.color}>
+                          {modelInfo.label}
+                        </Typography>
+                      </Box>
+                      <Chip 
+                        label="Selected" 
+                        size="small" 
+                        color="primary" 
+                        sx={{ 
+                          backgroundColor: modelInfo.color,
+                          fontWeight: 'medium'
+                        }} 
+                      />
+                    </Box>
+                    
+                    <Typography variant="body2" color="text.secondary" paragraph>
+                      {modelInfo.description}
+                    </Typography>
+                    
+                    <Divider sx={{ my: 2 }} />
+                    
+                    <Grid container spacing={1}>
+                      {modelInfo.details.map((detail, index) => (
+                        <Grid item xs={6} key={index}>
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">
+                              {detail.label}
+                            </Typography>
+                            <Typography 
+                              variant="body2" 
+                              fontWeight="medium"
+                              color={detail.highlight ? modelInfo.color : "inherit"}
+                              sx={detail.highlight ? {
+                                display: 'flex',
+                                alignItems: 'center',
+                                '&::before': {
+                                  content: '""',
+                                  display: 'inline-block',
+                                  width: 8,
+                                  height: 8,
+                                  bgcolor: modelInfo.color,
+                                  borderRadius: '50%',
+                                  mr: 1
+                                }
+                              } : {}}
                             >
-                              {selectedDefaults === key ? "Continue with Selection" : "Use This Configuration"}
-                            </Button>
+                              {detail.value}
+                            </Typography>
                           </Box>
-                        </CardContent>
-                      </Card>
+                        </Grid>
+                      ))}
                     </Grid>
-                  ))}
-                </Grid>
+                    
+                    <Box sx={{ mt: 3, textAlign: 'center' }}>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        component={Link}
+                        to="/calculation"
+                        size="medium"
+                        endIcon={<ArrowForwardIcon />}
+                        sx={{ 
+                          borderRadius: 2,
+                          borderColor: modelInfo.color,
+                          backgroundColor: modelInfo.color,
+                        }}
+                      >
+                        Continue with Model
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
               </Paper>
             </Grid>
 
@@ -274,14 +277,14 @@ const HomePage = () => {
                     <CalculateIcon sx={{ fontSize: 30, color: theme.palette.common.white }} />
                   </Box>
                   <Typography variant="h5" fontWeight="medium" color="primary.main">
-                    Calculate Results
+                    Receivables Analysis
                   </Typography>
                 </Box>
                 
                 <Typography paragraph sx={{ color: 'text.secondary', mb: 3 }}>
                   Configure tranche parameters and calculate detailed results for your
-                  ABS structure. Analyze cash flows, interest rates, and buffer ratios to
-                  ensure your securitization meets all requirements.
+                  receivables-backed securitization. Analyze cash flows, interest rates, and buffer ratios 
+                  to ensure your structure meets all requirements.
                 </Typography>
                 
                 <Box sx={{ mt: 'auto', textAlign: 'center' }}>
@@ -306,7 +309,7 @@ const HomePage = () => {
                       }
                     }}
                   >
-                    Start Calculation
+                    Analyze Receivables
                   </Button>
                 </Box>
               </Paper>
@@ -346,12 +349,12 @@ const HomePage = () => {
                     <OptimizeIcon sx={{ fontSize: 30, color: theme.palette.common.white }} />
                   </Box>
                   <Typography variant="h5" fontWeight="medium" color="secondary.main">
-                    Optimize Structure
+                    Portfolio Optimizer
                   </Typography>
                 </Box>
                 
                 <Typography paragraph sx={{ color: 'text.secondary', mb: 3 }}>
-                  Find the optimal ABS structure to maximize total principal
+                  Optimize your receivables securitization structure to maximize returns
                   while maintaining minimum buffer requirements. Our advanced optimization
                   algorithms explore multiple strategies to find the best tranche configuration.
                 </Typography>
@@ -378,7 +381,7 @@ const HomePage = () => {
                       }
                     }}
                   >
-                    Run Optimization
+                    Optimize Portfolio
                   </Button>
                 </Box>
               </Paper>
@@ -420,13 +423,13 @@ const HomePage = () => {
                         <CompareIcon sx={{ fontSize: 30, color: theme.palette.common.white }} />
                       </Box>
                       <Typography variant="h5" fontWeight="medium" color="info.main">
-                        Compare Results
+                        Compare Structures
                       </Typography>
                     </Box>
                     
                     <Typography paragraph sx={{ color: 'text.secondary' }}>
                       Compare different optimization strategies and manual configurations side by side. 
-                      Analyze the differences in principal distribution, interest rates, and buffer ratios 
+                      Analyze differences in receivables distribution, interest rates, and buffer ratios 
                       to make informed decisions about your securitization structure.
                     </Typography>
                   </Grid>

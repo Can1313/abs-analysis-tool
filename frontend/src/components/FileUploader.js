@@ -233,7 +233,7 @@ const FileUploader = () => {
               </Box>
               
               <Box>
-                <Typography variant="body2" color="text.secondary">Total Principal</Typography>
+                <Typography variant="body2" color="text.secondary">Total Receivables</Typography>
                 <Typography variant="h6">{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(cashFlowData.total_principal)}</Typography>
               </Box>
               

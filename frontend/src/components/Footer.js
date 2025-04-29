@@ -1,4 +1,4 @@
-// frontend/src/components/Footer.js
+// src/components/Footer.js
 import React from 'react';
 import { 
   Box, 
@@ -9,7 +9,7 @@ import {
   useTheme,
   alpha
 } from '@mui/material';
-import BusinessIcon from '@mui/icons-material/Business';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 
 const Footer = () => {
   const theme = useTheme();
@@ -28,16 +28,16 @@ const Footer = () => {
       <Container maxWidth="lg">
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <BusinessIcon sx={{ fontSize: 24, color: theme.palette.primary.main, mr: 1 }} />
+            <ReceiptLongIcon sx={{ fontSize: 24, color: theme.palette.primary.main, mr: 1 }} />
             <Typography variant="h6" color="primary.main" fontWeight="medium">
-              Advanced ABS Design
+              Receivables Securitization Platform
             </Typography>
           </Box>
           
           <Divider sx={{ width: '40px', mb: 2, borderColor: alpha(theme.palette.primary.main, 0.3) }} />
           
           <Typography variant="body2" color="text.secondary" align="center">
-            © {currentYear} Advanced ABS Design | All Rights Reserved
+            © {currentYear} Receivables Securitization Platform | All Rights Reserved
           </Typography>
           
           <Box sx={{ mt: 2, display: 'flex', gap: 3 }}>

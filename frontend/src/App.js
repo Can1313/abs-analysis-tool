@@ -4,7 +4,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 
-import TopBar from "./components/TopBar";
+import AppLayout from "./components/AppLayout";
 import Footer from "./components/Footer";
 import HomePage from "./pages/HomePage";
 import CalculationPage from "./pages/CalculationPage";
@@ -12,6 +12,8 @@ import OptimizationPage from "./pages/OptimizationPage";
 import StressTestingPage from "./pages/StressTestingPage";
 import { DataProvider } from "./contexts/DataContext";
 import ComparisonPage from "./pages/ComparisonPage";
+import ReceivablesAnalysis from "./pages/ReceivablesAnalysis";
+import ReportsPage from "./pages/ReportsPage"; // Import the new ReportsPage
 
 // Create a dark navy theme
 const theme = createTheme({
@@ -168,8 +170,8 @@ const theme = createTheme({
             width: 8,
           },
           "&::-webkit-scrollbar-thumb, & *::-webkit-scrollbar-thumb": {
-            borderRadius: 8,
             backgroundColor: "#6b6b6b",
+            borderRadius: 8,
             minHeight: 24,
           },
           "&::-webkit-scrollbar-thumb:focus, & *::-webkit-scrollbar-thumb:focus": {
@@ -184,6 +186,22 @@ const theme = createTheme({
         },
       },
     },
+    MuiDrawer: {
+      styleOverrides: {
+        paper: {
+          backgroundImage: 'none',
+        },
+      },
+    },
+    MuiListItemButton: {
+      styleOverrides: {
+        root: {
+          '&.Mui-selected': {
+            color: '#4e7bea',
+          },
+        },
+      },
+    },
   },
 });
 
@@ -193,15 +211,18 @@ function App() {
       <CssBaseline />
       <DataProvider>
         <Router>
-          <TopBar />
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/calculation" element={<CalculationPage />} />
-            <Route path="/optimization" element={<OptimizationPage />} />
-            <Route path="/comparison" element={<ComparisonPage />} />
-            <Route path="/stress-testing" element={<StressTestingPage />} />
-          </Routes>
-          <Footer />
+          <AppLayout>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/calculation" element={<CalculationPage />} />
+              <Route path="/optimization" element={<OptimizationPage />} />
+              <Route path="/comparison" element={<ComparisonPage />} />
+              <Route path="/stress-testing" element={<StressTestingPage />} />
+              <Route path="/receivables-analysis" element={<ReceivablesAnalysis />} />
+              <Route path="/reports" element={<ReportsPage />} /> {/* Add the new route */}
+            </Routes>
+            <Footer />
+          </AppLayout>
         </Router>
       </DataProvider>
     </ThemeProvider>
