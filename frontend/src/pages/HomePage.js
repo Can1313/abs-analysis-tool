@@ -15,29 +15,29 @@ import {
   CardContent,
   Chip
 } from '@mui/material';
-import CalculateIcon from '@mui/icons-material/Calculate';
-import OptimizeIcon from '@mui/icons-material/Speed';
+import AnalyticsIcon from '@mui/icons-material/Calculate';
+import OptimizationIcon from '@mui/icons-material/Speed';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
-import CompareIcon from '@mui/icons-material/Compare';
-import RestoreIcon from '@mui/icons-material/Restore';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import BusinessIcon from '@mui/icons-material/Business';
-import PaymentsIcon from '@mui/icons-material/Payments';
-import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import NavigateNextIcon from '@mui/icons-material/ArrowForward';
+import SecurityIcon from '@mui/icons-material/ReceiptLong';
+import ComparisonIcon from '@mui/icons-material/Compare';
+import DefaultModelIcon from '@mui/icons-material/Restore';
+import AnalysisIcon from '@mui/icons-material/Assignment';
+import CorporateIcon from '@mui/icons-material/Business';
+import FinancialIcon from '@mui/icons-material/Payments';
+import InstitutionalIcon from '@mui/icons-material/AccountBalance';
 import { useData } from '../contexts/DataContext';
 import FileUploader from '../components/FileUploader';
 
-const HomePage = () => {
+const StructuredProductDesignPage = () => {
   const { cashFlowData, selectedDefaults, setSelectedDefaults } = useData();
   const theme = useTheme();
 
   // Define just one default settings info
-  const modelInfo = {
+  const securitizationModelConfig = {
     label: "Standard Model",
     description: "February 13, 2025 start date with 4 senior tranches (61-274 days)",
-    icon: <RestoreIcon sx={{ color: theme.palette.primary.main }} />,
+    icon: <DefaultModelIcon sx={{ color: theme.palette.primary.main }} />,
     color: theme.palette.primary.main,
     details: [
       { label: "Start Date", value: "13 February 2025" },
@@ -62,12 +62,12 @@ const HomePage = () => {
           boxShadow: `0 8px 24px ${alpha(theme.palette.primary.dark, 0.4)}`,
         }}
       >
-        <ReceiptLongIcon sx={{ fontSize: 56, mb: 2, color: alpha('#fff', 0.9) }} />
-        <Typography variant="h3" component="h1" gutterBottom fontWeight="500">
-          Receivables Securitization Platform
+        <SecurityIcon sx={{ fontSize: 56, mb: 2, color: alpha('#fff', 0.9) }} />
+                  <Typography variant="h3" component="h1" gutterBottom fontWeight="500">
+          Structured Product Design
         </Typography>
         <Typography variant="h6" sx={{ mb: 3, fontWeight: 400, opacity: 0.9 }}>
-          Professional cash flow analysis and optimization for commercial receivables securitization
+          Professional cash flow analysis and optimization for Assets Securitization
         </Typography>
         <Divider sx={{ 
           width: '100px', 
@@ -76,29 +76,28 @@ const HomePage = () => {
           borderColor: 'rgba(255,255,255,0.25)' 
         }} />
         <Typography variant="body1" sx={{ maxWidth: '800px', mx: 'auto', opacity: 0.9 }}>
-          Upload your receivables data to analyze cash flows, 
-          calculate securitization structures, and optimize your tranches for maximum returns and risk protection.
+          Upload your cash flow data to calculate securitization structures, and optimize your tranches for maximum returns and risk protection.
         </Typography>
         
         {/* Key Features Badge Section */}
         <Box sx={{ mt: 4, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 2 }}>
           <Chip 
-            icon={<BusinessIcon />} 
-            label="Commercial Receivables" 
+            icon={<CorporateIcon />} 
+            label="Assets" 
             sx={{ bgcolor: alpha('#fff', 0.15), color: '#fff', fontWeight: 500, px: 1 }}
           />
           <Chip 
-            icon={<AccountBalanceIcon />} 
+            icon={<InstitutionalIcon />} 
             label="Securitization" 
             sx={{ bgcolor: alpha('#fff', 0.15), color: '#fff', fontWeight: 500, px: 1 }}
           />
           <Chip 
-            icon={<PaymentsIcon />} 
+            icon={<FinancialIcon />} 
             label="Cash Flow Analytics" 
             sx={{ bgcolor: alpha('#fff', 0.15), color: '#fff', fontWeight: 500, px: 1 }}
           />
           <Chip 
-            icon={<AssignmentIcon />} 
+            icon={<AnalysisIcon />} 
             label="Risk Management" 
             sx={{ bgcolor: alpha('#fff', 0.15), color: '#fff', fontWeight: 500, px: 1 }}
           />
@@ -121,7 +120,7 @@ const HomePage = () => {
             }}
           >
             <Typography variant="h5" gutterBottom fontWeight="medium" sx={{ mb: 3 }}>
-              Upload Your Receivables Data
+              Upload Your Cash Flow Data
             </Typography>
             <FileUploader />
           </Paper>
@@ -146,7 +145,7 @@ const HomePage = () => {
                 </Typography>
                 
                 <Typography variant="body1" paragraph sx={{ color: 'text.secondary' }}>
-                  Our pre-configured securitization structure model is optimized for your receivables profile.
+                  Our pre-configured securitization structure model is optimized for your retail credit data.
                 </Typography>
                 
                 <Card 
@@ -156,10 +155,10 @@ const HomePage = () => {
                     mx: 'auto',
                     borderRadius: 2,
                     transition: 'all 0.3s',
-                    border: `1px solid ${alpha(modelInfo.color, 0.6)}`,
-                    backgroundColor: alpha(modelInfo.color, 0.05),
+                    border: `1px solid ${alpha(securitizationModelConfig.color, 0.6)}`,
+                    backgroundColor: alpha(securitizationModelConfig.color, 0.05),
                     '&:hover': {
-                      boxShadow: `0 8px 20px ${alpha(modelInfo.color, 0.2)}`,
+                      boxShadow: `0 8px 20px ${alpha(securitizationModelConfig.color, 0.2)}`,
                       transform: 'translateY(-4px)',
                     }
                   }}
@@ -167,9 +166,9 @@ const HomePage = () => {
                   <CardContent sx={{ p: 3 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {modelInfo.icon}
-                        <Typography variant="h6" fontWeight="medium" color={modelInfo.color}>
-                          {modelInfo.label}
+                        {securitizationModelConfig.icon}
+                        <Typography variant="h6" fontWeight="medium" color={securitizationModelConfig.color}>
+                          {securitizationModelConfig.label}
                         </Typography>
                       </Box>
                       <Chip 
@@ -177,20 +176,20 @@ const HomePage = () => {
                         size="small" 
                         color="primary" 
                         sx={{ 
-                          backgroundColor: modelInfo.color,
+                          backgroundColor: securitizationModelConfig.color,
                           fontWeight: 'medium'
                         }} 
                       />
                     </Box>
                     
                     <Typography variant="body2" color="text.secondary" paragraph>
-                      {modelInfo.description}
+                      {securitizationModelConfig.description}
                     </Typography>
                     
                     <Divider sx={{ my: 2 }} />
                     
                     <Grid container spacing={1}>
-                      {modelInfo.details.map((detail, index) => (
+                      {securitizationModelConfig.details.map((detail, index) => (
                         <Grid item xs={6} key={index}>
                           <Box>
                             <Typography variant="caption" color="text.secondary">
@@ -199,7 +198,7 @@ const HomePage = () => {
                             <Typography 
                               variant="body2" 
                               fontWeight="medium"
-                              color={detail.highlight ? modelInfo.color : "inherit"}
+                              color={detail.highlight ? securitizationModelConfig.color : "inherit"}
                               sx={detail.highlight ? {
                                 display: 'flex',
                                 alignItems: 'center',
@@ -208,7 +207,7 @@ const HomePage = () => {
                                   display: 'inline-block',
                                   width: 8,
                                   height: 8,
-                                  bgcolor: modelInfo.color,
+                                  bgcolor: securitizationModelConfig.color,
                                   borderRadius: '50%',
                                   mr: 1
                                 }
@@ -228,11 +227,11 @@ const HomePage = () => {
                         component={Link}
                         to="/calculation"
                         size="medium"
-                        endIcon={<ArrowForwardIcon />}
+                        endIcon={<NavigateNextIcon />}
                         sx={{ 
                           borderRadius: 2,
-                          borderColor: modelInfo.color,
-                          backgroundColor: modelInfo.color,
+                          borderColor: securitizationModelConfig.color,
+                          backgroundColor: securitizationModelConfig.color,
                         }}
                       >
                         Continue with Model
@@ -274,16 +273,16 @@ const HomePage = () => {
                     mr: 2,
                     boxShadow: `0 4px 8px ${alpha(theme.palette.primary.main, 0.4)}`
                   }}>
-                    <CalculateIcon sx={{ fontSize: 30, color: theme.palette.common.white }} />
+                    <AnalyticsIcon sx={{ fontSize: 30, color: theme.palette.common.white }} />
                   </Box>
                   <Typography variant="h5" fontWeight="medium" color="primary.main">
-                    Receivables Analysis
+                    Structure
                   </Typography>
                 </Box>
                 
                 <Typography paragraph sx={{ color: 'text.secondary', mb: 3 }}>
                   Configure tranche parameters and calculate detailed results for your
-                  receivables-backed securitization. Analyze cash flows, interest rates, and buffer ratios 
+                  securitization. Analyze cash flows, interest rates, and buffer ratios 
                   to ensure your structure meets all requirements.
                 </Typography>
                 
@@ -294,7 +293,7 @@ const HomePage = () => {
                     component={Link}
                     to="/calculation"
                     size="large"
-                    endIcon={<ArrowForwardIcon />}
+                    endIcon={<NavigateNextIcon />}
                     sx={{ 
                       mt: 2, 
                       py: 1.2, 
@@ -309,7 +308,7 @@ const HomePage = () => {
                       }
                     }}
                   >
-                    Analyze Receivables
+                    Tranche Design
                   </Button>
                 </Box>
               </Paper>
@@ -346,15 +345,15 @@ const HomePage = () => {
                     mr: 2,
                     boxShadow: `0 4px 8px ${alpha(theme.palette.secondary.main, 0.4)}`
                   }}>
-                    <OptimizeIcon sx={{ fontSize: 30, color: theme.palette.common.white }} />
+                    <OptimizationIcon sx={{ fontSize: 30, color: theme.palette.common.white }} />
                   </Box>
                   <Typography variant="h5" fontWeight="medium" color="secondary.main">
-                    Portfolio Optimizer
+                    Structure Optimizer
                   </Typography>
                 </Box>
                 
                 <Typography paragraph sx={{ color: 'text.secondary', mb: 3 }}>
-                  Optimize your receivables securitization structure to maximize returns
+                  Optimize your structure to maximize returns
                   while maintaining minimum buffer requirements. Our advanced optimization
                   algorithms explore multiple strategies to find the best tranche configuration.
                 </Typography>
@@ -366,7 +365,7 @@ const HomePage = () => {
                     component={Link}
                     to="/optimization"
                     size="large"
-                    endIcon={<ArrowForwardIcon />}
+                    endIcon={<NavigateNextIcon />}
                     sx={{ 
                       mt: 2, 
                       py: 1.2, 
@@ -381,7 +380,7 @@ const HomePage = () => {
                       }
                     }}
                   >
-                    Optimize Portfolio
+                    Optimize Structure & Automatic Design
                   </Button>
                 </Box>
               </Paper>
@@ -420,7 +419,7 @@ const HomePage = () => {
                         mr: 2,
                         boxShadow: `0 4px 8px ${alpha(theme.palette.info.main, 0.4)}`
                       }}>
-                        <CompareIcon sx={{ fontSize: 30, color: theme.palette.common.white }} />
+                        <ComparisonIcon sx={{ fontSize: 30, color: theme.palette.common.white }} />
                       </Box>
                       <Typography variant="h5" fontWeight="medium" color="info.main">
                         Compare Structures
@@ -429,7 +428,7 @@ const HomePage = () => {
                     
                     <Typography paragraph sx={{ color: 'text.secondary' }}>
                       Compare different optimization strategies and manual configurations side by side. 
-                      Analyze differences in receivables distribution, interest rates, and buffer ratios 
+                      Analyze differences in distribution, interest rates, and buffer ratios 
                       to make informed decisions about your securitization structure.
                     </Typography>
                   </Grid>
@@ -441,7 +440,7 @@ const HomePage = () => {
                       component={Link}
                       to="/comparison"
                       size="large"
-                      endIcon={<ArrowForwardIcon />}
+                      endIcon={<NavigateNextIcon />}
                       sx={{ 
                         py: 1.2, 
                         px: 3.5,
@@ -468,4 +467,4 @@ const HomePage = () => {
   );
 };
 
-export default HomePage;
+export default StructuredProductDesignPage;

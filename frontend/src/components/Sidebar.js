@@ -11,158 +11,279 @@ import {
   ListItemText,
   Typography,
   Divider,
-  useTheme
+  useTheme,
+  IconButton,
+  useMediaQuery,
+  Tooltip,
+  Collapse
 } from '@mui/material';
 import HomeIcon from '@mui/icons-material/Home';
-import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
-import OptimizeIcon from '@mui/icons-material/Speed';
-import CompareIcon from '@mui/icons-material/Compare';
-import AssessmentIcon from '@mui/icons-material/Assessment';
-import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
-import BarChartIcon from '@mui/icons-material/BarChart';
-import AssignmentIcon from '@mui/icons-material/Assignment';
+import CalculationIcon from '@mui/icons-material/AccountBalance';
+import OptimizationIcon from '@mui/icons-material/Speed';
+import ComparisonIcon from '@mui/icons-material/Compare';
+import StressTestingIcon from '@mui/icons-material/Assessment';
+import ReceivablesIcon from '@mui/icons-material/ReceiptLong';
+import ReportsIcon from '@mui/icons-material/Assignment';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { alpha } from '@mui/material/styles';
 
-// Drawer width
+// Drawer widths for expanded and collapsed states
 const drawerWidth = 260;
+const collapsedDrawerWidth = 68;
 
-const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
+const Sidebar = ({ mobileOpen, handleDrawerToggle, isExpanded, handleDesktopDrawerToggle }) => {
   const location = useLocation();
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
-  // Menu items with reordered and renamed items
-  const menuItems = [
+  // Navigation items with professional financial terminology
+  const navigationItems = [
     {
       path: '/',
       label: 'Dashboard',
-      icon: <HomeIcon />
-    },
-    {
-      path: '/receivables-analysis',
-      label: 'Receivables Analytics',
-      icon: <BarChartIcon />
+      icon: <HomeIcon />,
+      description: 'Overview & Key Metrics'
     },
     {
       path: '/calculation',
-      label: 'ABS Design',
-      icon: <AccountBalanceIcon />
+      label: 'Structuring & Modeling',
+      icon: <CalculationIcon />,
+      description: 'Design financial product structures'
     },
     {
       path: '/optimization',
-      label: 'Portfolio Optimizer',
-      icon: <OptimizeIcon />
+      label: 'Yield Enhancement',
+      icon: <OptimizationIcon />,
+      description: 'Optimize for maximum returns'
     },
     {
       path: '/comparison',
-      label: 'Performance Metrics',
-      icon: <CompareIcon />
+      label: 'Comparative Analysis',
+      icon: <ComparisonIcon />,
+      description: 'Compare multiple product variants'
     },
     {
       path: '/stress-testing',
-      label: 'Stress Testing',
-      icon: <AssessmentIcon />
+      label: 'Risk Assessment',
+      icon: <StressTestingIcon />,
+      description: 'Evaluate market risk scenarios'
+    },
+    {
+      path: '/receivables-analysis',
+      label: 'Receivables Analysis',
+      icon: <ReceivablesIcon />,
+      description: 'Analyze receivables portfolio'
     },
     {
       path: '/reports',
-      label: 'Reports',
-      icon: <AssignmentIcon />
+      label: 'Financial Reporting',
+      icon: <ReportsIcon />,
+      description: 'Generate comprehensive reports'
     }
   ];
 
-  const drawer = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+  const navigationPanel = (
+    <Box sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }}>
+      {/* Header with logo and toggle button */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
-          p: 2,
-          height: 64,
-          borderBottom: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`
+          justifyContent: isExpanded ? 'space-between' : 'center',
+          p: isExpanded ? 2 : 1,
+          minHeight: 64,
+          borderBottom: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`
         }}
       >
-        <ReceiptLongIcon
-          sx={{
-            fontSize: 28,
-            color: theme.palette.primary.main,
-            mr: 1.5
-          }}
-        />
-        <Typography
-          variant="h6"
-          component={RouterLink}
-          to="/"
-          sx={{
-            textDecoration: 'none',
-            color: 'inherit',
-            fontWeight: 600,
-            letterSpacing: 0.5,
-          }}
-        >
-          Securitization
-        </Typography>
-      </Box>
-      
-      <List sx={{ px: 1, py: 2, flexGrow: 1 }}>
-        {menuItems.map((item) => (
-          <ListItem key={item.path} disablePadding sx={{ mb: 1 }}>
-            <ListItemButton
-              component={RouterLink}
-              to={item.path}
-              selected={location.pathname === item.path}
+        {isExpanded && (
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <ReceivablesIcon
               sx={{
-                borderRadius: 1,
-                py: 1.2,
-                backgroundColor: location.pathname === item.path
-                  ? alpha(theme.palette.primary.main, 0.15)
-                  : 'transparent',
-                '&:hover': {
-                  backgroundColor: location.pathname === item.path
-                    ? alpha(theme.palette.primary.main, 0.25)
-                    : alpha(theme.palette.primary.main, 0.1),
-                },
-                '&.Mui-selected': {
-                  backgroundColor: alpha(theme.palette.primary.main, 0.15),
-                  '&:hover': {
-                    backgroundColor: alpha(theme.palette.primary.main, 0.25),
-                  }
-                }
+                fontSize: 28,
+                color: theme.palette.primary.main,
+                mr: 1.5
+              }}
+            />
+            <Typography
+              variant="h6"
+              component={RouterLink}
+              to="/"
+              sx={{
+                textDecoration: 'none',
+                color: 'inherit',
+                fontWeight: 600,
+                letterSpacing: 0.5,
+                whiteSpace: 'nowrap'
               }}
             >
-              <ListItemIcon
-                sx={{
-                  minWidth: 42,
-                  color: location.pathname === item.path
-                    ? theme.palette.primary.main
-                    : theme.palette.text.secondary
-                }}
-              >
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText 
-                primary={item.label} 
-                primaryTypographyProps={{
-                  fontWeight: location.pathname === item.path ? 600 : 400
-                }}
-              />
-            </ListItemButton>
-          </ListItem>
-        ))}
+              Securitization
+            </Typography>
+          </Box>
+        )}
+        
+        {!isExpanded && (
+          <Tooltip title="Securitization Platform" placement="right">
+            <ReceivablesIcon
+              sx={{
+                fontSize: 28,
+                color: theme.palette.primary.main
+              }}
+            />
+          </Tooltip>
+        )}
+        
+        {!isMobile && (
+          <IconButton 
+            onClick={handleDesktopDrawerToggle}
+            sx={{ 
+              color: theme.palette.primary.main,
+              '&:hover': {
+                backgroundColor: alpha(theme.palette.primary.main, 0.1)
+              }
+            }}
+          >
+            {isExpanded ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+          </IconButton>
+        )}
+      </Box>
+      
+      {/* Navigation items */}
+      <List sx={{ 
+        px: isExpanded ? 1 : 0.5, 
+        py: 2, 
+        flexGrow: 1,
+        overflow: 'auto'
+      }}>
+        {navigationItems.map((item) => {
+          const isActive = location.pathname === item.path;
+          
+          return (
+            <ListItem key={item.path} disablePadding sx={{ mb: 1 }}>
+              <Tooltip title={!isExpanded ? item.label : ''} placement="right">
+                <ListItemButton
+                  component={RouterLink}
+                  to={item.path}
+                  selected={isActive}
+                  sx={{
+                    borderRadius: 1,
+                    py: 1.2,
+                    minHeight: 48,
+                    justifyContent: isExpanded ? 'initial' : 'center',
+                    px: isExpanded ? 2 : 2.5,
+                    position: 'relative',
+                    backgroundColor: isActive
+                      ? alpha(theme.palette.primary.main, 0.15)
+                      : 'transparent',
+                    '&:hover': {
+                      backgroundColor: isActive
+                        ? alpha(theme.palette.primary.main, 0.25)
+                        : alpha(theme.palette.primary.main, 0.1),
+                    },
+                    '&.Mui-selected': {
+                      backgroundColor: alpha(theme.palette.primary.main, 0.15),
+                      '&:hover': {
+                        backgroundColor: alpha(theme.palette.primary.main, 0.25),
+                      },
+                      '&::after': {
+                        content: '""',
+                        position: 'absolute',
+                        left: 0,
+                        top: '25%',
+                        height: '50%',
+                        width: 3,
+                        borderRadius: '0 2px 2px 0',
+                        backgroundColor: theme.palette.primary.main
+                      }
+                    },
+                    transition: theme.transitions.create(['background-color'], {
+                      easing: theme.transitions.easing.sharp,
+                      duration: theme.transitions.duration.standard,
+                    }),
+                  }}
+                >
+                  <ListItemIcon
+                    sx={{
+                      minWidth: isExpanded ? 42 : 0,
+                      mr: isExpanded ? 2 : 'auto',
+                      justifyContent: 'center',
+                      color: isActive
+                        ? theme.palette.primary.main
+                        : theme.palette.text.secondary
+                    }}
+                  >
+                    {item.icon}
+                  </ListItemIcon>
+                  
+                  <Collapse 
+                    in={isExpanded} 
+                    orientation="horizontal" 
+                    timeout="auto"
+                    sx={{ overflow: 'hidden' }}
+                  >
+                    <Box>
+                      <ListItemText 
+                        primary={item.label} 
+                        secondary={isActive ? item.description : null}
+                        primaryTypographyProps={{
+                          fontWeight: isActive ? 600 : 500,
+                          fontSize: '0.95rem',
+                          whiteSpace: 'nowrap'
+                        }}
+                        secondaryTypographyProps={{
+                          fontSize: '0.75rem',
+                          whiteSpace: 'nowrap',
+                          textOverflow: 'ellipsis',
+                          overflow: 'hidden',
+                          maxWidth: 180
+                        }}
+                      />
+                    </Box>
+                  </Collapse>
+                </ListItemButton>
+              </Tooltip>
+            </ListItem>
+          );
+        })}
       </List>
       
-      <Divider sx={{ mx: 2, opacity: 0.3 }} />
+      <Divider sx={{ mx: isExpanded ? 2 : 0.5, opacity: 0.3 }} />
       
-      <Box sx={{ p: 2 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-          Securitization Platform v1.0
-        </Typography>
+      <Box sx={{ p: isExpanded ? 2 : 1, display: 'flex', justifyContent: isExpanded ? 'flex-start' : 'center' }}>
+        {isExpanded ? (
+          <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+            Securitization Platform v1.0
+          </Typography>
+        ) : (
+          <Tooltip title="Securitization Platform v1.0" placement="right">
+            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+              v1.0
+            </Typography>
+          </Tooltip>
+        )}
       </Box>
     </Box>
   );
 
+  // Calculate drawer width based on expansion state
+  const currentDrawerWidth = !isMobile && !isExpanded ? collapsedDrawerWidth : drawerWidth;
+
   return (
     <Box
       component="nav"
-      sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
+      sx={{ 
+        width: { md: currentDrawerWidth }, 
+        flexShrink: { md: 0 },
+        transition: theme.transitions.create('width', {
+          easing: theme.transitions.easing.sharp,
+          duration: theme.transitions.duration.enteringScreen,
+        })
+      }}
     >
       {/* Mobile drawer */}
       <Drawer
@@ -177,12 +298,12 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
           '& .MuiDrawer-paper': { 
             boxSizing: 'border-box', 
             width: drawerWidth,
-            backgroundColor: theme.palette.background.default,
-            borderRight: `1px solid ${alpha(theme.palette.divider, 0.1)}`
+            backgroundColor: theme.palette.background.paper,
+            borderRight: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
           },
         }}
       >
-        {drawer}
+        {navigationPanel}
       </Drawer>
       
       {/* Desktop drawer */}
@@ -190,16 +311,27 @@ const Sidebar = ({ mobileOpen, handleDrawerToggle }) => {
         variant="permanent"
         sx={{
           display: { xs: 'none', md: 'block' },
+          width: currentDrawerWidth,
+          flexShrink: 0,
+          transition: theme.transitions.create('width', {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
           '& .MuiDrawer-paper': { 
             boxSizing: 'border-box', 
-            width: drawerWidth,
-            backgroundColor: theme.palette.background.default,
-            borderRight: `1px solid ${alpha(theme.palette.divider, 0.1)}`
+            width: currentDrawerWidth,
+            overflowX: 'hidden',
+            backgroundColor: theme.palette.background.paper,
+            borderRight: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+            transition: theme.transitions.create('width', {
+              easing: theme.transitions.easing.sharp,
+              duration: theme.transitions.duration.enteringScreen,
+            }),
           },
         }}
         open
       >
-        {drawer}
+        {navigationPanel}
       </Drawer>
     </Box>
   );
