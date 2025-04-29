@@ -1,15 +1,16 @@
-// src/services/apiService.js
+// frontend/src/services/apiService.js
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+const API_URL =
+  process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 /**
- * Shared axios client
+ * Ortak axios istemcisi
  */
 const apiClient = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
-  // 5 minutes (300,000 ms) - optimization processes can take long
+  // 5 dakika (300 000 ms) – optimizasyon işlemleri uzun sürebilir
   timeout: 300_000,
 });
 
@@ -18,7 +19,7 @@ const apiClient = axios.create({
 /* --------------------------------------------------------------------- */
 
 /**
- * Upload Excel file
+ * Excel dosyası yükle
  * @param {File} file
  * @returns {Promise<Object>}
  */
@@ -54,17 +55,17 @@ const uploadFile = async (file) => {
 /* --------------------------------------------------------------------- */
 
 /**
- * Calculation service.
- * If optimization output is sent as 2nd parameter,
- * Class B nominal is automatically added.
+ * Hesaplama servisi.
+ * 2. parametre olarak optimizasyon çıktısı gönderilirse
+ * Class B nominali otomatik eklenir.
  *
- * @param {Object} params - CalculationRequest body
- * @param {Object|null} optResult - OptimizationResult (optional)
+ * @param {Object} params   – CalculationRequest gövdesi
+ * @param {Object|null} optResult – OptimizationResult (opsiyonel)
  * @returns {Promise<Object>}
  */
 const calculateResults = async (params, optResult = null) => {
   try {
-    // Optional Class B nominal integration
+    // İsteğe bağlı Class B nominal entegrasyonu
     const finalParams = { ...params };
 
     if (
@@ -99,9 +100,9 @@ const calculateResults = async (params, optResult = null) => {
 /* --------------------------------------------------------------------- */
 
 /**
- * Structure optimization (classic | genetic)
+ * Yapı optimizasyonu (classic | genetic)
  *
- * @param {Object} params - OptimizationRequest body
+ * @param {Object} params – OptimizationRequest gövdesi
  * @param {'classic'|'genetic'} [method='classic']
  * @returns {Promise<Object>}
  */
@@ -113,11 +114,11 @@ const optimizeStructure = async (params, method = 'classic') => {
       JSON.stringify(params, null, 2)
     );
 
-    // Create cancellable request
+    // İptal edilebilir istek oluştur
     const CancelToken = axios.CancelToken;
     const source = CancelToken.source();
 
-    // 5 minute timeout
+    // 5 dakikada zaman aşımı
     const timeout = setTimeout(() => {
       source.cancel(
         'Operation timeout: The optimization process took too long'
@@ -184,7 +185,7 @@ const optimizeStructure = async (params, method = 'classic') => {
 /* --------------------------------------------------------------------- */
 
 /**
- * Poll optimization progress from server
+ * Sunucudan optimizasyon ilerlemesini sorgula
  * @returns {Promise<Object>}
  */
 const pollOptimizationProgress = async () => {
@@ -207,93 +208,7 @@ const pollOptimizationProgress = async () => {
 /* --------------------------------------------------------------------- */
 
 /**
- * Format structure for stress test API
- * @param {Object} savedStructure - Saved structure from context
- * @returns {Object} - Formatted structure for API
- */
-const formatStructureForStressTest = (savedStructure) => {
-  console.log('Formatting structure for stress test:', savedStructure);
-  
-  // Create a_tranches array from tranchesA
-  const a_tranches = [];
-  
-  // Check if tranches_a exists in the saved structure
-  const tranchesArray = savedStructure.tranches_a || savedStructure.tranchesA || [];
-  console.log('Found tranches array:', tranchesArray);
-  
-  if (Array.isArray(tranchesArray) && tranchesArray.length > 0) {
-    for (const tranche of tranchesArray) {
-      console.log('Processing tranche:', tranche);
-      a_tranches.push({
-        maturity_days: Number(tranche.maturity_days),
-        base_rate: Number(tranche.base_rate),
-        spread: Number(tranche.spread),
-        reinvest_rate: Number(tranche.reinvest_rate),
-        nominal: Number(tranche.nominal)
-      });
-    }
-  } else {
-    console.warn('No tranches_a found in the structure');
-  }
-  
-  // Format tranche_b
-  const trancheB = savedStructure.tranche_b || savedStructure.trancheB || {};
-  console.log('Found tranche B:', trancheB);
-  
-  const b_tranche = {
-    maturity_days: Number(trancheB.maturity_days || 180),
-    base_rate: Number(trancheB.base_rate || 0),
-    spread: Number(trancheB.spread || 0),
-    reinvest_rate: Number(trancheB.reinvest_rate || 0),
-    nominal: Number(trancheB.nominal || 0)
-  };
-  
-  // If no nominal is provided, calculate it as 10% of total structure
-  if (!b_tranche.nominal || b_tranche.nominal <= 0) {
-    const total_a_nominal = a_tranches.reduce((sum, t) => sum + t.nominal, 0);
-    // Calculate using the percentage formula (10% / 90%)
-    const percent_b = 10;
-    b_tranche.nominal = (total_a_nominal * percent_b) / (100 - percent_b);
-    b_tranche.nominal = Math.round(b_tranche.nominal / 1000) * 1000;
-    console.log('Calculated B nominal:', b_tranche.nominal);
-  }
-  
-  // Format date
-  let start_date = savedStructure.start_date || 
-                   savedStructure.general_settings?.start_date || 
-                   new Date().toISOString().split('T')[0];
-  
-  console.log('Start date before formatting:', start_date);
-  
-  // If it's a Date object, convert to ISO format
-  if (start_date instanceof Date) {
-    start_date = start_date.toISOString().split('T')[0];
-  }
-  
-  console.log('Start date after formatting:', start_date);
-  
-  // Return formatted structure for API
-  const formattedStructure = {
-    start_date: start_date,
-    a_maturities: a_tranches.map(t => t.maturity_days),
-    a_base_rates: a_tranches.map(t => t.base_rate),
-    a_spreads: a_tranches.map(t => t.spread),
-    a_reinvest_rates: a_tranches.map(t => t.reinvest_rate),
-    a_nominals: a_tranches.map(t => t.nominal),
-    b_maturity: b_tranche.maturity_days,
-    b_base_rate: b_tranche.base_rate,
-    b_spread: b_tranche.spread,
-    b_reinvest_rate: b_tranche.reinvest_rate,
-    b_nominal: b_tranche.nominal,
-    ops_expenses: Number(savedStructure.general_settings?.operational_expenses || 0)
-  };
-  
-  console.log('Final formatted structure:', formattedStructure);
-  return formattedStructure;
-};
-
-/**
- * Run a basic stress test on a structure
+ * Run stress test on a structure with given parameters
  * @param {Object} params - StressTestRequest body
  * @returns {Promise<Object>}
  */
@@ -316,21 +231,13 @@ const runStressTest = async (params) => {
 };
 
 /**
- * Run enhanced stress test with detailed cash flow modeling
+ * Run enhanced stress test with advanced cash flow modeling
  * @param {Object} params - EnhancedStressTestRequest body
  * @returns {Promise<Object>}
  */
 const runEnhancedStressTest = async (params) => {
   try {
     console.log('Running enhanced stress test with params:', params);
-    
-    // Log structure details
-    console.log('Structure details:', JSON.stringify(params.structure, null, 2));
-    console.log('Scenario details:', JSON.stringify(params.scenario, null, 2));
-    
-    // Log specific fields to debug date issues
-    console.log('Start date:', params.structure.start_date);
-    console.log('Start date type:', typeof params.structure.start_date);
     
     const response = await apiClient.post('/enhanced-stress-test/', params);
     
@@ -341,12 +248,6 @@ const runEnhancedStressTest = async (params) => {
     if (error.response) {
       console.error('Response status:', error.response.status);
       console.error('Response data:', error.response.data);
-      console.error('Full error response:', JSON.stringify(error.response.data, null, 2));
-      
-      // Extract specific validation errors
-      if (error.response.data && error.response.data.detail) {
-        console.error('Validation errors:', error.response.data.detail);
-      }
     }
     throw error;
   }
@@ -361,7 +262,6 @@ export {
   calculateResults,
   optimizeStructure,
   pollOptimizationProgress,
-  formatStructureForStressTest,
   runStressTest,
   runEnhancedStressTest
 };

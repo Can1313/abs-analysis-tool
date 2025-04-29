@@ -137,28 +137,6 @@ const theme = createTheme({
         },
       },
     },
-    MuiSlider: {
-      styleOverrides: {
-        thumb: {
-          height: 20,
-          width: 20,
-          backgroundColor: '#fff',
-          border: '2px solid currentColor',
-          '&:focus, &:hover, &.Mui-active, &.Mui-focusVisible': {
-            boxShadow: 'inherit',
-          },
-        },
-        valueLabel: {
-          fontSize: 12,
-          fontWeight: 'normal',
-          top: -6,
-          backgroundColor: 'unset',
-          '&:before': {
-            display: 'none',
-          },
-        },
-      },
-    },
     MuiCssBaseline: {
       styleOverrides: {
         body: {
