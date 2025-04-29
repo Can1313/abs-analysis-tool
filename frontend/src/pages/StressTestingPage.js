@@ -45,11 +45,9 @@ import TuneIcon from '@mui/icons-material/Tune';
 import ScienceIcon from '@mui/icons-material/Science';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CompareIcon from '@mui/icons-material/Compare';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useData } from '../contexts/DataContext';
 import { useNavigate } from 'react-router-dom';
-import { runEnhancedStressTest } from '../services/apiService';
+import { runStressTest } from '../services/apiService';
 
 // Import Recharts components
 import {
@@ -298,8 +296,7 @@ const ScatterTooltip = ({ active, payload }) => {
 };
 
 /**
- * Enhanced function to format structure data for stress testing
- * Improves Class B nominal value extraction with multiple fallback methods
+ * Improved function to format structure data for stress testing
  * 
  * @param {Object} structureDetails - Structure data from savedResults
  * @returns {Object} - Properly formatted structure object for API
@@ -559,60 +556,12 @@ const formatStructureForStressTest = (structureDetails) => {
     a_nominals = ensureNumericArray(extractProperty(structureDetails, possibleFieldMappings.a_nominals, []), maxLength);
   }
 
-  // Extract class B properties with standard approach
+  // Extract class B properties
   const b_maturity = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_maturity, 180));
   const b_base_rate = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_base_rate, 0));
   const b_spread = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_spread, 0));
   const b_reinvest_rate = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_reinvest_rate, 0));
-
-  // --- ENHANCED Class B Nominal Extraction Logic ---
-  // Get b_nominal with enhanced logic checking multiple potential locations
-  let b_nominal = 0;
-  
-  // Direct check for class_b_principal since this is often available
-  if (structureDetails.class_b_principal && Number(structureDetails.class_b_principal) > 0) {
-    b_nominal = Number(structureDetails.class_b_principal);
-    console.log('Found Class B nominal from class_b_principal:', b_nominal);
-  } 
-  // Check saved direct_class_b_coupon_rate
-  else if (structureDetails.direct_class_b_coupon_rate && structureDetails.class_b_coupon) {
-    const direct_rate = Number(structureDetails.direct_class_b_coupon_rate) / 100;
-    if (direct_rate > 0) {
-      b_nominal = Number(structureDetails.class_b_coupon) / direct_rate;
-      console.log('Calculated Class B nominal from coupon and rate:', b_nominal);
-    }
-  }
-  // Try standard extraction
-  else {
-    b_nominal = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_nominal, 0));
-    console.log('Found Class B nominal from field mapping:', b_nominal);
-  }
-  
-  // Special handling for tranche_b format
-  if (!b_nominal && structureDetails.tranche_b && structureDetails.tranche_b.nominal) {
-    b_nominal = Number(structureDetails.tranche_b.nominal);
-    console.log('Found Class B nominal from tranche_b.nominal:', b_nominal);
-  }
-  
-  // Fallback - calculate based on Class A totals (15% of total)
-  if (!b_nominal || b_nominal <= 0) {
-    const total_a_nominal = a_nominals.reduce((sum, val) => sum + val, 0);
-    if (total_a_nominal > 0) {
-      // Estimate Class B as 15% of total structure (Class A + B)
-      // Derivation: b = 0.15 * (a + b) => b = 0.15a / 0.85 ≈ 0.176a
-      b_nominal = total_a_nominal * 0.176;
-      b_nominal = Math.round(b_nominal / 1000) * 1000; // Round to nearest 1000
-      console.warn('No valid Class B nominal found, using estimated value:', b_nominal);
-    } else {
-      // Last resort fallback
-      b_nominal = 1000000;
-      console.warn('No valid data to estimate Class B nominal, using default:', b_nominal);
-    }
-  }
-  
-  // Final log to confirm
-  console.log('Final Class B nominal value:', b_nominal);
-  
+  const b_nominal = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.b_nominal, 0));
   const ops_expenses = ensureNumber(extractProperty(structureDetails, possibleFieldMappings.ops_expenses, 0));
 
   // Ensure lengths are consistent
@@ -789,18 +738,8 @@ const StressTestingPage = () => {
       prepayment: [],
       reinvestment: []
     },
-    combinedScenarios: [],
-    cashFlowModel: null
+    combinedScenarios: []
   });
-  
-  // Advanced model parameters state (now always active)
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-  const [recoveryRate, setRecoveryRate] = useState(0.5);
-  const [recoveryLag, setRecoveryLag] = useState(6);
-  const [delinquencyRate, setDelinquencyRate] = useState(null); // Will derive from NPL if null
-  const [delinquencyRecoveryRate, setDelinquencyRecoveryRate] = useState(0.85);
-  const [delinquencyToDefaultRate, setDelinquencyToDefaultRate] = useState(0.2);
-  const [repeatDelinquencyFactor, setRepeatDelinquencyFactor] = useState(1.5);
   
   // Fetch Available Structures
   useEffect(() => {
@@ -855,11 +794,7 @@ const StressTestingPage = () => {
     navigate('/calculation');
   };
 
-  /**
-   * Run stress test with enhanced error handling, debugging, and frontend normalization
-   * When backend normalization fails, this applies a secondary frontend normalization
-   * to ensure reasonable coupon rates
-   */
+  // Run stress test with enhanced error handling and debugging
   const handleRunStressTest = async () => {
     const selectedStructure = getSelectedStructure();
     
@@ -889,69 +824,33 @@ const StressTestingPage = () => {
       const prepaymentRate = Number(prepaymentRange[0]);
       const reinvestmentShift = applyReinvestmentShift ? Number(reinvestmentRange[0]) : 0;
       
-      // Create formatted structure with improved extraction logic
+      // Create request parameters for the API with enhanced formatting
       const formattedStructure = formatStructureForStressTest(structureDetails);
       
-      // Enhanced stress test with cash flow modeling
       const requestParams = {
         structure: formattedStructure,
         scenario: {
           name: predefinedScenario,
           npl_rate: nplRate,
           prepayment_rate: prepaymentRate,
-          reinvestment_shift: reinvestmentShift,
-          recovery_rate: recoveryRate,
-          recovery_lag: recoveryLag,
-          delinquency_rate: delinquencyRate,
-          delinquency_recovery_rate: delinquencyRecoveryRate,
-          delinquency_to_default_rate: delinquencyToDefaultRate,
-          repeat_delinquency_factor: repeatDelinquencyFactor
+          reinvestment_shift: reinvestmentShift
         }
       };
       
-      console.log('STRESS TEST PAYLOAD:', JSON.stringify(requestParams, null, 2));
-      const response = await runEnhancedStressTest(requestParams);
+      // Debug: Log the complete request payload
+      console.log('FULL REQUEST PAYLOAD:', JSON.stringify(requestParams, null, 2));
+      
+      // Call the API
+      const response = await runStressTest(requestParams);
       
       console.log('Received stress test response:', response);
       
-      // FRONTEND NORMALIZATION ENHANCEMENT
-      // If rates are still unreasonably high (backend normalization might have failed)
-      if (response.baseline.class_b_coupon_rate > 60 || response.stress_test.class_b_coupon_rate > 60) {
-        console.warn(`High coupon rates detected, applying frontend normalization: 
-          Baseline=${response.baseline.class_b_coupon_rate}%, 
-          Stress=${response.stress_test.class_b_coupon_rate}%`);
-        
-        // Calculate the relative impact
-        const relativeImpact = response.stress_test.class_b_coupon_rate / response.baseline.class_b_coupon_rate;
-        
-        // Normalize baseline to a reasonable target
-        const targetRate = 35.0;
-        const originalBase = response.baseline.class_b_coupon_rate;
-        const originalStress = response.stress_test.class_b_coupon_rate;
-        
-        response.baseline.class_b_coupon_rate = targetRate;
-        response.stress_test.class_b_coupon_rate = targetRate * relativeImpact;
-        
-        // Cap the stress rate
-        response.stress_test.class_b_coupon_rate = Math.min(50, Math.max(1, response.stress_test.class_b_coupon_rate));
-        
-        // Update difference
-        response.difference.class_b_coupon_rate = response.stress_test.class_b_coupon_rate - response.baseline.class_b_coupon_rate;
-        
-        // Store original values for reference
-        response.baseline.original_rate = originalBase;
-        response.stress_test.original_rate = originalStress;
-        
-        console.log(`Normalized rates to: Baseline=${response.baseline.class_b_coupon_rate}%, 
-          Stress=${response.stress_test.class_b_coupon_rate}%`);
-      }
-      
-      // Extract rates and differences
+      // Get the baseline and stress rates
       const baselineRate = response.baseline.class_b_coupon_rate;
       const stressRate = response.stress_test.class_b_coupon_rate;
       const rateDifference = response.difference.class_b_coupon_rate;
       
-      // Generate sensitivity analysis data
+      // Generate sensitivity analysis data based on the test result
       const sensitivityData = generateSensitivityData(
         baselineRate, 
         nplRate, 
@@ -960,7 +859,7 @@ const StressTestingPage = () => {
         stressRate
       );
       
-      // Process response data
+      // Process API response with generated sensitivity data
       const responseData = {
         classBCouponRate: {
           modeled: baselineRate,
@@ -994,20 +893,10 @@ const StressTestingPage = () => {
           prepayment: sensitivityData.prepayment,
           reinvestment: []
         },
-        combinedScenarios: sensitivityData.combinedScenarios,
-        // Cash flow model metrics
-        cashFlowModel: {
-          cashFlowReduction: response.stress_test.total_cashflow_reduction_pct,
-          defaultRate: response.stress_test.total_default_pct,
-          delinquencyRate: response.stress_test.total_delinquency_pct,
-          lossRate: response.stress_test.total_loss_pct,
-          principalReduction: response.stress_test.principal_reduction_pct,
-          recoveryRate: recoveryRate * 100,
-          detailedMetrics: response.cash_flow_model
-        }
+        combinedScenarios: sensitivityData.combinedScenarios
       };
       
-      // Update state with the results
+      // Update state with the API results
       setTestResults(responseData);
       setIsLoading(false);
       setShowResults(true);
@@ -1031,7 +920,7 @@ const StressTestingPage = () => {
       
       setIsLoading(false);
       
-      // Extract the actual error message
+      // Extract the actual error message from the response if available
       let errorMessage = "Error running stress test";
       if (error.response && error.response.data) {
         if (typeof error.response.data === 'string') {
@@ -1101,210 +990,6 @@ const StressTestingPage = () => {
     }
     setSnackbarOpen(false);
   };
-
-  // Cash Flow Model Results component
-  const CashFlowModelResults = ({ model }) => {
-    if (!model) return null;
-    
-    return (
-      <Paper
-        elevation={3}
-        sx={{
-          p: 3,
-          mb: 4,
-          borderRadius: 2,
-          backgroundColor: alpha(theme.palette.background.paper, 0.8),
-          border: `1px solid ${alpha(theme.palette.info.main, 0.3)}`,
-        }}
-      >
-        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <ScienceIcon sx={{ mr: 1, color: theme.palette.info.main }} />
-          Cash Flow Model Analysis
-        </Typography>
-        
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6} md={4}>
-            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.error.main, 0.1) }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Default Rate
-              </Typography>
-              <Typography variant="h5" color="error" fontWeight="medium">
-                {model.defaultRate}%
-              </Typography>
-            </Paper>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={4}>
-            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.warning.main, 0.1) }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Delinquency Rate
-              </Typography>
-              <Typography variant="h5" color="warning" fontWeight="medium">
-                {model.delinquencyRate}%
-              </Typography>
-            </Paper>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={4}>
-            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: alpha(theme.palette.primary.main, 0.1) }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Cash Flow Reduction
-              </Typography>
-              <Typography variant="h5" color="primary" fontWeight="medium">
-                {model.cashFlowReduction}%
-              </Typography>
-            </Paper>
-          </Grid>
-        </Grid>
-        
-        <Box sx={{ mt: 3, p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.paper, 0.4) }}>
-          <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-            Stress Scenario Metrics:
-          </Typography>
-          
-          <Grid container spacing={3}>
-            <Grid item xs={12} sm={6} md={4}>
-              <Typography variant="body2" color="text.secondary">Total Loss:</Typography>
-              <Typography variant="body1" fontWeight="medium">
-                {model.lossRate}% of Principal
-              </Typography>
-            </Grid>
-            
-            <Grid item xs={12} sm={6} md={4}>
-              <Typography variant="body2" color="text.secondary">Principal Reduction:</Typography>
-              <Typography variant="body1" fontWeight="medium">
-                {model.principalReduction}%
-              </Typography>
-            </Grid>
-            
-            <Grid item xs={12} sm={6} md={4}>
-              <Typography variant="body2" color="text.secondary">Recovery Rate:</Typography>
-              <Typography variant="body1" fontWeight="medium">
-                {model.recoveryRate}%
-              </Typography>
-            </Grid>
-          </Grid>
-        </Box>
-      </Paper>
-    );
-  };
-
-  // Advanced Model Parameters component
-  const AdvancedModelParameters = () => (
-    <React.Fragment>
-      <Box sx={{ mt: 3, mb: 1, display: 'flex', justifyContent: 'flex-end' }}>
-        <Button
-          size="small"
-          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-          startIcon={showAdvancedSettings ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-        >
-          {showAdvancedSettings ? "Hide" : "Show"} Advanced Parameters
-        </Button>
-      </Box>
-      
-      {showAdvancedSettings && (
-        <Paper sx={{ p: 2, mt: 2, mb: 2, backgroundColor: alpha(theme.palette.background.paper, 0.6) }}>
-          <Typography variant="subtitle2" gutterBottom>Cash Flow Model Parameters</Typography>
-          
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Recovery Rate"
-                value={recoveryRate}
-                onChange={(e) => setRecoveryRate(Number(e.target.value))}
-                type="number"
-                inputProps={{ min: 0, max: 1, step: 0.05 }}
-                size="small"
-                sx={{ mb: 2 }}
-                helperText="Percentage of defaults recovered (0-1)"
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Recovery Lag (days)"
-                value={recoveryLag}
-                onChange={(e) => setRecoveryLag(Number(e.target.value))}
-                type="number"
-                inputProps={{ min: 0, step: 1 }}
-                size="small"
-                sx={{ mb: 2 }}
-                helperText="Days until recovery occurs"
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Delinquency Rate"
-                value={delinquencyRate === null ? '' : delinquencyRate}
-                onChange={(e) => {
-                  const value = e.target.value === '' ? null : Number(e.target.value);
-                  setDelinquencyRate(value);
-                }}
-                type="number"
-                inputProps={{ min: 0, max: 100, step: 0.1 }}
-                size="small"
-                sx={{ mb: 2 }}
-                helperText="Leave blank to use half of NPL rate"
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Delinquency Recovery Rate"
-                value={delinquencyRecoveryRate}
-                onChange={(e) => setDelinquencyRecoveryRate(Number(e.target.value))}
-                type="number"
-                inputProps={{ min: 0, max: 1, step: 0.05 }}
-                size="small"
-                sx={{ mb: 2 }}
-                helperText="Percentage of delinquencies recovered (0-1)"
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Delinquency to Default Rate"
-                value={delinquencyToDefaultRate}
-                onChange={(e) => setDelinquencyToDefaultRate(Number(e.target.value))}
-                type="number"
-                inputProps={{ min: 0, max: 1, step: 0.05 }}
-                size="small"
-                sx={{ mb: 2 }}
-                helperText="Portion of delinquent loans that default"
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Repeat Delinquency Factor"
-                value={repeatDelinquencyFactor}
-                onChange={(e) => setRepeatDelinquencyFactor(Number(e.target.value))}
-                type="number"
-                inputProps={{ min: 1, step: 0.1 }}
-                size="small"
-                sx={{ mb: 2 }}
-                helperText="Increases likelihood of repeated delinquency"
-              />
-            </Grid>
-          </Grid>
-        </Paper>
-      )}
-      
-      {!showAdvancedSettings && (
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-          The stress test uses a detailed cash flow model that simulates loan defaults, prepayments, and delinquencies. 
-          Show advanced parameters for fine-tuning these behaviors.
-        </Typography>
-      )}
-    </React.Fragment>
-  );
 
   return (
     <ThemeProvider theme={theme}>
@@ -1670,10 +1355,7 @@ const StressTestingPage = () => {
                 )}
               </Box>
               
-              {/* Advanced model parameters - now always visible */}
-              <AdvancedModelParameters />
-              
-              <Box sx={{ mt: 3 }}>
+              <Box sx={{ mt: 4 }}>
                 <TextField
                   fullWidth
                   label="Base Reinvestment Rate (%)"
@@ -1687,6 +1369,33 @@ const StressTestingPage = () => {
                   size="small"
                   sx={{ mb: 3 }}
                 />
+                
+                <TextField
+                  fullWidth
+                  label="Number of Scenarios"
+                  value={scenarios}
+                  onChange={(e) => setScenarios(Number(e.target.value))}
+                  type="number"
+                  variant="outlined"
+                  size="small"
+                  sx={{ mb: 3 }}
+                />
+                
+                <FormControl fullWidth variant="outlined" size="small" sx={{ mb: 4 }}>
+                  <InputLabel>Pre-defined Scenario</InputLabel>
+                  <Select
+                    value={selectedScenarioType}
+                    onChange={(e) => setSelectedScenarioType(e.target.value)}
+                    label="Pre-defined Scenario"
+                  >
+                    <MenuItem value="optimistic">Optimistic</MenuItem>
+                    <MenuItem value="base">Base Case</MenuItem>
+                    <MenuItem value="moderate">Moderate Stress</MenuItem>
+                    <MenuItem value="severe">Severe Stress</MenuItem>
+                    <MenuItem value="extreme">Extreme Stress</MenuItem>
+                    <MenuItem value="custom">Custom Scenario</MenuItem>
+                  </Select>
+                </FormControl>
                 
                 <Button
                   variant="contained"
@@ -1713,11 +1422,6 @@ const StressTestingPage = () => {
           
           {/* Results Panel */}
           <Grid item xs={12} md={8}>
-            {/* Cash Flow Model Results */}
-            {showResults && testResults.cashFlowModel && (
-              <CashFlowModelResults model={testResults.cashFlowModel} />
-            )}
-            
             {/* Current Test Results Summary */}
             {showResults && testResults.classBCouponRate && (
               <Paper
